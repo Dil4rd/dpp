@@ -1,0 +1,36 @@
+[package]
+name = "pbzx"
+version = "0.1.0"
+edition = "2021"
+description = "A Rust library for parsing, extracting, and creating PBZX archives (Apple's payload format)"
+license = "MIT"
+keywords = ["pbzx", "apple", "macos", "archive", "xz"]
+categories = ["compression", "parsing"]
+
+[dependencies]
+# XZ/LZMA decompression
+xz2 = "0.1"
+
+# Error handling
+thiserror = "2"
+
+# Byte order handling
+byteorder = "1.5"
+
+[dev-dependencies]
+tempfile = "3"
+cpio-archive = "0.9"
+
+[features]
+default = ["extract", "list", "pack"]
+extract = []
+list = []
+pack = []
+
+[[example]]
+name = "pbzx-tool"
+path = "examples/pbzx-tool.rs"
+
+[[example]]
+name = "cpio-compare"
+path = "examples/cpio-compare.rs"

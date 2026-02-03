@@ -4,6 +4,7 @@
 
 **A fast Rust library for Apple's PBZX archive format**
 
+![Version](https://img.shields.io/badge/version-0.1.0-green)
 [![Crates.io](https://img.shields.io/crates/v/pbzx.svg)](https://crates.io/crates/pbzx)
 [![Documentation](https://docs.rs/pbzx/badge.svg)](https://docs.rs/pbzx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)

@@ -8,6 +8,7 @@
 [![Crates.io](https://img.shields.io/crates/v/pbzx.svg)](https://crates.io/crates/pbzx)
 [![Documentation](https://docs.rs/pbzx/badge.svg)](https://docs.rs/pbzx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)
 
 Parse, extract, and create PBZX archives used in macOS software updates and `.pkg` installers.
 

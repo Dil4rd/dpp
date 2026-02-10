@@ -1,0 +1,17 @@
+[package]
+name = "dpp-tool"
+version = "0.1.0"
+edition = "2021"
+description = "CLI to explore Apple DMG disk images: DMG → HFS+ → PKG → PBZX → files"
+license = "MIT"
+
+[[bin]]
+name = "dpp-tool"
+path = "src/main.rs"
+
+[dependencies]
+dpp = { version = "0.1.0", path = "../dpp" }
+udif = { version = "0.1.0", path = "../udif" }
+hfsplus = { version = "0.1.0", path = "../hfsplus" }
+xara = { version = "0.1.0", path = "../xara" }
+pbzx = { version = "0.1.0", path = "../pbzx" }

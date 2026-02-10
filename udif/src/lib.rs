@@ -51,6 +51,39 @@ pub use format::{BlockType, KolyHeader, MishHeader, PartitionEntry};
 pub use reader::{open, is_dmg, CompressionInfo, DmgReader, DmgReaderOptions, DmgStats};
 pub use writer::{create, create_from_data, create_from_file, CompressionMethod, DmgWriter};
 
+/// Partition filesystem type detected from the partition name
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartitionType {
+    /// HFS+ (case-insensitive)
+    Hfs,
+    /// HFSX (case-sensitive HFS+)
+    Hfsx,
+    /// Apple APFS
+    Apfs,
+    /// Other or unknown partition type
+    Other,
+}
+
+impl PartitionType {
+    /// Classify a partition from its DMG partition name (e.g. "Apple_HFSX")
+    pub fn from_partition_name(name: &str) -> Self {
+        if name.contains("Apple_HFSX") {
+            PartitionType::Hfsx
+        } else if name.contains("Apple_HFS") {
+            PartitionType::Hfs
+        } else if name.contains("Apple_APFS") {
+            PartitionType::Apfs
+        } else {
+            PartitionType::Other
+        }
+    }
+
+    /// Returns `true` if this partition can be parsed as HFS+
+    pub fn is_hfs_compatible(&self) -> bool {
+        matches!(self, PartitionType::Hfs | PartitionType::Hfsx)
+    }
+}
+
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -73,6 +106,8 @@ pub struct PartitionInfo {
     pub size: u64,
     /// Compressed size in bytes
     pub compressed_size: u64,
+    /// Filesystem type detected from partition name
+    pub partition_type: PartitionType,
 }
 
 impl DmgArchive {
@@ -112,6 +147,7 @@ impl DmgArchive {
                 sectors: p.block_map.sector_count,
                 size: p.block_map.uncompressed_size(),
                 compressed_size: p.block_map.compressed_size(),
+                partition_type: PartitionType::from_partition_name(&p.name),
             })
             .collect()
     }
@@ -124,6 +160,7 @@ impl DmgArchive {
             sectors: p.block_map.sector_count,
             size: p.block_map.uncompressed_size(),
             compressed_size: p.block_map.compressed_size(),
+            partition_type: PartitionType::from_partition_name(&p.name),
         })
     }
 
@@ -151,17 +188,45 @@ impl DmgArchive {
         self.reader.decompress_all()
     }
 
+    /// Stream a partition to a writer block-by-block (low memory usage)
+    pub fn extract_partition_to<W: std::io::Write>(
+        &mut self,
+        id: i32,
+        writer: &mut W,
+    ) -> Result<u64> {
+        self.reader.decompress_partition_to(id, writer)
+    }
+
+    /// Stream the main HFS+/APFS partition to a writer (low memory usage)
+    pub fn extract_main_partition_to<W: std::io::Write>(
+        &mut self,
+        writer: &mut W,
+    ) -> Result<u64> {
+        self.reader.decompress_main_partition_to(writer)
+    }
+
+    /// Get the ID of the main HFS+/APFS partition
+    pub fn main_partition_id(&self) -> Result<i32> {
+        self.reader.main_partition_id()
+    }
+
+    /// Get the ID of the main HFS+/HFSX partition (excludes APFS).
+    /// Returns `Err(FileNotFound)` if no HFS-compatible partition exists.
+    pub fn hfs_partition_id(&self) -> Result<i32> {
+        self.reader.hfs_partition_id()
+    }
+
     /// Extract a partition to a file
     pub fn extract_partition_to_file<P: AsRef<Path>>(&mut self, id: i32, path: P) -> Result<()> {
-        let data = self.extract_partition(id)?;
-        std::fs::write(path, &data)?;
+        let mut file = File::create(path)?;
+        self.reader.decompress_partition_to(id, &mut file)?;
         Ok(())
     }
 
     /// Extract main partition to a file
     pub fn extract_main_partition_to_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        let data = self.extract_main_partition()?;
-        std::fs::write(path, &data)?;
+        let mut file = File::create(path)?;
+        self.reader.decompress_main_partition_to(&mut file)?;
         Ok(())
     }
 
@@ -723,6 +788,32 @@ mod tests {
         // Find the HFSX partition
         let hfsx = partitions.iter().find(|p| p.name.contains("HFSX"));
         assert!(hfsx.is_some(), "Should have HFSX partition");
+    }
+
+    #[test]
+    fn test_real_dmg_decompress() {
+        let test_dmg = std::path::Path::new("../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg");
+        if !test_dmg.exists() {
+            eprintln!("Skipping - DMG not found");
+            return;
+        }
+
+        // Test buffered decompress
+        let mut archive = DmgArchive::open(test_dmg).unwrap();
+        let data = archive.extract_main_partition().unwrap();
+        eprintln!("Buffered: {} bytes", data.len());
+        assert_eq!(&data[1024..1026], &[0x48, 0x58], "Should be HFSX signature");
+
+        // Test streaming decompress
+        let mut archive2 = DmgArchive::open(test_dmg).unwrap();
+        let mut buf = Vec::new();
+        let n = archive2.extract_main_partition_to(&mut buf).unwrap();
+        eprintln!("Streaming: {} bytes", n);
+        assert_eq!(&buf[1024..1026], &[0x48, 0x58], "Should be HFSX signature");
+
+        // Both methods should produce identical output
+        assert_eq!(data.len(), buf.len());
+        assert_eq!(data, buf, "Buffered and streaming should produce identical output");
     }
 
     // =========================================================================

@@ -165,6 +165,17 @@ $ udif-tool list Kernel_Debug_Kit.dmg
 
 See [Comparison](docs/COMPARISON.md) for detailed analysis.
 
+## Next Steps
+
+- [ ] **Encrypted DMG support** — FileVault / AES-128 / AES-256 encrypted disk images
+- [ ] **ADC compression** — Apple Data Compression for legacy DMGs
+- [ ] **Streaming decompression** — decompress partitions without buffering entire output
+- [ ] **Parallel block decompression** — decompress blocks across multiple threads
+- [ ] **LZFSE write optimization** — tunable compression levels for LZFSE output
+- [ ] **APFS partition detection** — identify APFS containers within DMGs
+- [ ] **Partition resizing** — create DMGs with custom partition layouts
+- [ ] **Progress callbacks** — report compression/decompression progress for UI integration
+
 ## License
 
 MIT

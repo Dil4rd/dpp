@@ -1,0 +1,12 @@
+[package]
+name = "hfsplus"
+version = "0.1.0"
+edition = "2021"
+description = "Read-only HFS+ / HFSX filesystem parser"
+license = "MIT"
+keywords = ["hfs", "hfsplus", "apple", "macos", "filesystem"]
+categories = ["parsing", "filesystem"]
+
+[dependencies]
+byteorder = "1.5"
+thiserror = "2"

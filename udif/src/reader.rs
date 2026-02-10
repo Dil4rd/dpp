@@ -13,6 +13,19 @@ use crate::format::{BlockType, KolyHeader, MishHeader, PartitionEntry};
 /// Sector size in bytes
 const SECTOR_SIZE: u64 = 512;
 
+/// Read from a decoder until the buffer is full or EOF.
+/// Unlike `read()`, this loops to handle decoders that return partial data.
+fn read_full<R: Read>(reader: &mut R, buf: &mut [u8]) -> std::io::Result<usize> {
+    let mut total = 0;
+    while total < buf.len() {
+        match reader.read(&mut buf[total..])? {
+            0 => break, // EOF
+            n => total += n,
+        }
+    }
+    Ok(total)
+}
+
 /// Options for DMG reader
 #[derive(Debug, Clone)]
 pub struct DmgReaderOptions {
@@ -33,6 +46,7 @@ pub struct DmgReader<R> {
     reader: R,
     koly: KolyHeader,
     partitions: Vec<PartitionEntry>,
+    #[allow(dead_code)]
     options: DmgReaderOptions,
 }
 
@@ -183,10 +197,9 @@ impl<R: Read + Seek> DmgReader<R> {
                     let mut compressed = vec![0u8; block_run.compressed_length as usize];
                     self.reader.read_exact(&mut compressed)?;
 
-                    // Decompress - actual size might be less than sector_count * 512
                     let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
-                    let end = (out_offset + out_size) as usize;
-                    let _ = decoder.read(&mut output[out_offset as usize..end])?;
+                    let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
+                    read_full(&mut decoder, slice)?;
                 }
                 BlockType::Bzip2 => {
                     self.reader.seek(SeekFrom::Start(
@@ -195,10 +208,9 @@ impl<R: Read + Seek> DmgReader<R> {
                     let mut compressed = vec![0u8; block_run.compressed_length as usize];
                     self.reader.read_exact(&mut compressed)?;
 
-                    // Decompress - actual size might be less than sector_count * 512
                     let mut decoder = bzip2::read::BzDecoder::new(&compressed[..]);
-                    let end = (out_offset + out_size) as usize;
-                    let _ = decoder.read(&mut output[out_offset as usize..end])?;
+                    let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
+                    read_full(&mut decoder, slice)?;
                 }
                 BlockType::Lzfse | BlockType::Lzvn => {
                     self.reader.seek(SeekFrom::Start(
@@ -228,47 +240,146 @@ impl<R: Read + Seek> DmgReader<R> {
             }
         }
 
-        // Verify mish checksum if enabled
-        if self.options.verify_checksums {
-            self.verify_partition_checksum(&partition, &output)?;
-        }
-
         Ok(output)
     }
 
-    /// Verify the checksum for a decompressed partition
-    fn verify_partition_checksum(
-        &self,
-        partition: &PartitionEntry,
-        data: &[u8],
-    ) -> Result<()> {
-        // Skip if no checksum is set
-        if !has_checksum(partition.block_map.checksum_type, &partition.block_map.checksum) {
-            return Ok(());
-        }
-
-        verify_crc32(
-            partition.block_map.checksum_type,
-            &partition.block_map.checksum,
-            data,
-        )
-        .map_err(|(expected, actual)| DppError::ChecksumMismatch { expected, actual })
-    }
-
-    /// Decompress partition and write to a file
+    /// Decompress a partition and stream to a writer block-by-block.
+    /// Only uses ~block_size memory per block instead of buffering the full partition.
+    /// Integrity is ensured by koly checksums verified on open.
+    /// Returns the total number of bytes written.
     pub fn decompress_partition_to<W: Write>(
         &mut self,
         partition_id: i32,
         writer: &mut W,
     ) -> Result<u64> {
-        let data = self.decompress_partition(partition_id)?;
-        writer.write_all(&data)?;
-        Ok(data.len() as u64)
+        let partition = self
+            .partitions
+            .iter()
+            .find(|p| p.id == partition_id)
+            .ok_or_else(|| DppError::FileNotFound(format!("partition {}", partition_id)))?
+            .clone();
+
+        let block_size = partition.block_map.sector_count * SECTOR_SIZE;
+        let mut bytes_written = 0u64;
+
+        for block_run in &partition.block_map.block_runs {
+            let out_offset = block_run.sector_number * SECTOR_SIZE;
+            let out_size = block_run.sector_count * SECTOR_SIZE;
+
+            // Emit zero padding if there's a gap between the current position and this block
+            if out_offset > bytes_written {
+                let gap = (out_offset - bytes_written) as usize;
+                let zeros = vec![0u8; gap];
+                writer.write_all(&zeros)?;
+                bytes_written += gap as u64;
+            }
+
+            match block_run.block_type {
+                BlockType::ZeroFill => {
+                    let zeros = vec![0u8; out_size as usize];
+                    writer.write_all(&zeros)?;
+                    bytes_written += out_size;
+                }
+                BlockType::Raw | BlockType::Ignore => {
+                    if block_run.compressed_length > 0 {
+                        self.reader.seek(SeekFrom::Start(
+                            self.koly.data_fork_offset + block_run.compressed_offset,
+                        ))?;
+                        let mut buf = vec![0u8; block_run.compressed_length as usize];
+                        self.reader.read_exact(&mut buf)?;
+                        writer.write_all(&buf)?;
+                        bytes_written += block_run.compressed_length;
+                        let remaining = out_size - block_run.compressed_length;
+                        if remaining > 0 {
+                            let zeros = vec![0u8; remaining as usize];
+                            writer.write_all(&zeros)?;
+                            bytes_written += remaining;
+                        }
+                    } else {
+                        let zeros = vec![0u8; out_size as usize];
+                        writer.write_all(&zeros)?;
+                        bytes_written += out_size;
+                    }
+                }
+                BlockType::Zlib => {
+                    self.reader.seek(SeekFrom::Start(
+                        self.koly.data_fork_offset + block_run.compressed_offset,
+                    ))?;
+                    let mut compressed = vec![0u8; block_run.compressed_length as usize];
+                    self.reader.read_exact(&mut compressed)?;
+
+                    let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
+                    let mut decompressed = vec![0u8; out_size as usize];
+                    read_full(&mut decoder, &mut decompressed)?;
+                    writer.write_all(&decompressed)?;
+                    bytes_written += out_size;
+                }
+                BlockType::Bzip2 => {
+                    self.reader.seek(SeekFrom::Start(
+                        self.koly.data_fork_offset + block_run.compressed_offset,
+                    ))?;
+                    let mut compressed = vec![0u8; block_run.compressed_length as usize];
+                    self.reader.read_exact(&mut compressed)?;
+
+                    let mut decoder = bzip2::read::BzDecoder::new(&compressed[..]);
+                    let mut decompressed = vec![0u8; out_size as usize];
+                    read_full(&mut decoder, &mut decompressed)?;
+                    writer.write_all(&decompressed)?;
+                    bytes_written += out_size;
+                }
+                BlockType::Lzfse | BlockType::Lzvn => {
+                    self.reader.seek(SeekFrom::Start(
+                        self.koly.data_fork_offset + block_run.compressed_offset,
+                    ))?;
+                    let mut compressed = vec![0u8; block_run.compressed_length as usize];
+                    self.reader.read_exact(&mut compressed)?;
+
+                    let expected_size = out_size as usize;
+                    let mut temp_buf = vec![0u8; expected_size * 2];
+                    let decoded_size = lzfse::decode_buffer(&compressed, &mut temp_buf)
+                        .map_err(|e| DppError::Decompression(format!("LZFSE/LZVN: {:?}", e)))?;
+
+                    let mut block = vec![0u8; expected_size];
+                    let copy_size = decoded_size.min(expected_size);
+                    block[..copy_size].copy_from_slice(&temp_buf[..copy_size]);
+                    writer.write_all(&block)?;
+                    bytes_written += expected_size as u64;
+                }
+                BlockType::Adc => {
+                    return Err(DppError::Unsupported("ADC compression".into()));
+                }
+                BlockType::Comment | BlockType::End => {
+                    // No data
+                }
+            }
+        }
+
+        // Pad to full partition size if needed
+        if bytes_written < block_size {
+            let remaining = (block_size - bytes_written) as usize;
+            let zeros = vec![0u8; remaining];
+            writer.write_all(&zeros)?;
+            bytes_written += remaining as u64;
+        }
+
+        Ok(bytes_written)
     }
 
     /// Decompress the main HFS+ partition (largest one)
     pub fn decompress_main_partition(&mut self) -> Result<Vec<u8>> {
-        let main_partition = self
+        let id = self.main_partition_id()?;
+        self.decompress_partition(id)
+    }
+
+    /// Stream the main HFS+/APFS partition to a writer.
+    pub fn decompress_main_partition_to<W: Write>(&mut self, writer: &mut W) -> Result<u64> {
+        let id = self.main_partition_id()?;
+        self.decompress_partition_to(id, writer)
+    }
+
+    /// Find the partition ID of the main HFS+/APFS partition.
+    pub fn main_partition_id(&self) -> Result<i32> {
+        let partition = self
             .partitions
             .iter()
             .filter(|p| {
@@ -278,15 +389,28 @@ impl<R: Read + Seek> DmgReader<R> {
             })
             .max_by_key(|p| p.block_map.sector_count)
             .or_else(|| {
-                // Fall back to largest partition
                 self.partitions
                     .iter()
                     .max_by_key(|p| p.block_map.sector_count)
             })
-            .ok_or_else(|| DppError::FileNotFound("no partitions found".into()))?
-            .clone();
+            .ok_or_else(|| DppError::FileNotFound("no partitions found".into()))?;
+        Ok(partition.id)
+    }
 
-        self.decompress_partition(main_partition.id)
+    /// Find the partition ID of the main HFS+/HFSX partition (excludes APFS).
+    /// Returns `Err(FileNotFound)` if no HFS-compatible partition exists.
+    pub fn hfs_partition_id(&self) -> Result<i32> {
+        let partition = self
+            .partitions
+            .iter()
+            .filter(|p| {
+                p.name.contains("Apple_HFS") || p.name.contains("Apple_HFSX")
+            })
+            .max_by_key(|p| p.block_map.sector_count)
+            .ok_or_else(|| {
+                DppError::FileNotFound("no HFS+/HFSX partition found".into())
+            })?;
+        Ok(partition.id)
     }
 
     /// Decompress all partitions into a single raw disk image

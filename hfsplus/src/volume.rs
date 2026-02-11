@@ -183,15 +183,11 @@ impl VolumeHeader {
 mod tests {
     use super::*;
 
+    /// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_parse_kdk_volume_header() {
-        let path = std::path::Path::new("../tests/kdk.raw");
-        if !path.exists() {
-            eprintln!("Skipping test - kdk.raw not found");
-            return;
-        }
-
-        let file = std::fs::File::open(path).unwrap();
+        let file = std::fs::File::open("../tests/kdk.raw").unwrap();
         let mut reader = std::io::BufReader::new(file);
         let header = VolumeHeader::parse(&mut reader).unwrap();
 
@@ -203,17 +199,5 @@ mod tests {
         assert!(header.file_count > 0);
         assert!(header.folder_count > 0);
         assert!(header.catalog_file.logical_size > 0);
-
-        eprintln!("Volume header parsed successfully:");
-        eprintln!("  block_size: {}", header.block_size);
-        eprintln!("  total_blocks: {}", header.total_blocks);
-        eprintln!("  file_count: {}", header.file_count);
-        eprintln!("  folder_count: {}", header.folder_count);
-        eprintln!("  catalog_file.logical_size: {}", header.catalog_file.logical_size);
-        eprintln!("  catalog_file.total_blocks: {}", header.catalog_file.total_blocks);
-        eprintln!("  catalog_file first extent: start={}, count={}",
-            header.catalog_file.extents[0].start_block,
-            header.catalog_file.extents[0].block_count);
-        eprintln!("  extents_file.logical_size: {}", header.extents_file.logical_size);
     }
 }

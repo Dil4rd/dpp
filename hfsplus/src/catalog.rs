@@ -552,58 +552,33 @@ mod tests {
     use super::*;
     use std::io::BufReader;
 
-    fn open_kdk() -> Option<(BufReader<std::fs::File>, VolumeHeader, BTreeHeaderRecord)> {
-        let path = std::path::Path::new("../tests/kdk.raw");
-        if !path.exists() {
-            eprintln!("Skipping test - kdk.raw not found");
-            return None;
-        }
-
-        let file = std::fs::File::open(path).unwrap();
+    fn open_kdk() -> (BufReader<std::fs::File>, VolumeHeader, BTreeHeaderRecord) {
+        let file = std::fs::File::open("../tests/kdk.raw").unwrap();
         let mut reader = BufReader::new(file);
         let vol = VolumeHeader::parse(&mut reader).unwrap();
         let catalog_header = btree::read_btree_header(&mut reader, &vol.catalog_file, vol.block_size).unwrap();
-        Some((reader, vol, catalog_header))
+        (reader, vol, catalog_header)
     }
 
+    /// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_list_root_directory() {
-        let (mut reader, vol, catalog_header) = match open_kdk() {
-            Some(x) => x,
-            None => return,
-        };
+        let (mut reader, vol, catalog_header) = open_kdk();
 
         let entries = list_directory(&mut reader, &vol, &catalog_header, CNID_ROOT_FOLDER).unwrap();
-
-        eprintln!("Root directory entries ({}):", entries.len());
-        for entry in &entries {
-            eprintln!("  {:?} {} ({} bytes, cnid={})", entry.kind, entry.name, entry.size, entry.cnid);
-        }
-
         assert!(!entries.is_empty(), "Root directory should not be empty");
     }
 
+    /// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_resolve_root_path() {
-        let (mut reader, vol, catalog_header) = match open_kdk() {
-            Some(x) => x,
-            None => return,
-        };
+        let (mut reader, vol, catalog_header) = open_kdk();
 
-        // List root to see what's available
         let entries = list_directory(&mut reader, &vol, &catalog_header, CNID_ROOT_FOLDER).unwrap();
-        eprintln!("Root has {} entries", entries.len());
-
-        // Try to resolve a known path if entries exist
-        if let Some(first) = entries.first() {
-            let path = format!("/{}", first.name);
-            let (record, name) = resolve_path(&mut reader, &vol, &catalog_header, &path).unwrap();
-            eprintln!("Resolved '{}': name='{}', record={:?}", path, name,
-                match &record {
-                    CatalogRecord::Folder(f) => format!("Folder(cnid={})", f.folder_id),
-                    CatalogRecord::File(f) => format!("File(cnid={}, size={})", f.file_id, f.data_fork.logical_size),
-                    _ => "Thread".to_string(),
-                });
-        }
+        let first = entries.first().expect("Root should have entries");
+        let path = format!("/{}", first.name);
+        let (_record, _name) = resolve_path(&mut reader, &vol, &catalog_header, &path).unwrap();
     }
 }

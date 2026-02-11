@@ -368,97 +368,76 @@ mod tests {
     use super::*;
     use std::io::BufReader;
 
-    fn open_appfs() -> Option<BufReader<std::fs::File>> {
-        let path = std::path::Path::new("../tests/appfs.raw");
-        if !path.exists() {
-            eprintln!("Skipping test - appfs.raw not found");
-            return None;
-        }
-        let file = std::fs::File::open(path).unwrap();
-        Some(BufReader::new(file))
+    fn open_appfs() -> BufReader<std::fs::File> {
+        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
+        BufReader::new(file)
     }
 
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_parse_nxsb() {
-        let mut reader = match open_appfs() {
-            Some(r) => r,
-            None => return,
-        };
+        let mut reader = open_appfs();
 
         let nxsb = read_nxsb(&mut reader).unwrap();
         assert_eq!(nxsb.magic, NX_MAGIC);
         assert_eq!(nxsb.block_size, 4096);
         assert!(nxsb.block_count > 0);
 
-        // Check file size matches block_count * block_size
         let file_size = reader.seek(SeekFrom::End(0)).unwrap();
         let expected_size = nxsb.block_count * nxsb.block_size as u64;
         assert_eq!(file_size, expected_size,
             "File size {} should match block_count({}) * block_size({})",
             file_size, nxsb.block_count, nxsb.block_size);
-
-        eprintln!("NX Superblock:");
-        eprintln!("  block_size: {}", nxsb.block_size);
-        eprintln!("  block_count: {}", nxsb.block_count);
-        eprintln!("  omap_oid: {}", nxsb.omap_oid);
-        eprintln!("  xid: {}", nxsb.header.xid);
-        eprintln!("  xp_desc_base: {}", nxsb.xp_desc_base);
-        eprintln!("  xp_desc_blocks: {}", nxsb.xp_desc_blocks);
-        eprintln!("  fs_oids: {:?}", nxsb.fs_oids.iter().filter(|&&o| o != 0).collect::<Vec<_>>());
     }
 
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_checkpoint_scan() {
-        let mut reader = match open_appfs() {
-            Some(r) => r,
-            None => return,
-        };
+        let mut reader = open_appfs();
 
         let nxsb = read_nxsb(&mut reader).unwrap();
         let latest = find_latest_nxsb(&mut reader, &nxsb).unwrap();
-
-        eprintln!("Block 0 xid: {}", nxsb.header.xid);
-        eprintln!("Latest checkpoint xid: {}", latest.header.xid);
 
         assert!(latest.header.xid >= nxsb.header.xid,
             "Latest xid {} should be >= block 0 xid {}", latest.header.xid, nxsb.header.xid);
     }
 
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_volume_superblock() {
-        let mut reader = match open_appfs() {
-            Some(r) => r,
-            None => return,
-        };
+        let mut reader = open_appfs();
 
         let nxsb = read_nxsb(&mut reader).unwrap();
         let latest = find_latest_nxsb(&mut reader, &nxsb).unwrap();
 
-        // Find first non-zero volume OID
-        let vol_oid = latest.fs_oids.iter().find(|&&o| o != 0).copied()
-            .expect("Should have at least one volume");
+        assert!(latest.fs_oids.iter().any(|&o| o != 0), "Should have at least one volume");
 
-        eprintln!("Volume OID: {}", vol_oid);
-
-        // Read container OMAP to resolve volume OID
         let omap_block = crate::object::read_block(&mut reader, latest.omap_oid, latest.block_size).unwrap();
-        let omap_header = ObjectHeader::parse(&omap_block).unwrap();
-        eprintln!("Container OMAP type: 0x{:X}", omap_header.object_type());
+        let omap_header = crate::object::ObjectHeader::parse(&omap_block).unwrap();
+        assert_ne!(omap_header.object_type(), 0);
 
-        // The OMAP has a B-tree OID at offset 32+16 = 48 (after header + flags + snap count + tree type + ...)
-        // omap_phys_t layout after obj_phys_t (32 bytes):
-        //   om_flags: u32 (4)
-        //   om_snap_count: u32 (4)
-        //   om_tree_type: u32 (4)
-        //   om_snapshot_tree_type: u32 (4)
-        //   om_tree_oid: u64 (8)  <- this is the B-tree root physical block
         let mut cursor = Cursor::new(&omap_block[32..]);
         let _om_flags = cursor.read_u32::<LittleEndian>().unwrap();
         let _om_snap_count = cursor.read_u32::<LittleEndian>().unwrap();
         let _om_tree_type = cursor.read_u32::<LittleEndian>().unwrap();
         let _om_snap_tree_type = cursor.read_u32::<LittleEndian>().unwrap();
         let om_tree_oid = cursor.read_u64::<LittleEndian>().unwrap();
+        assert!(om_tree_oid > 0);
+    }
 
-        eprintln!("OMAP tree root block: {}", om_tree_oid);
+    #[test]
+    fn test_nxsb_invalid_magic() {
+        // Build a block that has wrong NXSB magic at offset 32
+        let mut block = vec![0u8; 4096];
+        // ObjectHeader: checksum [0..8], oid [8..16], xid [16..24], type [24..28], subtype [28..32]
+        block[24..28].copy_from_slice(&0x01u32.to_le_bytes()); // type = NX_SUPERBLOCK
+        // Wrong magic at offset 32
+        block[32..36].copy_from_slice(&0xDEADBEEFu32.to_le_bytes());
+
+        let result = NxSuperblock::parse(&block);
+        assert!(matches!(result, Err(ApfsError::InvalidMagic(0xDEADBEEF))));
     }
 }

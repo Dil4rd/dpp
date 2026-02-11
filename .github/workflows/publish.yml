@@ -7,6 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
 jobs:
   publish:
@@ -18,25 +19,22 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Publish pbzx
-        run: cargo publish -p pbzx --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
+        run: cargo publish -p pbzx
       - name: Publish xara
-        run: cargo publish -p xara --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
+        run: cargo publish -p xara
       - name: Publish hfsplus
-        run: cargo publish -p hfsplus --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
+        run: cargo publish -p hfsplus
       - name: Publish udif
-        run: cargo publish -p udif --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p udif
 
       - name: Wait for crates.io index
         run: sleep 30
 
       - name: Publish dpp
-        run: cargo publish -p dpp --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p dpp
 
       - name: Wait for crates.io index
         run: sleep 30
 
       - name: Publish dpp-tool
-        run: cargo publish -p dpp-tool --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p dpp-tool

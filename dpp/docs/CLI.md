@@ -24,7 +24,7 @@ Commands are organized by pipeline layer with consistent verbs across layers:
 ### Overview Commands
 
 ```bash
-dpp-tool info <dmg>              # Full pipeline overview (DMG + HFS+ + PKGs)
+dpp-tool info <dmg>              # Full pipeline overview (DMG + HFS+/APFS + PKGs)
 dpp-tool bench <dmg>             # Benchmark each pipeline stage
 ```
 
@@ -36,6 +36,17 @@ dpp-tool dmg ls <dmg>                # List partitions
 dpp-tool dmg cat <dmg> [partition-id] # Raw partition data to stdout (default: main)
 ```
 
+### fs — Filesystem (auto-detect HFS+ / APFS)
+
+```bash
+dpp-tool fs info <dmg>               # Volume info (auto-detects filesystem type)
+dpp-tool fs ls <dmg> <path>          # List directory contents
+dpp-tool fs tree <dmg> [path]        # Browse filesystem tree
+dpp-tool fs cat <dmg> <path>         # File to stdout
+dpp-tool fs stat <dmg> <path>        # File metadata (adapts labels to detected FS)
+dpp-tool fs find <dmg> [opts]        # Find files by name/type
+```
+
 ### hfs — HFS+ Filesystem
 
 ```bash
@@ -45,6 +56,17 @@ dpp-tool hfs tree <dmg> [path]       # Browse filesystem tree
 dpp-tool hfs cat <dmg> <path>        # File to stdout
 dpp-tool hfs stat <dmg> <path>       # File metadata (CNID, perms, dates, forks)
 dpp-tool hfs find <dmg> [opts]       # Find files by name/type
+```
+
+### apfs — APFS Filesystem
+
+```bash
+dpp-tool apfs info <dmg>             # Volume info (name, block size, counts)
+dpp-tool apfs ls <dmg> <path>        # List directory contents
+dpp-tool apfs tree <dmg> [path]      # Browse filesystem tree
+dpp-tool apfs cat <dmg> <path>       # File to stdout
+dpp-tool apfs stat <dmg> <path>      # File metadata (OID, perms, dates, links)
+dpp-tool apfs find <dmg> [opts]      # Find files by name/type
 ```
 
 ### pkg — PKG/XAR Archive
@@ -67,6 +89,44 @@ dpp-tool payload cat <dmg> <pkg> <comp> <file>    # Extract payload file
 ```
 
 ## Examples
+
+### Auto-detect filesystem
+
+```
+$ cargo run -p dpp-tool -- fs info app.dmg
+
+  > Opening app.dmg... done (12.3ms)
+  > Detecting and extracting filesystem... done (APFS, 1.2s)
+
+  APFS Volume: app.dmg
+  ════════════════════════════════════════════════════════════
+
+  Volume Info
+  ────────────────────────────────────────────────────────────
+  Name                     MyApp
+  Block size               4096 bytes
+  Files                    234
+  Directories              41
+  Symlinks                 12
+```
+
+```
+$ cargo run -p dpp-tool -- fs ls app.dmg /
+
+  > Opening app.dmg... done (12.3ms)
+  > Detecting and extracting filesystem... done (APFS, 1.2s)
+
+  app.dmg:/
+  ════════════════════════════════════════════════════════════
+
+  Kind          Size  Name
+  --------------------------------------------------------
+  dir              -  Applications
+  dir              -  Library
+             1.22 KB  readme.txt
+
+  1 file(s), 2 directory(ies)
+```
 
 ### Full pipeline overview
 
@@ -109,6 +169,8 @@ $ cargo run -p dpp-tool -- info Kernel_Debug_Kit.dmg
 ```
 
 ### Browsing the filesystem
+
+Use `fs` for auto-detection, or `hfs`/`apfs` to target a specific filesystem:
 
 ```
 $ cargo run -p dpp-tool -- hfs tree Kernel_Debug_Kit.dmg /Library

@@ -160,32 +160,21 @@ impl<R: Read + Seek> Seek for ApfsForkReader<'_, R> {
 
 #[cfg(test)]
 mod tests {
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_read_file() {
-        let path = std::path::Path::new("../tests/appfs.raw");
-        if !path.exists() {
-            eprintln!("Skipping test - appfs.raw not found");
-            return;
-        }
-
-        // Use the full ApfsVolume pipeline to read a file
-        let file = std::fs::File::open(path).unwrap();
+        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
         let reader = std::io::BufReader::new(file);
         let mut vol = crate::ApfsVolume::open(reader).unwrap();
 
-        // Walk to find a small file
         let walk = vol.walk().unwrap();
         let small_file = walk.iter()
             .find(|e| e.entry.kind == crate::EntryKind::File && e.entry.size > 0 && e.entry.size < 100_000);
 
-        if let Some(entry) = small_file {
-            eprintln!("Reading file: {} ({} bytes)", entry.path, entry.entry.size);
-            let data = vol.read_file(&entry.path).unwrap();
-            assert!(!data.is_empty(), "File data should not be empty");
-            assert_eq!(data.len() as u64, entry.entry.size);
-            eprintln!("  Read {} bytes successfully", data.len());
-        } else {
-            eprintln!("No small file found to test");
-        }
+        let entry = small_file.expect("Should find a small file in the test image");
+        let data = vol.read_file(&entry.path).unwrap();
+        assert!(!data.is_empty(), "File data should not be empty");
+        assert_eq!(data.len() as u64, entry.entry.size);
     }
 }

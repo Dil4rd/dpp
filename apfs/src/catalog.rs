@@ -553,13 +553,8 @@ mod tests {
     use crate::omap as omap_mod;
     use std::io::BufReader;
 
-    fn open_volume() -> Option<(BufReader<std::fs::File>, u64, u64, u32)> {
-        let path = std::path::Path::new("../tests/appfs.raw");
-        if !path.exists() {
-            eprintln!("Skipping test - appfs.raw not found");
-            return None;
-        }
-        let file = std::fs::File::open(path).unwrap();
+    fn open_volume() -> (BufReader<std::fs::File>, u64, u64, u32) {
+        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
         let mut reader = BufReader::new(file);
 
         let nxsb = superblock::read_nxsb(&mut reader).unwrap();
@@ -577,40 +572,60 @@ mod tests {
         let vol_omap_root = omap_mod::read_omap_tree_root(&mut reader, vol_sb.omap_oid, block_size).unwrap();
         let catalog_root = omap_mod::omap_lookup(&mut reader, vol_omap_root, block_size, vol_sb.root_tree_oid).unwrap();
 
-        Some((reader, catalog_root, vol_omap_root, block_size))
+        (reader, catalog_root, vol_omap_root, block_size)
     }
 
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_list_root() {
-        let (mut reader, catalog_root, omap_root, block_size) = match open_volume() {
-            Some(x) => x,
-            None => return,
-        };
+        let (mut reader, catalog_root, omap_root, block_size) = open_volume();
 
         let entries = list_directory(&mut reader, catalog_root, omap_root, block_size, ROOT_DIR_RECORD).unwrap();
-
-        eprintln!("Root directory ({} entries):", entries.len());
-        for entry in &entries {
-            eprintln!("  {:?} {:>12} {}", entry.kind, entry.size, entry.name);
-        }
-
         assert!(!entries.is_empty(), "Root directory should have entries");
     }
 
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_resolve_path() {
-        let (mut reader, catalog_root, omap_root, block_size) = match open_volume() {
-            Some(x) => x,
-            None => return,
-        };
+        let (mut reader, catalog_root, omap_root, block_size) = open_volume();
 
-        // First list root to find a known entry
         let entries = list_directory(&mut reader, catalog_root, omap_root, block_size, ROOT_DIR_RECORD).unwrap();
+        let first = entries.first().expect("Root should have entries");
+        let path = format!("/{}", first.name);
+        let (oid, inode) = resolve_path(&mut reader, catalog_root, omap_root, block_size, &path).unwrap();
+        assert!(oid > 0);
+        assert!(inode.kind() != 0);
+    }
 
-        if let Some(first) = entries.first() {
-            let path = format!("/{}", first.name);
-            let (oid, inode) = resolve_path(&mut reader, catalog_root, omap_root, block_size, &path).unwrap();
-            eprintln!("Resolved '{}': oid={}, kind=0o{:o}, size={}", path, oid, inode.kind(), inode.size());
-        }
+    #[test]
+    fn test_drec_val_parse() {
+        // Construct DrecVal bytes: file_id(u64) + date_added(i64) + flags(u16)
+        let mut data = Vec::new();
+        data.extend_from_slice(&42u64.to_le_bytes());       // file_id = 42
+        data.extend_from_slice(&1000i64.to_le_bytes());     // date_added = 1000
+        data.extend_from_slice(&(DT_DIR as u16).to_le_bytes()); // flags = DT_DIR (4)
+
+        let drec = DrecVal::parse(&data).unwrap();
+        assert_eq!(drec.file_id, 42);
+        assert_eq!(drec.date_added, 1000);
+        assert_eq!(drec.file_type(), DT_DIR);
+    }
+
+    #[test]
+    fn test_file_extent_val_parse() {
+        // Construct FileExtentVal bytes: flags_and_length(u64) + phys_block_num(u64) + crypto_id(u64)
+        // length() masks with lower 56 bits (0x00FFFFFFFFFFFFFF)
+        let flags_and_length: u64 = 0xAB00_0000_0000_1000; // upper byte = flags 0xAB, lower 56 = 0x1000
+        let mut data = Vec::new();
+        data.extend_from_slice(&flags_and_length.to_le_bytes());
+        data.extend_from_slice(&100u64.to_le_bytes());  // phys_block_num = 100
+        data.extend_from_slice(&0u64.to_le_bytes());    // crypto_id = 0
+
+        let extent = FileExtentVal::parse(&data).unwrap();
+        assert_eq!(extent.length(), 0x1000);
+        assert_eq!(extent.phys_block_num, 100);
+        assert_eq!(extent.crypto_id, 0);
     }
 }

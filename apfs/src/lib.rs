@@ -323,72 +323,45 @@ mod tests {
     use super::*;
     use std::io::BufReader;
 
-    fn open_appfs() -> Option<BufReader<std::fs::File>> {
-        let path = std::path::Path::new("../tests/appfs.raw");
-        if !path.exists() {
-            eprintln!("Skipping test - appfs.raw not found");
-            return None;
-        }
-        let file = std::fs::File::open(path).unwrap();
-        Some(BufReader::new(file))
-    }
-
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_volume_open() {
-        let reader = match open_appfs() {
-            Some(r) => r,
-            None => return,
-        };
+        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
+        let reader = BufReader::new(file);
 
         let mut vol = ApfsVolume::open(reader).unwrap();
         let info = vol.volume_info();
-        eprintln!("Volume: {}", info.name);
-        eprintln!("  block_size: {}", info.block_size);
-        eprintln!("  files: {}", info.num_files);
-        eprintln!("  directories: {}", info.num_directories);
 
         assert!(!info.name.is_empty(), "Volume name should not be empty");
         assert_eq!(info.block_size, 4096);
 
-        // List root directory
         let entries = vol.list_directory("/").unwrap();
-        eprintln!("Root directory ({} entries):", entries.len());
-        for entry in &entries {
-            eprintln!("  {:?} {:>12} {}", entry.kind, entry.size, entry.name);
-        }
         assert!(!entries.is_empty(), "Root directory should have entries");
 
-        // Walk
         let walk_entries = vol.walk().unwrap();
-        eprintln!("Walk found {} entries", walk_entries.len());
         assert!(!walk_entries.is_empty());
     }
 
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_read_file_data() {
-        let reader = match open_appfs() {
-            Some(r) => r,
-            None => return,
-        };
+        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
+        let reader = BufReader::new(file);
 
         let mut vol = ApfsVolume::open(reader).unwrap();
 
-        // Walk to find a small file
         let walk = vol.walk().unwrap();
         let small_file = walk.iter()
             .find(|e| e.entry.kind == EntryKind::File && e.entry.size > 0 && e.entry.size < 1_000_000);
 
-        if let Some(entry) = small_file {
-            eprintln!("Reading file: {} ({} bytes)", entry.path, entry.entry.size);
-            let data = vol.read_file(&entry.path).unwrap();
-            assert_eq!(data.len() as u64, entry.entry.size,
-                "Read size should match stat size");
+        let entry = small_file.expect("Should find a small file in the test image");
+        let data = vol.read_file(&entry.path).unwrap();
+        assert_eq!(data.len() as u64, entry.entry.size,
+            "Read size should match stat size");
 
-            let stat = vol.stat(&entry.path).unwrap();
-            assert_eq!(stat.size, entry.entry.size);
-            eprintln!("  stat: uid={}, gid={}, mode=0o{:o}", stat.uid, stat.gid, stat.mode);
-        } else {
-            eprintln!("No small file found to test read");
-        }
+        let stat = vol.stat(&entry.path).unwrap();
+        assert_eq!(stat.size, entry.entry.size);
     }
 }

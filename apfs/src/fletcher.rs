@@ -50,23 +50,17 @@ pub fn verify_object(block: &[u8]) -> bool {
 mod tests {
     use super::*;
 
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_fletcher64_known() {
-        let path = std::path::Path::new("../tests/appfs.raw");
-        if !path.exists() {
-            eprintln!("Skipping test - appfs.raw not found");
-            return;
-        }
-
-        // Read block 0 (the container superblock)
-        let mut file = std::fs::File::open(path).unwrap();
+        let mut file = std::fs::File::open("../tests/appfs.raw").unwrap();
         use std::io::Read;
         let mut block = vec![0u8; 4096];
         file.read_exact(&mut block).unwrap();
 
         assert!(verify_object(&block), "Block 0 checksum should be valid");
 
-        // Also verify that the computed checksum matches the stored one
         let stored = u64::from_le_bytes([
             block[0], block[1], block[2], block[3],
             block[4], block[5], block[6], block[7],
@@ -74,5 +68,51 @@ mod tests {
         let computed = fletcher64(&block[8..]);
         assert_eq!(stored, computed,
             "Stored checksum 0x{:016X} should match computed 0x{:016X}", stored, computed);
+    }
+
+    #[test]
+    fn test_fletcher64_known_words() {
+        // Hand-computed Fletcher-64 over a small buffer of 8 bytes (two 32-bit LE words).
+        // Words: [1, 2] → sum1 = (0+1)%M = 1, sum2 = (0+1)%M = 1
+        //                  sum1 = (1+2)%M = 3, sum2 = (1+3)%M = 4
+        // check1 = M - ((3+4) % M) = M - 7
+        // check2 = M - ((3 + check1) % M) = M - (3 + M - 7) % M = M - (M - 4) % M = M - (M-4) = 4
+        let data = [
+            1u8, 0, 0, 0, // word 0 = 1
+            2, 0, 0, 0,   // word 1 = 2
+        ];
+        let m: u64 = 0xFFFFFFFF;
+        let checksum = fletcher64(&data);
+        let check1 = checksum & 0xFFFFFFFF;
+        let check2 = checksum >> 32;
+        assert_eq!(check1, m - 7);
+        assert_eq!(check2, 4);
+    }
+
+    #[test]
+    fn test_verify_object_valid() {
+        // Build a 64-byte block: checksum at [0..8], data at [8..64]
+        let mut block = vec![0u8; 64];
+        // Fill data region with a pattern
+        for (i, byte) in block[8..].iter_mut().enumerate() {
+            *byte = (i & 0xFF) as u8;
+        }
+        // Compute and store the checksum
+        let checksum = fletcher64(&block[8..]);
+        block[..8].copy_from_slice(&checksum.to_le_bytes());
+        assert!(verify_object(&block));
+    }
+
+    #[test]
+    fn test_verify_object_invalid() {
+        let mut block = vec![0u8; 64];
+        for (i, byte) in block[8..].iter_mut().enumerate() {
+            *byte = (i & 0xFF) as u8;
+        }
+        let checksum = fletcher64(&block[8..]);
+        block[..8].copy_from_slice(&checksum.to_le_bytes());
+        // Corrupt one byte in the data region
+        block[16] ^= 0xFF;
+        assert!(!verify_object(&block));
     }
 }

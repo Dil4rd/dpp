@@ -150,45 +150,26 @@ mod tests {
     use crate::superblock;
     use std::io::BufReader;
 
-    fn open_appfs() -> Option<BufReader<std::fs::File>> {
-        let path = std::path::Path::new("../tests/appfs.raw");
-        if !path.exists() {
-            eprintln!("Skipping test - appfs.raw not found");
-            return None;
-        }
-        let file = std::fs::File::open(path).unwrap();
-        Some(BufReader::new(file))
-    }
-
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_omap_lookup() {
-        let mut reader = match open_appfs() {
-            Some(r) => r,
-            None => return,
-        };
+        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
+        let mut reader = BufReader::new(file);
 
         let nxsb = superblock::read_nxsb(&mut reader).unwrap();
         let latest = superblock::find_latest_nxsb(&mut reader, &nxsb).unwrap();
 
-        // Read container OMAP root
         let omap_root = read_omap_tree_root(&mut reader, latest.omap_oid, latest.block_size).unwrap();
-        eprintln!("Container OMAP tree root block: {}", omap_root);
 
-        // Find first non-zero volume OID
         let vol_oid = latest.fs_oids.iter().find(|&&o| o != 0).copied().unwrap();
-        eprintln!("Volume OID: {}", vol_oid);
 
-        // Resolve volume OID via OMAP
         let vol_block = omap_lookup(&mut reader, omap_root, latest.block_size, vol_oid).unwrap();
-        eprintln!("Volume physical block: {}", vol_block);
-
         assert!(vol_block > 0 && vol_block < latest.block_count,
             "Physical block {} should be within container", vol_block);
 
-        // Verify the resolved block contains a valid APSB
         let vol_data = object::read_block(&mut reader, vol_block, latest.block_size).unwrap();
         let vol_sb = superblock::ApfsSuperblock::parse(&vol_data).unwrap();
         assert_eq!(vol_sb.magic, superblock::APSB_MAGIC);
-        eprintln!("Volume name: {}", vol_sb.volume_name);
     }
 }

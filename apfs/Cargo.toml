@@ -1,0 +1,19 @@
+[package]
+name = "apfs"
+version = "0.1.0"
+edition = "2021"
+description = "Read-only APFS (Apple File System) parser"
+license = "MIT"
+keywords = ["apfs", "apple", "macos", "filesystem"]
+categories = ["parsing", "filesystem"]
+
+[dependencies]
+byteorder = "1.5"
+thiserror = "2"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "parse_benchmark"
+harness = false

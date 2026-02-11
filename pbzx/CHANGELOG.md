@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Parallel XZ chunk decompression via `rayon` behind opt-in `parallel` feature flag
+- `PbzxReader::decompress_parallel()` and `decompress_parallel_to()` methods
+- `Archive::open()` and `Archive::from_reader()` automatically use parallel decompression when the `parallel` feature is enabled
+
 ## [0.1.0] - 2026-02-03
 
 ### Added

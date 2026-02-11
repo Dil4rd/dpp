@@ -14,3 +14,6 @@ hfsplus = { version = "0.1.0", path = "../hfsplus" }
 xara = { version = "0.1.0", path = "../xara" }
 thiserror = "2"
 tempfile = "3"
+
+[features]
+parallel = ["pbzx/parallel"]

@@ -283,14 +283,10 @@ There is no equivalent single-crate solution in Rust. The closest approach is to
 
 ## Next Steps
 
-- [x] **APFS support** — handle APFS containers in DMGs with auto-detection
 - [ ] **Encrypted DMG** — support FileVault-encrypted disk images
 - [ ] **Parallel extraction** — decompress multiple partitions concurrently
 - [ ] **Progress callbacks** — report extraction progress for UI integration
 - [ ] **Selective extraction** — extract specific files without full pipeline
-- [ ] **DMG creation pipeline** — reverse pipeline: files → PBZX → PKG → HFS+ → DMG
-- [ ] **`no_std` support** — enable embedded/WASM usage for core parsing
-- [ ] **Flat PKG without DMG** — support direct `.pkg` file opening
 
 ## License
 

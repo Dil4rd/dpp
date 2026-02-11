@@ -8,15 +8,13 @@ Rust workspace with 7 crates forming a layered pipeline for cross-platform Apple
 dpp-tool (CLI binary)
     ↓
 dpp (pipeline library — orchestrates + re-exports all below)
-    ↓           ↓           ↓           ↓
-udif (DMG)   hfsplus (HFS+)   xara (XAR/PKG)   pbzx (PBZX/CPIO)
-
-apfs (APFS — standalone, not yet integrated into dpp pipeline)
+    ↓           ↓           ↓           ↓           ↓
+udif (DMG)   hfsplus (HFS+)   apfs (APFS)   xara (XAR/PKG)   pbzx (PBZX/CPIO)
 ```
 
 ## Data Flow
 
-DMG → decompress partition → mount HFS+ filesystem → find .pkg → parse XAR archive → extract PBZX payload → decompress CPIO → individual files.
+DMG → decompress partition → mount HFS+ or APFS filesystem → find .pkg → parse XAR archive → extract PBZX payload → decompress CPIO → individual files.
 
 ## Key Design Patterns
 
@@ -33,5 +31,5 @@ DMG → decompress partition → mount HFS+ filesystem → find .pkg → parse X
 - **xara** — XAR archive and PKG installer parser. Reads XAR header + gzip-compressed TOC XML, extracts heap entries, understands product/component/flat packages.
 - **pbzx** — PBZX archive reader/writer + CPIO parser. Chunked XZ decompression. Supports CPIO odc (070707), newc (070701), crc (070702 read-only).
 - **apfs** — APFS filesystem reader. Fletcher-64 checksums, checkpoint scanning, B-tree traversal, object map resolution, catalog records.
-- **dpp** — Pipeline library. Chains udif→hfsplus→xara→pbzx. Provides `DmgPipeline`, `find_packages()`, `extract_pkg_payload()`.
-- **dpp-tool** — CLI tool with subcommands for interactive exploration of each pipeline stage.
+- **dpp** — Pipeline library. Chains udif→hfsplus/apfs→xara→pbzx. Provides `DmgPipeline`, `FilesystemHandle` (unified HFS+/APFS access), unified types (`FsType`, `FsFileStat`, `FsVolumeInfo`, `FsDirEntry`, `FsWalkEntry`, `FsEntryKind`), `find_packages()`, `extract_pkg_payload()`.
+- **dpp-tool** — CLI tool with subcommands for interactive exploration of each pipeline stage. The `fs` command auto-detects HFS+ or APFS; `hfs` and `apfs` commands target specific filesystems.

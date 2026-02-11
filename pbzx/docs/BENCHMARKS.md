@@ -48,7 +48,7 @@ Compression benchmarks on a 16MB sample:
 To run the comparison benchmark yourself:
 
 ```bash
-cargo run --example cpio-compare --release -- Payload
+cargo run -p pbzx --example cpio-compare --release -- Payload
 ```
 
 This requires a PBZX file (e.g., `Payload` from a macOS `.pkg`).

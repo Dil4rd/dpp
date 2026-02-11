@@ -119,6 +119,7 @@ Header:
   Version:          4
   Sector count:     2351263
   Data fork length: 1023271318 bytes
+  Segment:          1/1
 
 Size:
   Uncompressed:     1203845632 bytes (1148.08 MB)
@@ -134,6 +135,8 @@ Block types used:
 ```
 $ udif-tool list Kernel_Debug_Kit.dmg
 
+Partitions in Kernel_Debug_Kit.dmg:
+================================================================================
   ID       Sectors          Size     Ratio  Name
 --------------------------------------------------------------------------------
   -1             1         512 B     89.6%  Protective Master Boot Record (MBR : 0)

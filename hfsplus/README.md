@@ -126,33 +126,38 @@ println!("Resource fork: {} bytes", stat.resource_fork_size);
 
 ## Example Output
 
-```
-$ hfsplus-tool list partition.raw /
-
-  Kind         Size  Name
-──────────────────────────────────────────────────────
-  Directory       0  .HFS+ Private Directory Data\r
-  Directory       0  .Trashes
-  Directory       0  Library
-  Directory       0  System
-  Directory       0  usr
-  File        12288  .DS_Store
-```
+Via `dpp-tool hfs` (which uses the hfsplus library internally):
 
 ```
-$ hfsplus-tool info partition.raw
+$ dpp-tool hfs ls Kernel_Debug_Kit.dmg /
 
-HFS+ Volume Information
-════════════════════════════════════════════════════════
+  Kind          Size  Name
+  --------------------------------------------------------
+  dir              -  .HFS+ Private Directory Data\r
+  dir              -  .Trashes
+  dir              -  Library
+  dir              -  System
+  dir              -  usr
+              12288  .DS_Store
 
-  Signature:        HFSX (case-sensitive)
-  Version:          5
-  Block size:       4096 bytes
-  Total blocks:     260608
-  Free blocks:      6
-  File count:       3,847
-  Folder count:     612
-  Created:          2024-01-15 08:23:41
+  1 file(s), 5 directory(ies)
+```
+
+```
+$ dpp-tool hfs info Kernel_Debug_Kit.dmg
+
+  HFS+ Volume: Kernel_Debug_Kit.dmg
+  ════════════════════════════════════════════════════════════
+
+  Volume Header
+  ────────────────────────────────────────────────────────────
+  Signature                HFSX (case-sensitive)
+  Version                  5
+  Block size               4096 bytes
+  Total blocks             260,608
+  Free blocks              6
+  Files                    3,847
+  Folders                  612
 ```
 
 ## Alternatives

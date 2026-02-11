@@ -118,30 +118,26 @@ writer.finish()?;
 ```
 $ pbzx-tool info Payload
 
-PBZX Archive: Payload
-════════════════════════════════════════════════════════
+Archive Information:
+  Chunks:            64
+  Compressed size:   1061683200 bytes
+  Uncompressed size: 4480106496 bytes
+  Compression ratio: 76.3% space savings
 
-  Chunks:             64
-  Compressed:         1,012 MB
-  Decompressed:       4,273 MB
-  Compression ratio:  23.7%
-
-  CPIO entries:       7,788
-  Files:              6,241
-  Directories:        1,534
-  Symlinks:           13
+Payload Contents:
+  Files:       6241
+  Directories: 1534
+  Total size:  4273000000 bytes
 ```
 
 ```
 $ pbzx-tool list Payload
 
-  Mode       Size  Path
-──────────────────────────────────────────────────────
-  drwxr-xr-x       0  ./usr
-  drwxr-xr-x       0  ./usr/lib
-  -rwxr-xr-x  12,480  ./usr/lib/libfoo.dylib
-  -rw-r--r--   3,201  ./usr/share/man/man1/foo.1
-  lrwxr-xr-x      18  ./usr/lib/libfoo.1.dylib -> libfoo.dylib
+drwxr-xr-x          - ./usr
+drwxr-xr-x          - ./usr/lib
+-rwxr-xr-x      12480 ./usr/lib/libfoo.dylib
+-rw-r--r--       3201 ./usr/share/man/man1/foo.1
+lrwxr-xr-x         18 ./usr/lib/libfoo.1.dylib -> libfoo.dylib
 ```
 
 ## Benchmarks

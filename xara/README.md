@@ -135,33 +135,48 @@ pkg.payload_to("com.apple.pkg.KDK", &mut out)?;
 
 ## Example Output
 
-```
-$ xara-tool info installer.pkg
-
-XAR Archive Information
-════════════════════════════════════════════════════════
-
-  Header:
-    Version:            1
-    Header size:        28 bytes
-    TOC compressed:     1,245 bytes
-    TOC uncompressed:   4,892 bytes
-    Checksum:           SHA-1
-
-  Package type:         Product package
-  Components:           2
-```
+Via `dpp-tool pkg` (which uses the xara library internally):
 
 ```
-$ xara-tool list installer.pkg
+$ dpp-tool pkg info Kernel_Debug_Kit.dmg /Library/Developer/KDKs/KDK.pkg
 
-  Type       Size  Path
-──────────────────────────────────────────────────────
-  dir           0  com.apple.pkg.KDK
-  file        892  com.apple.pkg.KDK/PackageInfo
-  file  512.3 MB   com.apple.pkg.KDK/Payload
-  file      1,024  com.apple.pkg.KDK/Bom
-  file      3,201  Distribution
+  PKG: /Library/Developer/KDKs/KDK.pkg
+  ════════════════════════════════════════════════════════════
+
+  Package
+  ────────────────────────────────────────────────────────────
+  Type                     Product package (multi-component)
+  Components               1
+  XAR version              1
+  Checksum                 Sha1
+  TOC size                 1.22 KB compressed, 4.78 KB uncompressed
+
+  Contents
+  ────────────────────────────────────────────────────────────
+  Entries                  6
+  Files                    4
+  Directories              2
+  Compressed size          512.30 MB
+  Uncompressed size        512.30 MB
+  Space savings            0.0%
+
+  Components
+  ────────────────────────────────────────────────────────────
+  └── com.apple.pkg.KDK  512.30 MB compressed, 512.30 MB uncompressed
+```
+
+```
+$ dpp-tool pkg ls Kernel_Debug_Kit.dmg /Library/Developer/KDKs/KDK.pkg
+
+  XAR Contents
+  ────────────────────────────────────────────────────────────
+  com.apple.pkg.KDK                                          dir
+  com.apple.pkg.KDK/Bom                                  1.00 KB
+  com.apple.pkg.KDK/PackageInfo                            892 B
+  com.apple.pkg.KDK/Payload                            512.30 MB
+  Distribution                                           3.12 KB
+
+  4 file(s), 1 directory(ies)
 ```
 
 ## Alternatives

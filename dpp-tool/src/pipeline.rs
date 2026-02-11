@@ -17,10 +17,25 @@ pub(crate) fn open_hfs(pipeline: &mut dpp::DmgPipeline) -> Result<dpp::HfsHandle
         Ok(hfs) => hfs,
         Err(dpp::DppError::NoHfsPartition) => {
             eprintln!(" {RED}failed{RESET}");
-            return Err("This DMG contains an APFS partition. APFS is not supported.".into());
+            return Err("This DMG does not contain an HFS+ partition. Try the `apfs` subcommand instead.".into());
         }
         Err(e) => return Err(e.into()),
     };
     spinner_done(&format!(" ({})", format_duration(t.elapsed())));
     Ok(hfs)
+}
+
+pub(crate) fn open_apfs(pipeline: &mut dpp::DmgPipeline) -> Result<dpp::ApfsHandle, Box<dyn std::error::Error>> {
+    spinner_msg("Extracting APFS partition");
+    let t = Instant::now();
+    let apfs = match pipeline.open_apfs() {
+        Ok(apfs) => apfs,
+        Err(dpp::DppError::NoApfsPartition) => {
+            eprintln!(" {RED}failed{RESET}");
+            return Err("This DMG does not contain an APFS partition. Try the `hfs` subcommand instead.".into());
+        }
+        Err(e) => return Err(e.into()),
+    };
+    spinner_done(&format!(" ({})", format_duration(t.elapsed())));
+    Ok(apfs)
 }

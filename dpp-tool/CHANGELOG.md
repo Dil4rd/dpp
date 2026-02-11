@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `apfs` subcommand with `info`, `ls`, `tree`, `cat`, `stat`, `find` operations
+- APFS support in `info` command — shows volume info and file listing for APFS DMGs
+- APFS support in `bench` command — benchmarks APFS extraction and walk stages
 - README.md with install instructions, command reference, and examples
 
 ## [0.2.0] - 2026-02-11

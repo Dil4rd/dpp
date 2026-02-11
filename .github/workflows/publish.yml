@@ -1,0 +1,42 @@
+name: Publish to crates.io
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish pbzx
+        run: cargo publish -p pbzx --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish xara
+        run: cargo publish -p xara --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish hfsplus
+        run: cargo publish -p hfsplus --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish udif
+        run: cargo publish -p udif --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io index
+        run: sleep 30
+
+      - name: Publish dpp
+        run: cargo publish -p dpp --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io index
+        run: sleep 30
+
+      - name: Publish dpp-tool
+        run: cargo publish -p dpp-tool --token ${{ secrets.CARGO_REGISTRY_TOKEN }}

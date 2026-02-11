@@ -4,6 +4,7 @@ version = "0.2.0"
 edition = "2021"
 description = "Read-only XAR archive and macOS PKG package parser"
 license = "MIT"
+repository = "https://github.com/Dil4rd/dpp"
 keywords = ["xar", "pkg", "apple", "macos", "archive"]
 categories = ["parsing", "compression"]
 

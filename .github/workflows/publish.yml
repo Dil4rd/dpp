@@ -30,6 +30,7 @@ jobs:
           try_publish pbzx
           try_publish xara
           try_publish hfsplus
+          try_publish apfs
           try_publish udif
           sleep 30
           try_publish dpp

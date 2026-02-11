@@ -5,22 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] - 2026-02-11
 
 ### Added
 
-- `FsType` enum for filesystem type discrimination (HFS+ vs APFS)
-- `FsFileStat` unified file metadata type with `From<&hfsplus::FileStat>` and `From<&apfs::FileStat>`
-- `FsVolumeInfo` unified volume information type
-- `FilesystemHandle::fs_type()` method to query detected filesystem type
-- `FilesystemHandle::stat()` method returning unified `FsFileStat`
-- `FilesystemHandle::volume_info()` method returning unified `FsVolumeInfo`
-- APFS filesystem support: `ApfsHandle` for type-erased APFS volume access
-- `DmgPipeline::open_apfs()` and `open_apfs_with_mode()` for APFS partition extraction
-- `DmgPipeline::open_filesystem()` for auto-detecting HFS+ or APFS partitions
-- `FilesystemHandle` unified enum dispatching to either `HfsHandle` or `ApfsHandle`
-- Unified filesystem types: `FsDirEntry`, `FsWalkEntry`, `FsEntryKind`
-- `DppError::Apfs`, `DppError::NoApfsPartition`, `DppError::NoFilesystemPartition` error variants
+- APFS filesystem support via `ApfsHandle`
+- Auto-detecting `open_filesystem()` for HFS+ and APFS partitions
+- Unified `FilesystemHandle` dispatching to either filesystem
+- Unified metadata types: `FsFileStat`, `FsVolumeInfo`, `FsDirEntry`, `FsWalkEntry`
 
 ## [0.2.0] - 2026-02-11
 

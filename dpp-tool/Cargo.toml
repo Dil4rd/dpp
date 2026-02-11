@@ -1,8 +1,8 @@
 [package]
 name = "dpp-tool"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
-description = "CLI to explore Apple DMG disk images: DMG → HFS+ → PKG → PBZX → files"
+description = "CLI to explore Apple DMG disk images: DMG → HFS+/APFS → PKG → PBZX → files"
 license = "MIT"
 repository = "https://github.com/Dil4rd/dpp"
 
@@ -11,7 +11,7 @@ name = "dpp-tool"
 path = "src/main.rs"
 
 [dependencies]
-dpp = { version = "0.2.0", path = "../dpp" }
+dpp = { version = "0.3.0", path = "../dpp" }
 udif = { version = "0.2.0", path = "../udif" }
 hfsplus = { version = "0.2.0", path = "../hfsplus" }
 apfs = { version = "0.2.0", path = "../apfs" }

@@ -25,6 +25,25 @@ pub(crate) fn open_hfs(pipeline: &mut dpp::DmgPipeline) -> Result<dpp::HfsHandle
     Ok(hfs)
 }
 
+pub(crate) fn open_filesystem(pipeline: &mut dpp::DmgPipeline) -> Result<dpp::FilesystemHandle, Box<dyn std::error::Error>> {
+    spinner_msg("Detecting and extracting filesystem");
+    let t = Instant::now();
+    let fs = match pipeline.open_filesystem() {
+        Ok(fs) => fs,
+        Err(dpp::DppError::NoFilesystemPartition) => {
+            eprintln!(" {RED}failed{RESET}");
+            return Err("This DMG does not contain an HFS+ or APFS partition.".into());
+        }
+        Err(e) => return Err(e.into()),
+    };
+    let type_label = match fs.fs_type() {
+        dpp::FsType::HfsPlus => "HFS+",
+        dpp::FsType::Apfs => "APFS",
+    };
+    spinner_done(&format!(" ({}, {})", type_label, format_duration(t.elapsed())));
+    Ok(fs)
+}
+
 pub(crate) fn open_apfs(pipeline: &mut dpp::DmgPipeline) -> Result<dpp::ApfsHandle, Box<dyn std::error::Error>> {
     spinner_msg("Extracting APFS partition");
     let t = Instant::now();

@@ -17,6 +17,9 @@ Commands are organized by pipeline layer with consistent verbs across layers:
 | `ls` | List contents |
 | `info` | Show metadata |
 | `cat` | Output/extract content |
+| `find` | Search for entries |
+| `tree` | Browse tree structure |
+| `stat` | Show file metadata |
 
 ### Overview Commands
 
@@ -41,22 +44,26 @@ dpp-tool hfs ls <dmg> <path>         # List directory contents
 dpp-tool hfs tree <dmg> [path]       # Browse filesystem tree
 dpp-tool hfs cat <dmg> <path>        # File to stdout
 dpp-tool hfs stat <dmg> <path>       # File metadata (CNID, perms, dates, forks)
+dpp-tool hfs find <dmg> [opts]       # Find files by name/type
 ```
 
 ### pkg — PKG/XAR Archive
 
 ```bash
-dpp-tool pkg ls <dmg>                # Find all .pkg files on volume
 dpp-tool pkg info <dmg> <pkg-path>   # Package type, XAR contents listing
+dpp-tool pkg ls <dmg> <pkg>          # List XAR contents
+dpp-tool pkg find <dmg>              # Find all .pkg files on volume
 dpp-tool pkg cat <dmg> <pkg> <file>  # XAR entry to stdout (Distribution, etc.)
 ```
 
-### component — PKG Component Payloads
+### payload — PKG Component Payloads
 
 ```bash
-dpp-tool component ls <dmg> <pkg-path>                    # List components
-dpp-tool component info <dmg> <pkg-path> <component>      # Component metadata
-dpp-tool component cat <dmg> <pkg-path> <component> <dest> # Extract payload to dir
+dpp-tool payload info <dmg> <pkg> <comp>          # Payload stats
+dpp-tool payload ls <dmg> <pkg> <comp> [path]     # List payload files
+dpp-tool payload tree <dmg> <pkg> <comp>          # Browse payload tree
+dpp-tool payload find <dmg> <pkg> <comp> [opts]   # Find files in payload
+dpp-tool payload cat <dmg> <pkg> <comp> <file>    # Extract payload file
 ```
 
 ## Examples
@@ -118,13 +125,13 @@ $ cargo run -p dpp-tool -- hfs tree Kernel_Debug_Kit.dmg /Library
 
 ```bash
 dpp-tool pkg info Kernel_Debug_Kit.dmg /Library/Developer/KDKs/KDK.pkg
-dpp-tool component ls Kernel_Debug_Kit.dmg /Library/Developer/KDKs/KDK.pkg
+dpp-tool payload ls Kernel_Debug_Kit.dmg /Library/Developer/KDKs/KDK.pkg com.apple.pkg.KDK /
 ```
 
-### Extracting a component
+### Extracting a payload file
 
 ```bash
-dpp-tool component cat Kernel_Debug_Kit.dmg /path.pkg com.apple.pkg.KDK ./output
+dpp-tool payload cat Kernel_Debug_Kit.dmg /path.pkg com.apple.pkg.KDK /usr/bin/tool > tool
 ```
 
 ### Extracting raw data

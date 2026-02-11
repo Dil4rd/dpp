@@ -63,7 +63,7 @@ Benchmarked on a 1 GB PBZX payload (4.3 GB decompressed, 7,788 entries):
 ### Pipeline benchmark
 
 ```bash
-cargo run --example dpp-tool --release -- bench Kernel_Debug_Kit.dmg
+cargo run -p dpp-tool --release -- bench Kernel_Debug_Kit.dmg
 ```
 
 ### PBZX comparison benchmark

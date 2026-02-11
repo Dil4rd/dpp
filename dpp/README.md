@@ -156,43 +156,60 @@ pkg.payload_to("component", &mut out)?;
 ```
 $ dpp-tool info Kernel_Debug_Kit.dmg
 
-DMG Pipeline: Kernel_Debug_Kit.dmg
-════════════════════════════════════════════════════════
+  DMG Pipeline: Kernel_Debug_Kit.dmg
+  ════════════════════════════════════════════════════════════
 
-  DMG:
-    Partitions:       7
-    Compression:      LZFSE (988 blocks)
-    Compressed size:  975.87 MB
-    Actual size:      1,148.08 MB
+  DMG (UDIF)
+  ────────────────────────────────────────────────────────────
+  Version                  4
+  Partitions               7
+  Compressed               975.87 MB (975.87 MB)
+  Uncompressed             1.12 GB
+  Space savings            15.0%
+  Block types              LZFSE: 988
 
-  HFS+ Volume:
-    Signature:        HFSX (case-sensitive)
-    Block size:       4096
-    Files:            3,847
-    Folders:          612
+    ID       Sectors          Size    Ratio  Name
+    ----------------------------------------------------------
+    -1             1         512 B     89.6%  MBR : 0
+     2       2089050    1020.04 MB      4.3%  Apple_HFSX : 3
 
-  Packages found:     1
-    /Library/Developer/KDKs/KDK_14.2_23C64.pkg
+  HFS+ Volume
+  ────────────────────────────────────────────────────────────
+  Signature                HFSX (case-sensitive)
+  Version                  5
+  Block size               4096 bytes
+  Files                    3,847
+  Folders                  612
+
+  Packages
+  ────────────────────────────────────────────────────────────
+  └── /Library/Developer/KDKs/KDK_14.2_23C64.pkg  512.30 MB
 ```
 
 ```
-$ dpp-tool tree Kernel_Debug_Kit.dmg /Library/Developer/KDKs/
+$ dpp-tool hfs tree Kernel_Debug_Kit.dmg /Library/Developer/KDKs
 
-  /Library/Developer/KDKs/
-  ├── KDK_14.2_23C64.pkg          512.3 MB
-  ├── readme.txt                     1.2 KB
-  └── LICENSE.txt                    4.8 KB
+  Tree: Kernel_Debug_Kit.dmg:/Library/Developer/KDKs
+  ════════════════════════════════════════════════════════════
+
+  ├── KDK_14.2_23C64.pkg  512.30 MB
+  ├── readme.txt  1.22 KB
+  └── LICENSE.txt  4.78 KB
 ```
 
 ```
-$ dpp-tool extract Kernel_Debug_Kit.dmg /path/to.pkg com.apple.pkg.KDK ./output/
+$ dpp-tool payload ls Kernel_Debug_Kit.dmg /path.pkg com.apple.pkg.KDK /usr
 
-  Extracting com.apple.pkg.KDK...
-  ├── Decompressing PBZX payload... 4,273 MB
-  ├── Parsing CPIO archive...       7,788 entries
-  └── Writing to ./output/...       done
+  Payload: com.apple.pkg.KDK — /usr
+  ════════════════════════════════════════════════════════════
 
-  Extracted 7,788 files (4.17 GB) in 23.4s
+  Kind          Size  Name
+  --------------------------------------------------------
+  dir              -  lib
+  dir              -  share
+              12.19 KB  libfoo.dylib
+
+  1 file(s), 2 directory(ies)
 ```
 
 ## Alternatives

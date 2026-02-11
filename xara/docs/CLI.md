@@ -6,13 +6,16 @@ The xara crate does not include a standalone CLI tool. For XAR/PKG operations, u
 
 ```bash
 # Build the pipeline tool
-cargo build --example dpp-tool --release -p dpp
+cargo build -p dpp-tool --release
 
 # Inspect a PKG inside a DMG
-cargo run --example dpp-tool -- pkg-info image.dmg /path/to/installer.pkg
+cargo run -p dpp-tool -- pkg info image.dmg /path/to/installer.pkg
 
-# Extract a component payload
-cargo run --example dpp-tool -- extract image.dmg /path.pkg com.apple.pkg.KDK ./output/
+# List payload files
+cargo run -p dpp-tool -- payload ls image.dmg /path.pkg com.apple.pkg.KDK /
+
+# Extract a payload file
+cargo run -p dpp-tool -- payload cat image.dmg /path.pkg com.apple.pkg.KDK /usr/bin/tool > tool
 ```
 
 ## Programmatic Usage

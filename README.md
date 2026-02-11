@@ -117,11 +117,13 @@ hfs.read_file_to("/System/Library/Kernels/kernel", &mut out)?;
 | **pkg** | |
 | `dpp-tool pkg info <dmg> <pkg>` | Package statistics |
 | `dpp-tool pkg ls <dmg> <pkg>` | List XAR contents |
+| `dpp-tool pkg find <dmg> <pkg> [opts]` | Find XAR entries |
 | `dpp-tool pkg cat <dmg> <pkg> <file>` | Extract XAR entry |
 | **payload** | |
 | `dpp-tool payload info <dmg> <pkg> <comp>` | Payload stats |
 | `dpp-tool payload ls <dmg> <pkg> <comp> [path]` | List payload files |
 | `dpp-tool payload tree <dmg> <pkg> <comp>` | Browse payload tree |
+| `dpp-tool payload find <dmg> <pkg> <comp> [opts]` | Find payload files |
 | `dpp-tool payload cat <dmg> <pkg> <comp> <file>` | Extract payload file |
 
 ## Architecture

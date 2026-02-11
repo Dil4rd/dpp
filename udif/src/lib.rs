@@ -762,56 +762,46 @@ mod tests {
     }
 
     // =========================================================================
-    // Integration test with real DMG file (if available)
+    // Integration test with real DMG file (requires fixture)
     // =========================================================================
-    #[test]
-    fn test_real_dmg_if_available() {
-        let test_dmg = std::path::Path::new("../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg");
 
-        if !test_dmg.exists() {
-            eprintln!("Skipping real DMG test - file not found");
-            return;
-        }
+    /// Requires ../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg fixture.
+    /// Run with `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn test_real_dmg_if_available() {
+        let test_dmg = "../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg";
 
         let archive = DmgArchive::open(test_dmg).unwrap();
         let stats = archive.stats();
 
-        // Verify basic properties
         assert_eq!(stats.version, 4);
         assert!(stats.partition_count > 0);
         assert!(stats.total_uncompressed > stats.total_compressed);
 
-        // Verify partitions
         let partitions = archive.partitions();
         assert!(!partitions.is_empty());
 
-        // Find the HFSX partition
         let hfsx = partitions.iter().find(|p| p.name.contains("HFSX"));
         assert!(hfsx.is_some(), "Should have HFSX partition");
     }
 
+    /// Requires ../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg fixture.
+    /// Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_real_dmg_decompress() {
-        let test_dmg = std::path::Path::new("../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg");
-        if !test_dmg.exists() {
-            eprintln!("Skipping - DMG not found");
-            return;
-        }
+        let test_dmg = "../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg";
 
-        // Test buffered decompress
         let mut archive = DmgArchive::open(test_dmg).unwrap();
         let data = archive.extract_main_partition().unwrap();
-        eprintln!("Buffered: {} bytes", data.len());
         assert_eq!(&data[1024..1026], &[0x48, 0x58], "Should be HFSX signature");
 
-        // Test streaming decompress
         let mut archive2 = DmgArchive::open(test_dmg).unwrap();
         let mut buf = Vec::new();
-        let n = archive2.extract_main_partition_to(&mut buf).unwrap();
-        eprintln!("Streaming: {} bytes", n);
+        let _n = archive2.extract_main_partition_to(&mut buf).unwrap();
         assert_eq!(&buf[1024..1026], &[0x48, 0x58], "Should be HFSX signature");
 
-        // Both methods should produce identical output
         assert_eq!(data.len(), buf.len());
         assert_eq!(data, buf, "Buffered and streaming should produce identical output");
     }

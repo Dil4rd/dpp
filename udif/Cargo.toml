@@ -4,6 +4,7 @@ version = "0.2.0"
 edition = "2021"
 description = "cross-platform Apple disk image (aka DMG, UDIF) library"
 license = "MIT"
+repository = "https://github.com/Dil4rd/dpp"
 keywords = ["dmg", "apple", "macos", "disk-image", "udif"]
 categories = ["compression", "encoding", "parsing"]
 

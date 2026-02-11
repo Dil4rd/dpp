@@ -4,6 +4,7 @@ version = "0.2.0"
 edition = "2021"
 description = "DMG + PKG + PBZX pipeline - walk through Apple disk images to extract packages"
 license = "MIT"
+repository = "https://github.com/Dil4rd/dpp"
 keywords = ["dmg", "apple", "macos", "pkg", "hfs"]
 categories = ["compression", "encoding", "parsing"]
 

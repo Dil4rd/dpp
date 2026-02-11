@@ -4,6 +4,7 @@ version = "0.2.0"
 edition = "2021"
 description = "CLI to explore Apple DMG disk images: DMG → HFS+ → PKG → PBZX → files"
 license = "MIT"
+repository = "https://github.com/Dil4rd/dpp"
 
 [[bin]]
 name = "dpp-tool"

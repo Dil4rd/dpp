@@ -12,6 +12,7 @@ categories = ["compression", "encoding", "parsing"]
 udif = { version = "0.2.0", path = "../udif" }
 pbzx = { version = "0.2.0", path = "../pbzx" }
 hfsplus = { version = "0.2.0", path = "../hfsplus" }
+apfs = { version = "0.2.0", path = "../apfs" }
 xara = { version = "0.2.0", path = "../xara" }
 thiserror = "2"
 tempfile = "3"

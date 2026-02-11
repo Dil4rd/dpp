@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- APFS filesystem support: `ApfsHandle` for type-erased APFS volume access
+- `DmgPipeline::open_apfs()` and `open_apfs_with_mode()` for APFS partition extraction
+- `DmgPipeline::open_filesystem()` for auto-detecting HFS+ or APFS partitions
+- `FilesystemHandle` unified enum dispatching to either `HfsHandle` or `ApfsHandle`
+- Unified filesystem types: `FsDirEntry`, `FsWalkEntry`, `FsEntryKind`
+- `DppError::Apfs`, `DppError::NoApfsPartition`, `DppError::NoFilesystemPartition` error variants
+
 ## [0.2.0] - 2026-02-11
 
 ### Changed

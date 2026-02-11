@@ -17,11 +17,20 @@ pub enum DppError {
     #[error("PBZX error: {0}")]
     Pbzx(#[from] pbzx::PbzxError),
 
+    #[error("APFS error: {0}")]
+    Apfs(#[from] apfs::ApfsError),
+
     #[error("file not found: {0}")]
     FileNotFound(String),
 
     #[error("no HFS+ partition found in DMG")]
     NoHfsPartition,
+
+    #[error("no APFS partition found in DMG")]
+    NoApfsPartition,
+
+    #[error("no filesystem partition found in DMG")]
+    NoFilesystemPartition,
 }
 
 pub type Result<T> = std::result::Result<T, DppError>;

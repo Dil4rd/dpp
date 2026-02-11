@@ -291,25 +291,20 @@ fn lookup_overflow_extents<R: Read + Seek>(
 mod tests {
     use super::*;
 
+    /// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_read_pkg_header_from_kdk() {
-        let path = std::path::Path::new("../tests/kdk.raw");
-        if !path.exists() {
-            eprintln!("Skipping test - kdk.raw not found");
-            return;
-        }
-
-        let file = std::fs::File::open(path).unwrap();
+        let file = std::fs::File::open("../tests/kdk.raw").unwrap();
         let mut reader = std::io::BufReader::new(file);
         let vol = crate::volume::VolumeHeader::parse(&mut reader).unwrap();
         let catalog_header = btree::read_btree_header(
             &mut reader, &vol.catalog_file, vol.block_size,
         ).unwrap();
-        let extents_header = btree::read_btree_header(
+        let _extents_header = btree::read_btree_header(
             &mut reader, &vol.extents_file, vol.block_size,
         ).unwrap();
 
-        // Look up KernelDebugKit.pkg
         let record = crate::catalog::lookup_catalog(
             &mut reader, &vol, &catalog_header,
             crate::catalog::CNID_ROOT_FOLDER, "KernelDebugKit.pkg",
@@ -320,38 +315,24 @@ mod tests {
             other => panic!("Expected File record, got {:?}", other.map(|r| format!("{:?}", r))),
         };
 
-        eprintln!("KernelDebugKit.pkg: cnid={}, size={}", file_rec.file_id, file_rec.data_fork.logical_size);
-        eprintln!("  First extent: start_block={}, block_count={}",
-            file_rec.data_fork.extents[0].start_block,
-            file_rec.data_fork.extents[0].block_count);
-
-        // Read just the first block to check magic
         let offset = file_rec.data_fork.extents[0].start_block as u64 * vol.block_size as u64;
         reader.seek(std::io::SeekFrom::Start(offset)).unwrap();
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic).unwrap();
-
-        eprintln!("PKG magic bytes: {:02x} {:02x} {:02x} {:02x}", magic[0], magic[1], magic[2], magic[3]);
         assert_eq!(&magic, b"xar!", "PKG file should start with XAR magic 'xar!'");
-        eprintln!("Confirmed: KernelDebugKit.pkg is a valid XAR archive!");
 
-        // Test ForkReader: read XAR header (28 bytes) via streaming Read+Seek
         let mut fork_reader = ForkReader::new(&mut reader, &file_rec.data_fork, vol.block_size);
 
         let mut xar_header = [0u8; 28];
         fork_reader.read_exact(&mut xar_header).unwrap();
         assert_eq!(&xar_header[..4], b"xar!", "ForkReader should read XAR magic");
 
-        // Test seek: jump to position 0 and re-read magic
         fork_reader.seek(SeekFrom::Start(0)).unwrap();
         let mut magic2 = [0u8; 4];
         fork_reader.read_exact(&mut magic2).unwrap();
         assert_eq!(&magic2, b"xar!", "ForkReader seek+read should work");
 
-        // Test seek to end
         let end = fork_reader.seek(SeekFrom::End(0)).unwrap();
         assert_eq!(end, file_rec.data_fork.logical_size, "SeekFrom::End should match file size");
-
-        eprintln!("ForkReader tests passed! Read XAR header via streaming fork access.");
     }
 }

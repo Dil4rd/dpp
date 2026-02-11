@@ -375,31 +375,15 @@ fn extract_index_child(record_data: &[u8]) -> Result<u32> {
 mod tests {
     use super::*;
 
+    /// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
+    #[ignore]
     fn test_read_btree_header_from_kdk() {
-        let path = std::path::Path::new("../tests/kdk.raw");
-        if !path.exists() {
-            eprintln!("Skipping test - kdk.raw not found");
-            return;
-        }
-
-        let file = std::fs::File::open(path).unwrap();
+        let file = std::fs::File::open("../tests/kdk.raw").unwrap();
         let mut reader = std::io::BufReader::new(file);
         let vol = crate::volume::VolumeHeader::parse(&mut reader).unwrap();
 
         let catalog_header = read_btree_header(&mut reader, &vol.catalog_file, vol.block_size).unwrap();
-
-        eprintln!("Catalog B-tree header:");
-        eprintln!("  tree_depth: {}", catalog_header.tree_depth);
-        eprintln!("  root_node: {}", catalog_header.root_node);
-        eprintln!("  leaf_records: {}", catalog_header.leaf_records);
-        eprintln!("  first_leaf_node: {}", catalog_header.first_leaf_node);
-        eprintln!("  last_leaf_node: {}", catalog_header.last_leaf_node);
-        eprintln!("  node_size: {}", catalog_header.node_size);
-        eprintln!("  max_key_length: {}", catalog_header.max_key_length);
-        eprintln!("  total_nodes: {}", catalog_header.total_nodes);
-        eprintln!("  free_nodes: {}", catalog_header.free_nodes);
-        eprintln!("  key_compare_type: {}", catalog_header.key_compare_type);
 
         assert!(catalog_header.node_size > 0);
         assert!(catalog_header.root_node > 0);

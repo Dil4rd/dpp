@@ -2,7 +2,7 @@ use std::process;
 use std::time::Instant;
 
 use crate::style::*;
-use crate::pipeline::{open_pipeline, open_hfs};
+use crate::pipeline::{open_pipeline, open_hfs, open_apfs};
 
 pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
@@ -123,11 +123,60 @@ pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(_) => {
             let has_apfs = partitions.iter().any(|p| p.partition_type == udif::PartitionType::Apfs);
-            section("HFS+ Volume");
             if has_apfs {
-                println!("  {YELLOW}Main partition is APFS (not HFS+). APFS parsing is not supported.{RESET}");
+                match open_apfs(&mut pipeline) {
+                    Ok(mut apfs_handle) => {
+                        let vi = apfs_handle.volume_info();
+
+                        section("APFS Volume");
+                        kv("Name", &vi.name);
+                        kv("Block size", &format!("{} bytes", vi.block_size));
+                        kv_highlight("Files", &format_commas(vi.num_files));
+                        kv_highlight("Directories", &format_commas(vi.num_directories));
+                        kv("Symlinks", &format_commas(vi.num_symlinks));
+
+                        // Find packages
+                        spinner_msg("Scanning for .pkg files");
+                        let t = Instant::now();
+                        let entries = apfs_handle.walk()?;
+                        let pkg_files: Vec<_> = entries
+                            .iter()
+                            .filter(|e| e.entry.kind == apfs::EntryKind::File && e.path.ends_with(".pkg"))
+                            .collect();
+                        spinner_done(&format!(" ({})", format_duration(t.elapsed())));
+
+                        section("Packages");
+                        if pkg_files.is_empty() {
+                            println!("  {DIM}No .pkg files found{RESET}");
+                        } else {
+                            for (i, pkg) in pkg_files.iter().enumerate() {
+                                let connector = if i == pkg_files.len() - 1 { ELBOW } else { TEE };
+                                println!(
+                                    "  {DIM}{connector}{RESET} {BOLD}{}{RESET}  {DIM}{}{RESET}",
+                                    pkg.path,
+                                    format_size(pkg.entry.size),
+                                );
+                            }
+                        }
+
+                        // Summary
+                        let total_files: u64 = entries.iter().filter(|e| e.entry.kind == apfs::EntryKind::File).count() as u64;
+                        let total_size: u64 = entries.iter().filter(|e| e.entry.kind == apfs::EntryKind::File).map(|e| e.entry.size).sum();
+                        let total_dirs: u64 = entries.iter().filter(|e| e.entry.kind == apfs::EntryKind::Directory).count() as u64;
+
+                        section("Summary");
+                        kv("Total files", &format_commas(total_files));
+                        kv("Total directories", &format_commas(total_dirs));
+                        kv("Total content size", &format_size(total_size));
+                    }
+                    Err(e) => {
+                        section("APFS Volume");
+                        println!("  {YELLOW}APFS partition found but could not be opened: {e}{RESET}");
+                    }
+                }
             } else {
-                println!("  {YELLOW}No HFS+ partition found in this DMG.{RESET}");
+                section("Filesystem");
+                println!("  {YELLOW}No HFS+ or APFS partition found in this DMG.{RESET}");
             }
         }
     }

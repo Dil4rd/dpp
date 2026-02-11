@@ -95,6 +95,22 @@ pub(crate) fn kind_color(kind: hfsplus::EntryKind) -> &'static str {
     }
 }
 
+pub(crate) fn apfs_kind_icon(kind: apfs::EntryKind) -> &'static str {
+    match kind {
+        apfs::EntryKind::Directory => "dir",
+        apfs::EntryKind::File => "   ",
+        apfs::EntryKind::Symlink => "lnk",
+    }
+}
+
+pub(crate) fn apfs_kind_color(kind: apfs::EntryKind) -> &'static str {
+    match kind {
+        apfs::EntryKind::Directory => BLUE,
+        apfs::EntryKind::File => WHITE,
+        apfs::EntryKind::Symlink => CYAN,
+    }
+}
+
 /// Simple glob matching supporting `*` (any sequence) and `?` (any single char).
 /// Case-insensitive to match HFS+ default behavior.
 pub(crate) fn glob_match(pattern: &str, text: &str) -> bool {

@@ -168,16 +168,100 @@ pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         Err(dpp::DppError::NoHfsPartition) => {
             let has_apfs = partitions.iter().any(|p| p.partition_type == udif::PartitionType::Apfs);
             if has_apfs {
-                println!("  {YELLOW}Main partition is APFS (not HFS+). Skipping HFS+ stages.{RESET}");
-            } else {
-                println!("  {YELLOW}No HFS+ partition found. Skipping HFS+ stages.{RESET}");
-            }
+                println!("  {DIM}No HFS+ partition — trying APFS...{RESET}");
 
-            section("Pipeline Summary");
-            println!();
-            kv("DMG open", &format_duration(dmg_time));
-            println!("  {DIM}(HFS+ stages skipped — no compatible partition){RESET}");
-            println!();
+                // Stage 2: APFS extraction
+                section("Stage 2: APFS Extraction (decompress + parse)");
+                let t = Instant::now();
+                let apfs_result = pipeline.open_apfs();
+                let apfs_time = t.elapsed();
+
+                match apfs_result {
+                    Ok(mut apfs_handle) => {
+                        let vi = apfs_handle.volume_info();
+                        kv("Time", &format_duration(apfs_time));
+                        kv("Block size", &format!("{} bytes", vi.block_size));
+                        kv("Files", &format_commas(vi.num_files));
+                        kv("Directories", &format_commas(vi.num_directories));
+
+                        if let Some(mp) = main_partition {
+                            if mp.size > 0 && apfs_time.as_secs_f64() > 0.0 {
+                                let throughput = mp.size as f64 / apfs_time.as_secs_f64() / (1024.0 * 1024.0);
+                                kv_highlight("Throughput", &format!("{:.1} MB/s", throughput));
+                            }
+                        }
+
+                        // Stage 3: Filesystem walk
+                        section("Stage 3: Filesystem Walk (B-tree traversal)");
+                        let t = Instant::now();
+                        let entries = apfs_handle.walk()?;
+                        let walk_time = t.elapsed();
+                        let file_count = entries.iter().filter(|e| e.entry.kind == apfs::EntryKind::File).count();
+                        let dir_count = entries.iter().filter(|e| e.entry.kind == apfs::EntryKind::Directory).count();
+                        let total_size: u64 = entries.iter().map(|e| e.entry.size).sum();
+                        kv("Time", &format_duration(walk_time));
+                        kv("Files", &format_commas(file_count as u64));
+                        kv("Directories", &format_commas(dir_count as u64));
+                        kv("Total content", &format_size(total_size));
+
+                        if !entries.is_empty() && walk_time.as_secs_f64() > 0.0 {
+                            kv_highlight("Entries/sec", &format!("{:.0}", entries.len() as f64 / walk_time.as_secs_f64()));
+                        }
+
+                        // Summary
+                        section("Pipeline Summary");
+                        let total = dmg_time + apfs_time + walk_time;
+                        println!();
+                        println!("  {DIM}Stage{RESET}                        {DIM}Time{RESET}          {DIM}%{RESET}");
+                        println!("  {DIM}{}{RESET}", "-".repeat(50));
+
+                        let stages = [
+                            ("DMG open", dmg_time),
+                            ("APFS extraction", apfs_time),
+                            ("Filesystem walk", walk_time),
+                        ];
+
+                        let bar_total = 40;
+                        for (name, time) in &stages {
+                            let pct = time.as_secs_f64() / total.as_secs_f64() * 100.0;
+                            let bar_len = (pct / 100.0 * bar_total as f64) as usize;
+                            let bar: String = (0..bar_len).map(|_| '#').collect();
+                            let color = if pct > 50.0 { RED } else if pct > 20.0 { YELLOW } else { GREEN };
+                            println!(
+                                "  {:<25} {:>10}  {color}{:>5.1}%{RESET}  {color}{bar}{RESET}",
+                                name,
+                                format_duration(*time),
+                                pct,
+                            );
+                        }
+                        println!("  {DIM}{}{RESET}", "-".repeat(50));
+                        println!(
+                            "  {BOLD}{:<25}{RESET} {:>10}",
+                            "Total",
+                            format_duration(total),
+                        );
+                        println!();
+                    }
+                    Err(e) => {
+                        kv("Time", &format_duration(apfs_time));
+                        println!("  {YELLOW}APFS extraction failed: {e}{RESET}");
+
+                        section("Pipeline Summary");
+                        println!();
+                        kv("DMG open", &format_duration(dmg_time));
+                        println!("  {DIM}(APFS stages failed){RESET}");
+                        println!();
+                    }
+                }
+            } else {
+                println!("  {YELLOW}No HFS+ or APFS partition found. Skipping filesystem stages.{RESET}");
+
+                section("Pipeline Summary");
+                println!();
+                kv("DMG open", &format_duration(dmg_time));
+                println!("  {DIM}(Filesystem stages skipped — no compatible partition){RESET}");
+                println!();
+            }
         }
         Err(e) => return Err(e.into()),
     }

@@ -14,5 +14,6 @@ path = "src/main.rs"
 dpp = { version = "0.2.0", path = "../dpp" }
 udif = { version = "0.2.0", path = "../udif" }
 hfsplus = { version = "0.2.0", path = "../hfsplus" }
+apfs = { version = "0.2.0", path = "../apfs" }
 xara = { version = "0.2.0", path = "../xara" }
 pbzx = { version = "0.2.0", path = "../pbzx" }

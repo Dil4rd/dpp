@@ -1,7 +1,7 @@
 //! dpp-tool — Fancy CLI for the full Apple DMG pipeline
 //!
 //! A cross-platform tool to explore DMG disk images end-to-end:
-//! DMG → HFS+ → PKG → PBZX → files
+//! DMG → HFS+/APFS → PKG → PBZX → files
 //!
 //! # Usage
 //!
@@ -20,6 +20,13 @@
 //! dpp-tool hfs stat <dmg> <path>                         File metadata
 //! dpp-tool hfs find <dmg> [-name pat] [-type f|d|l]     Find files (default: *.pkg)
 //!
+//! dpp-tool apfs info <dmg>                               APFS volume info
+//! dpp-tool apfs ls <dmg> <path>                          List directory contents
+//! dpp-tool apfs tree <dmg> [path]                        Browse filesystem tree
+//! dpp-tool apfs cat <dmg> <path>                         Extract file to stdout
+//! dpp-tool apfs stat <dmg> <path>                        File metadata
+//! dpp-tool apfs find <dmg> [-name pat] [-type f|d|l]    Find files (default: *.pkg)
+//!
 //! dpp-tool pkg info <dmg> <pkg-path>                     Package stats
 //! dpp-tool pkg ls <dmg> <pkg-path>                       List XAR contents
 //! dpp-tool pkg find <dmg> <pkg-path> [-name p] [-type f|d|l]  Find entries
@@ -36,6 +43,7 @@ mod style;
 mod pipeline;
 mod cmd_dmg;
 mod cmd_hfs;
+mod cmd_apfs;
 mod cmd_pkg;
 mod cmd_payload;
 mod cmd_info;
@@ -57,6 +65,7 @@ fn main() {
     let result = match args[1].as_str() {
         "dmg" => cmd_dmg::run(&args[2..]),
         "hfs" => cmd_hfs::run(&args[2..]),
+        "apfs" => cmd_apfs::run(&args[2..]),
         "pkg" => cmd_pkg::run(&args[2..]),
         "payload" => cmd_payload::run(&args[2..]),
         "info" => cmd_info::run(&args[2..]),
@@ -83,7 +92,7 @@ fn print_usage() {
         r#"
 {BOLD}dpp-tool{RESET} — Apple DMG pipeline explorer
 
-{DIM}Navigate the full stack: DMG → HFS+ → PKG → PBZX → files{RESET}
+{DIM}Navigate the full stack: DMG → HFS+/APFS → PKG → PBZX → files{RESET}
 
 {BOLD}USAGE:{RESET}
     dpp-tool <COMMAND> [OPTIONS]
@@ -93,6 +102,7 @@ fn print_usage() {
     {GREEN}bench{RESET}       <dmg>          Benchmark pipeline stages
     {GREEN}dmg{RESET}         ...            DMG (UDIF) container commands
     {GREEN}hfs{RESET}         ...            HFS+ filesystem commands
+    {GREEN}apfs{RESET}        ...            APFS filesystem commands
     {GREEN}pkg{RESET}         ...            PKG (XAR) archive commands
     {GREEN}payload{RESET}     ...            Component payload (PBZX/CPIO) commands
 
@@ -101,6 +111,8 @@ fn print_usage() {
     dpp-tool dmg ls Kernel_Debug_Kit.dmg
     dpp-tool hfs tree Kernel_Debug_Kit.dmg /Library
     dpp-tool hfs find Kernel_Debug_Kit.dmg -name "*.kext" -type d
+    dpp-tool apfs info app.dmg
+    dpp-tool apfs ls app.dmg /
     dpp-tool pkg ls Kernel_Debug_Kit.dmg /KernelDebugKit.pkg
     dpp-tool payload ls Kernel_Debug_Kit.dmg /path.pkg com.apple.pkg.KDK /
 

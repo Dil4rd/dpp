@@ -16,6 +16,7 @@ DMG (UDIF) → HFS+ filesystem → PKG installer (XAR) → Payload (PBZX/CPIO) �
 - **Memory efficient** — streams through temp files by default (~4KB resident memory)
 - **Pure Rust** — zero `unsafe` in filesystem crates, minimal dependencies
 - **Modular** — use the full pipeline or individual crates standalone
+- **Parallel decompression** — opt-in multi-threaded PBZX extraction via `parallel` feature
 
 ## Quick Start
 
@@ -53,6 +54,13 @@ Add to `Cargo.toml`:
 ```toml
 [dependencies]
 dpp = "0.1"
+```
+
+For faster PBZX payload extraction with multi-threaded decompression:
+
+```toml
+[dependencies]
+dpp = { version = "0.1", features = ["parallel"] }
 ```
 
 Open a DMG and list the root directory:
@@ -146,6 +154,12 @@ Each crate is published independently and can be used on its own:
 
 ```bash
 cargo build --release
+```
+
+Build with multi-threaded PBZX decompression:
+
+```bash
+cargo build --release --features parallel
 ```
 
 Run tests (some tests require fixture files and skip gracefully if missing):

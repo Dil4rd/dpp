@@ -1,6 +1,6 @@
 [package]
 name = "pbzx"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A Rust library for parsing, extracting, and creating PBZX archives (Apple's payload format)"
 license = "MIT"

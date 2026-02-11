@@ -18,23 +18,20 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Publish pbzx
-        run: cargo publish -p pbzx
-      - name: Publish xara
-        run: cargo publish -p xara
-      - name: Publish hfsplus
-        run: cargo publish -p hfsplus
-      - name: Publish udif
-        run: cargo publish -p udif
-
-      - name: Wait for crates.io index
-        run: sleep 30
-
-      - name: Publish dpp
-        run: cargo publish -p dpp
-
-      - name: Wait for crates.io index
-        run: sleep 30
-
-      - name: Publish dpp-tool
-        run: cargo publish -p dpp-tool
+      - name: Publish crates
+        run: |
+          try_publish() {
+            local output
+            output=$(cargo publish -p "$1" 2>&1) && echo "$output" || {
+              echo "$output"
+              echo "$output" | grep -q "already exists"
+            }
+          }
+          try_publish pbzx
+          try_publish xara
+          try_publish hfsplus
+          try_publish udif
+          sleep 30
+          try_publish dpp
+          sleep 30
+          try_publish dpp-tool

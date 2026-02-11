@@ -125,9 +125,17 @@ pub struct Archive {
 
 impl Archive {
     /// Open a PBZX archive from a file path.
+    ///
+    /// When the `parallel` feature is enabled, XZ chunks are decompressed
+    /// across multiple threads for significantly faster extraction.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut reader = open(path)?;
+
+        #[cfg(feature = "parallel")]
+        let cpio_data = reader.decompress_parallel()?;
+        #[cfg(not(feature = "parallel"))]
         let cpio_data = reader.decompress()?;
+
         Ok(Self { cpio_data })
     }
 
@@ -141,9 +149,17 @@ impl Archive {
     }
 
     /// Create an Archive from a reader containing PBZX data.
+    ///
+    /// When the `parallel` feature is enabled, XZ chunks are decompressed
+    /// across multiple threads for significantly faster extraction.
     pub fn from_reader<R: Read>(reader: R) -> Result<Self> {
         let mut pbzx = PbzxReader::new(reader)?;
+
+        #[cfg(feature = "parallel")]
+        let cpio_data = pbzx.decompress_parallel()?;
+        #[cfg(not(feature = "parallel"))]
         let cpio_data = pbzx.decompress()?;
+
         Ok(Self { cpio_data })
     }
 
@@ -244,6 +260,10 @@ pub fn stats<P: AsRef<Path>>(path: P) -> Result<ArchiveStats> {
 
     // Decompress and analyze CPIO
     pbzx.reset()?;
+
+    #[cfg(feature = "parallel")]
+    let cpio_data = pbzx.decompress_parallel()?;
+    #[cfg(not(feature = "parallel"))]
     let cpio_data = pbzx.decompress()?;
 
     let cursor = Cursor::new(&cpio_data);

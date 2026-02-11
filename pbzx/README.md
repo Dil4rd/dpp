@@ -45,6 +45,7 @@ No other Rust crate handles the full PBZX pipeline: XZ decompression → CPIO pa
 | **List files** | Parse PBZX, decompress XZ chunks, parse CPIO, list entries |
 | **Extract files** | Extract individual files or entire archive to disk |
 | **Pack files** | Create new PBZX archives from directories or data |
+| **Parallel decompression** | Multi-threaded XZ decompression via `parallel` feature |
 
 ### Format Support
 
@@ -74,6 +75,16 @@ let data = archive.extract_file("path/to/file.txt")?;
 // Extract all files
 archive.extract_all("output_dir")?;
 ```
+
+### Parallel Decompression
+
+Enable the `parallel` feature for multi-threaded XZ decompression:
+
+```toml
+pbzx = { version = "0.1", features = ["parallel"] }
+```
+
+All `Archive::open()` and `Archive::from_reader()` calls automatically use parallel decompression when the feature is enabled. You can also call `decompress_parallel()` directly on `PbzxReader`.
 
 ### Create Archive
 
@@ -171,7 +182,7 @@ See [full benchmarks](docs/BENCHMARKS.md) for details.
 
 ## Next Steps
 
-- [ ] **Parallel XZ decompression** — decompress chunks across multiple threads
+- [x] **Parallel XZ decompression** — decompress chunks across multiple threads (opt-in `parallel` feature)
 - [ ] **CPIO crc writing** — emit SVR4 CRC format (`070702`)
 - [ ] **Streaming CPIO parsing** — parse entries without full decompression
 - [ ] **Apple Archive (AAR)** — support newer macOS 11+ payload format

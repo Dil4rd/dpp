@@ -17,6 +17,9 @@ thiserror = "2"
 # Byte order handling
 byteorder = "1.5"
 
+# Parallel decompression (optional)
+rayon = { version = "1.10", optional = true }
+
 [dev-dependencies]
 tempfile = "3"
 cpio-archive = "0.9"
@@ -26,6 +29,7 @@ default = ["extract", "list", "pack"]
 extract = []
 list = []
 pack = []
+parallel = ["rayon"]
 
 [[example]]
 name = "pbzx-tool"

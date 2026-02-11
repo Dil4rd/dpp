@@ -7,6 +7,9 @@ use std::path::Path;
 use byteorder::{BigEndian, ReadBytesExt};
 use xz2::read::XzDecoder;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 use crate::error::{PbzxError, Result};
 use crate::format::{ChunkHeader, PbzxHeader, CHUNK_HEADER_SIZE, HEADER_SIZE, PBZX_MAGIC};
 
@@ -164,6 +167,118 @@ impl<R: Read> PbzxReader<R> {
     }
 }
 
+/// A chunk read from the archive, ready for decompression.
+#[cfg(feature = "parallel")]
+struct ReadChunk {
+    /// The chunk header
+    header: ChunkHeader,
+    /// Offset of this chunk in the file (for error reporting)
+    offset: u64,
+    /// The raw (possibly compressed) data
+    data: Vec<u8>,
+}
+
+#[cfg(feature = "parallel")]
+impl<R: Read> PbzxReader<R> {
+    /// Read all chunks into memory sequentially.
+    fn read_all_chunks(&mut self) -> Result<Vec<ReadChunk>> {
+        let mut chunks = Vec::new();
+
+        while let Some(header) = self.read_chunk_header()? {
+            let offset = self.current_offset;
+            let mut data = vec![0u8; header.compressed_size as usize];
+            self.reader.read_exact(&mut data)?;
+            self.current_offset += header.compressed_size;
+
+            chunks.push(ReadChunk {
+                header,
+                offset,
+                data,
+            });
+        }
+
+        Ok(chunks)
+    }
+
+    /// Decompress the entire PBZX archive using parallel decompression.
+    ///
+    /// Uses rayon to decompress all XZ chunks in parallel across multiple
+    /// threads, then concatenates results in chunk order.
+    ///
+    /// Returns the total number of bytes written.
+    pub fn decompress_parallel_to<W: Write>(&mut self, writer: &mut W) -> Result<u64> {
+        let output = self.decompress_parallel()?;
+        let len = output.len() as u64;
+        writer.write_all(&output)?;
+        Ok(len)
+    }
+
+    /// Decompress the entire PBZX archive using parallel decompression.
+    ///
+    /// Uses rayon to decompress all XZ chunks in parallel across multiple
+    /// threads, then concatenates results in chunk order.
+    ///
+    /// Returns the decompressed data as a `Vec<u8>`.
+    pub fn decompress_parallel(&mut self) -> Result<Vec<u8>> {
+        let chunks = self.read_all_chunks()?;
+
+        // Parallel decompress each chunk
+        let results: Vec<Result<Vec<u8>>> = chunks
+            .into_par_iter()
+            .map(|chunk| decompress_chunk(chunk))
+            .collect();
+
+        // Calculate total size for pre-allocation
+        let mut total_size = 0usize;
+        for result in &results {
+            match result {
+                Ok(v) => total_size += v.len(),
+                Err(_) => break,
+            }
+        }
+
+        // Concatenate in order, propagating first error
+        let mut output = Vec::with_capacity(total_size);
+        for result in results {
+            output.extend_from_slice(&result?);
+        }
+
+        self.total_decompressed = output.len() as u64;
+        Ok(output)
+    }
+}
+
+/// Decompress a single chunk (used by parallel decompression).
+#[cfg(feature = "parallel")]
+fn decompress_chunk(chunk: ReadChunk) -> Result<Vec<u8>> {
+    if chunk.header.is_uncompressed() {
+        return Ok(chunk.data);
+    }
+
+    let mut decoder = XzDecoder::new(&chunk.data[..]);
+    let mut decompressed = Vec::with_capacity(chunk.header.uncompressed_size as usize);
+
+    decoder.read_to_end(&mut decompressed).map_err(|e| {
+        PbzxError::Decompression(format!(
+            "Failed to decompress chunk at offset {}: {}",
+            chunk.offset, e
+        ))
+    })?;
+
+    if decompressed.len() as u64 != chunk.header.uncompressed_size {
+        return Err(PbzxError::InvalidChunk {
+            offset: chunk.offset,
+            message: format!(
+                "Decompressed size mismatch: expected {}, got {}",
+                chunk.header.uncompressed_size,
+                decompressed.len()
+            ),
+        });
+    }
+
+    Ok(decompressed)
+}
+
 impl<R: Read + Seek> PbzxReader<R> {
     /// Reset the reader to the beginning of the chunks.
     pub fn reset(&mut self) -> Result<()> {
@@ -291,5 +406,89 @@ mod tests {
         let result = PbzxReader::new(cursor);
 
         assert!(matches!(result, Err(PbzxError::InvalidMagic(_))));
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "parallel")]
+mod parallel_tests {
+    use super::*;
+    use std::io::Cursor;
+
+    /// Create a multi-chunk PBZX archive for testing.
+    fn create_multi_chunk_pbzx(chunk_size: usize) -> (Vec<u8>, Vec<u8>) {
+        use crate::writer::{CpioBuilder, PbzxWriter};
+
+        let mut cpio_builder = CpioBuilder::new();
+        for i in 0..10 {
+            let content = format!(
+                "File {} content with enough data to generate multiple chunks: {}",
+                i,
+                "abcdefghijklmnopqrstuvwxyz ".repeat(20)
+            );
+            cpio_builder.add_file(&format!("file_{}.txt", i), content.as_bytes(), 0o644);
+        }
+        let cpio_data = cpio_builder.finish();
+
+        let mut pbzx_data = Vec::new();
+        let mut writer = PbzxWriter::new(&mut pbzx_data)
+            .chunk_size(chunk_size)
+            .compression_level(1);
+        writer.write_cpio(&cpio_data).unwrap();
+        writer.finish().unwrap();
+
+        (pbzx_data, cpio_data)
+    }
+
+    #[test]
+    fn test_parallel_matches_sequential() {
+        let (pbzx_data, _) = create_multi_chunk_pbzx(256);
+
+        // Sequential decompress
+        let mut reader1 = PbzxReader::new(Cursor::new(&pbzx_data)).unwrap();
+        let sequential = reader1.decompress().unwrap();
+
+        // Parallel decompress
+        let mut reader2 = PbzxReader::new(Cursor::new(&pbzx_data)).unwrap();
+        let parallel = reader2.decompress_parallel().unwrap();
+
+        assert_eq!(sequential, parallel);
+    }
+
+    #[test]
+    fn test_parallel_single_chunk() {
+        let (pbzx_data, cpio_data) = create_multi_chunk_pbzx(1024 * 1024);
+
+        let mut reader = PbzxReader::new(Cursor::new(&pbzx_data)).unwrap();
+        let result = reader.decompress_parallel().unwrap();
+
+        assert_eq!(result, cpio_data);
+    }
+
+    #[test]
+    fn test_parallel_empty_archive() {
+        let mut data = Vec::new();
+        data.extend_from_slice(&PBZX_MAGIC);
+        data.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 1]); // flags
+
+        let mut reader = PbzxReader::new(Cursor::new(data)).unwrap();
+        let result = reader.decompress_parallel().unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parallel_to_writer() {
+        let (pbzx_data, _) = create_multi_chunk_pbzx(256);
+
+        // Sequential
+        let mut reader1 = PbzxReader::new(Cursor::new(&pbzx_data)).unwrap();
+        let sequential = reader1.decompress().unwrap();
+
+        // Parallel via decompress_parallel_to
+        let mut reader2 = PbzxReader::new(Cursor::new(&pbzx_data)).unwrap();
+        let mut output = Vec::new();
+        reader2.decompress_parallel_to(&mut output).unwrap();
+
+        assert_eq!(sequential, output);
     }
 }

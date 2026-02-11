@@ -409,6 +409,105 @@ impl From<&apfs::WalkEntry> for FsWalkEntry {
     }
 }
 
+// ── Filesystem Type Discriminant ─────────────────────────────────────────
+
+/// Discriminant for HFS+ vs APFS filesystem type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FsType {
+    HfsPlus,
+    Apfs,
+}
+
+// ── Unified File Stat ───────────────────────────────────────────────────
+
+/// Unified file metadata from either HFS+ or APFS
+#[derive(Debug, Clone)]
+pub struct FsFileStat {
+    pub fs_type: FsType,
+    /// CNID (HFS+) or OID (APFS)
+    pub id: u64,
+    pub kind: FsEntryKind,
+    pub size: u64,
+    pub uid: u32,
+    pub gid: u32,
+    pub mode: u16,
+    /// HFS+ timestamp (seconds since 1904) or APFS nanosecond timestamp
+    pub create_time: i64,
+    /// HFS+ timestamp (seconds since 1904) or APFS nanosecond timestamp
+    pub modify_time: i64,
+    /// Link count (APFS only)
+    pub nlink: Option<u32>,
+    /// Number of data fork extents (HFS+ only)
+    pub data_fork_extents: Option<u32>,
+    /// Resource fork size (HFS+ only, when > 0)
+    pub resource_fork_size: Option<u64>,
+}
+
+impl From<&hfsplus::FileStat> for FsFileStat {
+    fn from(s: &hfsplus::FileStat) -> Self {
+        FsFileStat {
+            fs_type: FsType::HfsPlus,
+            id: s.cnid as u64,
+            kind: s.kind.into(),
+            size: s.size,
+            uid: s.permissions.owner_id,
+            gid: s.permissions.group_id,
+            mode: s.permissions.mode,
+            create_time: s.create_date as i64,
+            modify_time: s.modify_date as i64,
+            nlink: None,
+            data_fork_extents: Some(s.data_fork_extents),
+            resource_fork_size: if s.resource_fork_size > 0 {
+                Some(s.resource_fork_size)
+            } else {
+                None
+            },
+        }
+    }
+}
+
+impl From<&apfs::FileStat> for FsFileStat {
+    fn from(s: &apfs::FileStat) -> Self {
+        FsFileStat {
+            fs_type: FsType::Apfs,
+            id: s.oid,
+            kind: s.kind.into(),
+            size: s.size,
+            uid: s.uid,
+            gid: s.gid,
+            mode: s.mode,
+            create_time: s.create_time,
+            modify_time: s.modify_time,
+            nlink: Some(s.nlink),
+            data_fork_extents: None,
+            resource_fork_size: None,
+        }
+    }
+}
+
+// ── Unified Volume Info ─────────────────────────────────────────────────
+
+/// Unified volume metadata from either HFS+ or APFS
+#[derive(Debug, Clone)]
+pub struct FsVolumeInfo {
+    pub fs_type: FsType,
+    pub block_size: u32,
+    pub file_count: u64,
+    pub directory_count: u64,
+    /// Volume name (APFS only)
+    pub name: Option<String>,
+    /// Symlink count (APFS only)
+    pub symlink_count: Option<u64>,
+    /// Total blocks (HFS+ only)
+    pub total_blocks: Option<u32>,
+    /// Free blocks (HFS+ only)
+    pub free_blocks: Option<u32>,
+    /// Volume version (HFS+ only)
+    pub version: Option<u16>,
+    /// Whether this is an HFSX (case-sensitive) volume (HFS+ only)
+    pub is_hfsx: Option<bool>,
+}
+
 // ── Unified Filesystem Handle ───────────────────────────────────────────
 
 /// Unified handle to either an HFS+ or APFS volume.
@@ -419,6 +518,58 @@ pub enum FilesystemHandle {
 }
 
 impl FilesystemHandle {
+    /// Get the filesystem type
+    pub fn fs_type(&self) -> FsType {
+        match self {
+            FilesystemHandle::Hfs(_) => FsType::HfsPlus,
+            FilesystemHandle::Apfs(_) => FsType::Apfs,
+        }
+    }
+
+    /// Get unified file metadata
+    pub fn stat(&mut self, path: &str) -> Result<FsFileStat> {
+        match self {
+            FilesystemHandle::Hfs(h) => Ok(FsFileStat::from(&h.stat(path)?)),
+            FilesystemHandle::Apfs(h) => Ok(FsFileStat::from(&h.stat(path)?)),
+        }
+    }
+
+    /// Get unified volume information
+    pub fn volume_info(&self) -> FsVolumeInfo {
+        match self {
+            FilesystemHandle::Hfs(h) => {
+                let vh = h.volume_header();
+                FsVolumeInfo {
+                    fs_type: FsType::HfsPlus,
+                    block_size: vh.block_size,
+                    file_count: vh.file_count as u64,
+                    directory_count: vh.folder_count as u64,
+                    name: None,
+                    symlink_count: None,
+                    total_blocks: Some(vh.total_blocks),
+                    free_blocks: Some(vh.free_blocks),
+                    version: Some(vh.version),
+                    is_hfsx: Some(vh.is_hfsx),
+                }
+            }
+            FilesystemHandle::Apfs(h) => {
+                let vi = h.volume_info();
+                FsVolumeInfo {
+                    fs_type: FsType::Apfs,
+                    block_size: vi.block_size,
+                    file_count: vi.num_files,
+                    directory_count: vi.num_directories,
+                    name: Some(vi.name.clone()),
+                    symlink_count: Some(vi.num_symlinks),
+                    total_blocks: None,
+                    free_blocks: None,
+                    version: None,
+                    is_hfsx: None,
+                }
+            }
+        }
+    }
+
     /// List a directory, returning unified entries
     pub fn list_directory(&mut self, path: &str) -> Result<Vec<FsDirEntry>> {
         match self {

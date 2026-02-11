@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `FsType` enum for filesystem type discrimination (HFS+ vs APFS)
+- `FsFileStat` unified file metadata type with `From<&hfsplus::FileStat>` and `From<&apfs::FileStat>`
+- `FsVolumeInfo` unified volume information type
+- `FilesystemHandle::fs_type()` method to query detected filesystem type
+- `FilesystemHandle::stat()` method returning unified `FsFileStat`
+- `FilesystemHandle::volume_info()` method returning unified `FsVolumeInfo`
 - APFS filesystem support: `ApfsHandle` for type-erased APFS volume access
 - `DmgPipeline::open_apfs()` and `open_apfs_with_mode()` for APFS partition extraction
 - `DmgPipeline::open_filesystem()` for auto-detecting HFS+ or APFS partitions

@@ -2,13 +2,13 @@
 
 # dpp
 
-**All-in-one Rust pipeline for Apple DMG → HFS+ → PKG → PBZX extraction**
+**All-in-one Rust pipeline for Apple DMG → HFS+/APFS → PKG → PBZX extraction**
 
 ![Version](https://img.shields.io/badge/version-0.1.0-green)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)
 
-Open a `.dmg`, browse the HFS+ filesystem inside, extract `.pkg` installers, and unpack their payloads — all in a single pipeline, on any platform.
+Open a `.dmg`, browse the HFS+ or APFS filesystem inside, extract `.pkg` installers, and unpack their payloads — all in a single pipeline, on any platform.
 
 **No macOS required** — works on Linux and Windows too.
 
@@ -20,10 +20,10 @@ Open a `.dmg`, browse the HFS+ filesystem inside, extract `.pkg` installers, and
 
 **dpp is the only Rust library that chains the entire Apple package extraction pipeline into a single API.**
 
-Without dpp, extracting files from a macOS `.dmg` requires 4 separate tools:
+Without dpp, extracting files from a macOS `.dmg` requires 4+ separate tools:
 
 ```
-DMG file → [dmg tool] → raw partition → [hfs tool] → pkg file → [xar tool] → payload → [pbzx tool] → files
+DMG file → [dmg tool] → raw partition → [hfs/apfs tool] → pkg file → [xar tool] → payload → [pbzx tool] → files
 ```
 
 With dpp:
@@ -34,7 +34,9 @@ let files = dpp::extract_pkg_payload("image.dmg", "/path/to.pkg", "component")?;
 
 | Feature | **dpp** | Manual pipeline |
 |---------|:-------:|:---------------:|
-| Single API call | ✓ | ❌ (4 tools) |
+| Single API call | ✓ | ❌ (4+ tools) |
+| HFS+ and APFS support | ✓ | partial |
+| Auto-detect filesystem | ✓ | ❌ |
 | Memory-efficient streaming | ✓ | ❌ (temp files) |
 | Type-safe error handling | ✓ | ❌ (string errors) |
 | Cross-platform | ✓ | partial |
@@ -45,7 +47,9 @@ let files = dpp::extract_pkg_payload("image.dmg", "/path/to.pkg", "component")?;
 | | |
 |---|---|
 | **Open DMG** | Parse UDIF disk images with all compression formats |
-| **Browse HFS+** | Navigate the filesystem inside the DMG |
+| **Browse HFS+** | Navigate HFS+ filesystems inside the DMG |
+| **Browse APFS** | Navigate APFS filesystems inside the DMG |
+| **Auto-detect FS** | `open_filesystem()` detects HFS+ or APFS automatically |
 | **Extract PKG** | Open `.pkg` installers found on the volume |
 | **Unpack PBZX** | Decompress XZ payloads and parse CPIO archives |
 | **Find packages** | Auto-discover all `.pkg` files in a DMG |
@@ -54,11 +58,15 @@ let files = dpp::extract_pkg_payload("image.dmg", "/path/to.pkg", "component")?;
 ### Pipeline
 
 ```
-┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
-│  UDIF   │───▶│  HFS+   │───▶│   XAR   │───▶│  PBZX   │
-│  (DMG)  │    │ (volume)│    │  (PKG)  │    │ (files) │
-└─────────┘    └─────────┘    └─────────┘    └─────────┘
-     udif         hfsplus         xara           pbzx
+                 ┌─────────┐
+             ┌──▶│  HFS+   │──┐
+┌─────────┐  │   │ (volume)│  │   ┌─────────┐    ┌─────────┐
+│  UDIF   │──┤   └─────────┘  ├──▶│   XAR   │───▶│  PBZX   │
+│  (DMG)  │  │   ┌─────────┐  │   │  (PKG)  │    │ (files) │
+└─────────┘  └──▶│  APFS   │──┘   └─────────┘    └─────────┘
+     udif        │ (volume)│          xara           pbzx
+                 └─────────┘
+              hfsplus / apfs
 ```
 
 ### Extraction Modes
@@ -70,12 +78,37 @@ let files = dpp::extract_pkg_payload("image.dmg", "/path/to.pkg", "component")?;
 
 ## Quick Start
 
-### Browse a DMG
+### Browse a DMG (auto-detect filesystem)
 
 ```rust
-use dpp::{DmgPipeline, ExtractMode};
+use dpp::DmgPipeline;
 
-// Open DMG and extract HFS+ volume
+// Open DMG and auto-detect HFS+ or APFS
+let mut pipeline = DmgPipeline::open("image.dmg")?;
+let mut fs = pipeline.open_filesystem()?;
+
+// Check what was detected
+println!("Filesystem: {:?}", fs.fs_type());
+
+// List root directory (unified FsDirEntry)
+for entry in fs.list_directory("/")? {
+    println!("{:?} {:>12} {}", entry.kind, entry.size, entry.name);
+}
+
+// Get unified volume info
+let info = fs.volume_info();
+println!("Files: {}, Dirs: {}", info.file_count, info.directory_count);
+
+// Read a file
+let data = fs.read_file("/path/to/file.txt")?;
+```
+
+### Browse a DMG (HFS+ specific)
+
+```rust
+use dpp::DmgPipeline;
+
+// Open DMG and extract HFS+ volume directly
 let mut pipeline = DmgPipeline::open("Kernel_Debug_Kit.dmg")?;
 let mut hfs = pipeline.open_hfs()?;
 
@@ -86,6 +119,25 @@ for entry in hfs.list_directory("/")? {
 
 // Read a file
 let data = hfs.read_file("/Library/Developer/KDKs/readme.txt")?;
+```
+
+### Browse a DMG (APFS specific)
+
+```rust
+use dpp::DmgPipeline;
+
+// Open DMG and extract APFS volume directly
+let mut pipeline = DmgPipeline::open("app.dmg")?;
+let mut apfs = pipeline.open_apfs()?;
+
+// Volume info
+let vi = apfs.volume_info();
+println!("Volume: {} ({} files)", vi.name, vi.num_files);
+
+// List root directory
+for entry in apfs.list_directory("/")? {
+    println!("{:?} {:>12} {}", entry.kind, entry.size, entry.name);
+}
 ```
 
 ### Extract a PKG Payload
@@ -216,12 +268,12 @@ $ dpp-tool payload ls Kernel_Debug_Kit.dmg /path.pkg com.apple.pkg.KDK /usr
 
 There is no equivalent single-crate solution in Rust. The closest approach is to manually combine separate tools:
 
-| Approach | DMG | HFS+ | PKG | PBZX | Single API | Cross-platform |
-|----------|:---:|:----:|:---:|:----:|:----------:|:--------------:|
-| **dpp** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `hdiutil` + shell | ✓ | ✓ | ✓ | ✓ | ❌ | macOS only |
-| dmgwiz + hfsfuse + xar | ✓ | ✓ | ✓ | ❌ | ❌ | Unix only |
-| apple-platform-rs | partial | ❌ | partial | ❌ | ❌ | ✓ |
+| Approach | DMG | HFS+ | APFS | PKG | PBZX | Single API | Cross-platform |
+|----------|:---:|:----:|:----:|:---:|:----:|:----------:|:--------------:|
+| **dpp** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `hdiutil` + shell | ✓ | ✓ | ✓ | ✓ | ✓ | ❌ | macOS only |
+| dmgwiz + hfsfuse + xar | ✓ | ✓ | ❌ | ✓ | ❌ | ❌ | Unix only |
+| apple-platform-rs | partial | ❌ | ❌ | partial | ❌ | ❌ | ✓ |
 
 **Choose dpp if you need:**
 - End-to-end DMG → files extraction on any platform
@@ -231,7 +283,7 @@ There is no equivalent single-crate solution in Rust. The closest approach is to
 
 ## Next Steps
 
-- [ ] **APFS support** — handle APFS containers in DMGs (requires new crate)
+- [x] **APFS support** — handle APFS containers in DMGs with auto-detection
 - [ ] **Encrypted DMG** — support FileVault-encrypted disk images
 - [ ] **Parallel extraction** — decompress multiple partitions concurrently
 - [ ] **Progress callbacks** — report extraction progress for UI integration

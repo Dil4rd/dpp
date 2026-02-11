@@ -6,6 +6,8 @@ All benchmarks run on a macOS Kernel Debug Kit DMG (~1 GB compressed, ~1.15 GB u
 
 ## Pipeline Stages
 
+### HFS+ DMG
+
 | Stage | Operation | Time | Throughput |
 |-------|-----------|------|------------|
 | 1. DMG open | Parse koly header + plist + mish blocks | ~235 ms | - |
@@ -14,6 +16,15 @@ All benchmarks run on a macOS Kernel Debug Kit DMG (~1 GB compressed, ~1.15 GB u
 | 4. Filesystem walk | Traverse catalog B-tree | ~45 ms | 85K entries/s |
 | 5. PKG open | Read file + parse XAR header/TOC | ~120 ms | - |
 | 6. PBZX decompress | XZ decompress + CPIO parse | ~22 s | 48.5 MB/s |
+
+### APFS DMG
+
+| Stage | Operation | Time | Throughput |
+|-------|-----------|------|------------|
+| 1. DMG open | Parse koly header + plist + mish blocks | ~235 ms | - |
+| 2. APFS extraction | Decompress + write to temp file | ~1–8 s | Varies by compression |
+| 3. Volume open | Checkpoint scan + object map + volume superblock | ~2 ms | - |
+| 4. Filesystem walk | Traverse catalog B-tree | ~30–60 ms | Varies by file count |
 
 **Bottleneck:** Decompression dominates (stages 2 and 6). LZFSE decompression is ~124 MB/s; XZ decompression is ~48.5 MB/s.
 

@@ -5,14 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] - 2026-02-11
 
 ### Added
 
-- `apfs` subcommand with `info`, `ls`, `tree`, `cat`, `stat`, `find` operations
-- APFS support in `info` command — shows volume info and file listing for APFS DMGs
-- APFS support in `bench` command — benchmarks APFS extraction and walk stages
-- README.md with install instructions, command reference, and examples
+- `fs` subcommand: unified filesystem browsing (info, ls, tree, cat, stat, find) with HFS+/APFS auto-detection
+- `apfs` subcommand for direct APFS volume access
+- APFS support in `info` and `bench` commands
 
 ## [0.2.0] - 2026-02-11
 

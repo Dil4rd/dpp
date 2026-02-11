@@ -5,7 +5,7 @@
 Navigate the full stack from DMG container down to individual files — no macOS required:
 
 ```
-DMG (UDIF) → HFS+ filesystem → PKG installer (XAR) → Payload (PBZX/CPIO) → files
+DMG (UDIF) → HFS+ or APFS filesystem → PKG installer (XAR) → Payload (PBZX/CPIO) → files
 ```
 
 ## Install
@@ -19,6 +19,9 @@ cargo install dpp-tool
 ```bash
 # Overview of everything inside a DMG
 dpp-tool info Kernel_Debug_Kit.dmg
+
+# Auto-detect filesystem and browse (works with HFS+ and APFS)
+dpp-tool fs tree Kernel_Debug_Kit.dmg /
 
 # Browse the HFS+ filesystem
 dpp-tool hfs tree Kernel_Debug_Kit.dmg /
@@ -40,6 +43,13 @@ dpp-tool payload cat Kernel_Debug_Kit.dmg /KernelDebugKit.pkg com.apple.pkg.KDK 
 | `dpp-tool dmg info <dmg>` | DMG format and compression stats |
 | `dpp-tool dmg ls <dmg>` | List partitions |
 | `dpp-tool dmg cat <dmg> [id]` | Extract raw partition data |
+| **fs** (auto-detect) | |
+| `dpp-tool fs info <dmg>` | Volume info (auto-detect HFS+/APFS) |
+| `dpp-tool fs ls <dmg> <path>` | List directory |
+| `dpp-tool fs tree <dmg> [path]` | Browse filesystem tree |
+| `dpp-tool fs cat <dmg> <path>` | Extract file to stdout |
+| `dpp-tool fs stat <dmg> <path>` | File metadata |
+| `dpp-tool fs find <dmg> [opts]` | Find files by name/type |
 | **hfs** | |
 | `dpp-tool hfs info <dmg>` | HFS+ volume header |
 | `dpp-tool hfs ls <dmg> <path>` | List directory |
@@ -47,6 +57,13 @@ dpp-tool payload cat Kernel_Debug_Kit.dmg /KernelDebugKit.pkg com.apple.pkg.KDK 
 | `dpp-tool hfs cat <dmg> <path>` | Extract file to stdout |
 | `dpp-tool hfs stat <dmg> <path>` | File metadata |
 | `dpp-tool hfs find <dmg> [opts]` | Find files by name/type |
+| **apfs** | |
+| `dpp-tool apfs info <dmg>` | APFS volume info |
+| `dpp-tool apfs ls <dmg> <path>` | List directory |
+| `dpp-tool apfs tree <dmg> [path]` | Browse filesystem tree |
+| `dpp-tool apfs cat <dmg> <path>` | Extract file to stdout |
+| `dpp-tool apfs stat <dmg> <path>` | File metadata |
+| `dpp-tool apfs find <dmg> [opts]` | Find files by name/type |
 | **pkg** | |
 | `dpp-tool pkg info <dmg> <pkg>` | Package statistics |
 | `dpp-tool pkg ls <dmg> <pkg>` | List XAR contents |
@@ -72,6 +89,22 @@ dpp-tool dmg ls Kernel_Debug_Kit.dmg
 
 # Dump raw partition data
 dpp-tool dmg cat Kernel_Debug_Kit.dmg 0 > partition.bin
+```
+
+### Filesystem (auto-detect)
+
+```bash
+# Auto-detect HFS+ or APFS and show volume info
+dpp-tool fs info Kernel_Debug_Kit.dmg
+
+# Browse the directory tree (works with both HFS+ and APFS)
+dpp-tool fs tree Kernel_Debug_Kit.dmg /Library
+
+# Find all .pkg files
+dpp-tool fs find Kernel_Debug_Kit.dmg
+
+# File metadata
+dpp-tool fs stat Kernel_Debug_Kit.dmg /Library/Developer/KDKs
 ```
 
 ### HFS+ filesystem

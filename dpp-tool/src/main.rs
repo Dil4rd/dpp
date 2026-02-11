@@ -13,6 +13,13 @@
 //! dpp-tool dmg ls <dmg>                                  List partitions
 //! dpp-tool dmg cat <dmg> [partition-id]                  Raw partition data to stdout
 //!
+//! dpp-tool fs info <dmg>                                 Volume info (auto-detect HFS+/APFS)
+//! dpp-tool fs ls <dmg> <path>                            List directory contents
+//! dpp-tool fs tree <dmg> [path]                          Browse filesystem tree
+//! dpp-tool fs cat <dmg> <path>                           Extract file to stdout
+//! dpp-tool fs stat <dmg> <path>                          File metadata
+//! dpp-tool fs find <dmg> [-name pat] [-type f|d|l]       Find files (default: *.pkg)
+//!
 //! dpp-tool hfs info <dmg>                                HFS+ volume header
 //! dpp-tool hfs ls <dmg> <path>                           List directory contents
 //! dpp-tool hfs tree <dmg> [path]                         Browse filesystem tree
@@ -42,6 +49,7 @@
 mod style;
 mod pipeline;
 mod cmd_dmg;
+mod cmd_fs;
 mod cmd_hfs;
 mod cmd_apfs;
 mod cmd_pkg;
@@ -64,6 +72,7 @@ fn main() {
 
     let result = match args[1].as_str() {
         "dmg" => cmd_dmg::run(&args[2..]),
+        "fs" => cmd_fs::run(&args[2..]),
         "hfs" => cmd_hfs::run(&args[2..]),
         "apfs" => cmd_apfs::run(&args[2..]),
         "pkg" => cmd_pkg::run(&args[2..]),
@@ -101,6 +110,7 @@ fn print_usage() {
     {GREEN}info{RESET}        <dmg>          Full pipeline overview
     {GREEN}bench{RESET}       <dmg>          Benchmark pipeline stages
     {GREEN}dmg{RESET}         ...            DMG (UDIF) container commands
+    {GREEN}fs{RESET}          ...            Filesystem commands (auto-detect HFS+/APFS)
     {GREEN}hfs{RESET}         ...            HFS+ filesystem commands
     {GREEN}apfs{RESET}        ...            APFS filesystem commands
     {GREEN}pkg{RESET}         ...            PKG (XAR) archive commands
@@ -109,6 +119,9 @@ fn print_usage() {
 {BOLD}EXAMPLES:{RESET}
     dpp-tool info Kernel_Debug_Kit.dmg
     dpp-tool dmg ls Kernel_Debug_Kit.dmg
+    dpp-tool fs info Kernel_Debug_Kit.dmg
+    dpp-tool fs tree Kernel_Debug_Kit.dmg /Library
+    dpp-tool fs find Kernel_Debug_Kit.dmg -name "*.kext" -type d
     dpp-tool hfs tree Kernel_Debug_Kit.dmg /Library
     dpp-tool hfs find Kernel_Debug_Kit.dmg -name "*.kext" -type d
     dpp-tool apfs info app.dmg

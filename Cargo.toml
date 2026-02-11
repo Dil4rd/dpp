@@ -3,4 +3,9 @@ resolver = "2"
 members = [
     "pbzx",
     "udif",
+    "hfsplus",
+    "xara",
+    "dpp",
+    "apfs",
+    "dpp-tool",
 ]

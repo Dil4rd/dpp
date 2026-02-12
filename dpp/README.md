@@ -4,7 +4,8 @@
 
 **All-in-one Rust pipeline for Apple DMG → HFS+/APFS → PKG → PBZX extraction**
 
-![Version](https://img.shields.io/badge/version-0.1.0-green)
+[![Crates.io](https://img.shields.io/crates/v/dpp.svg)](https://crates.io/crates/dpp)
+[![Documentation](https://docs.rs/dpp/badge.svg)](https://docs.rs/dpp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)
 

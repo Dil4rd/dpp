@@ -4,7 +4,8 @@
 
 **Cross-platform Rust library for reading XAR archives and macOS PKG installer packages**
 
-![Version](https://img.shields.io/badge/version-0.1.0-green)
+[![Crates.io](https://img.shields.io/crates/v/xara.svg)](https://crates.io/crates/xara)
+[![Documentation](https://docs.rs/xara/badge.svg)](https://docs.rs/xara)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)
 

@@ -4,7 +4,8 @@
 
 **Cross-platform Rust library for reading Apple File System (APFS) containers**
 
-![Version](https://img.shields.io/badge/version-0.1.0-green)
+[![Crates.io](https://img.shields.io/crates/v/apfs.svg)](https://crates.io/crates/apfs)
+[![Documentation](https://docs.rs/apfs/badge.svg)](https://docs.rs/apfs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)
 

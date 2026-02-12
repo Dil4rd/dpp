@@ -1,3 +1,5 @@
+<div align="center">
+
 # dpp
 
 **Cross-platform Apple DMG extraction pipeline in pure Rust.**
@@ -5,8 +7,10 @@
 Open macOS `.dmg` disk images on any OS — no macOS required. Navigate the full stack from DMG container down to individual files:
 
 ```
-DMG (UDIF) → HFS+ filesystem → PKG installer (XAR) → Payload (PBZX/CPIO) → files
+DMG (UDIF) → HFS+ or APFS filesystem → PKG installer (XAR) → Payload (PBZX/CPIO) → files
 ```
+
+</div>
 
 ## Features
 
@@ -30,12 +34,18 @@ cargo install dpp-tool
 # Overview of everything inside a DMG
 dpp-tool info Kernel_Debug_Kit.dmg
 
-# Browse the HFS+ filesystem
+# Auto-detect filesystem and browse (works with HFS+ and APFS)
+dpp-tool fs tree Kernel_Debug_Kit.dmg /
+dpp-tool fs ls Kernel_Debug_Kit.dmg /Library/Developer
+
+# Use in-memory mode for faster extraction on small DMGs
+dpp-tool --in-memory fs info small.dmg
+
+# Browse the HFS+ filesystem directly
 dpp-tool hfs tree Kernel_Debug_Kit.dmg /
-dpp-tool hfs ls Kernel_Debug_Kit.dmg /Library/Developer
 
 # Find all .kext bundles
-dpp-tool hfs find Kernel_Debug_Kit.dmg -name "*.kext" -type d
+dpp-tool fs find Kernel_Debug_Kit.dmg -name "*.kext" -type d
 
 # Inspect a PKG installer inside the DMG
 dpp-tool pkg ls Kernel_Debug_Kit.dmg /KernelDebugKit.pkg
@@ -53,25 +63,33 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-dpp = "0.1"
+dpp = "0.3"
 ```
 
 For faster PBZX payload extraction with multi-threaded decompression:
 
 ```toml
 [dependencies]
-dpp = { version = "0.1", features = ["parallel"] }
+dpp = { version = "0.3.1", features = ["parallel"] }
 ```
 
-Open a DMG and list the root directory:
+Open a DMG and list the root directory (auto-detects HFS+ or APFS):
 
 ```rust
 let mut pipeline = dpp::DmgPipeline::open("image.dmg")?;
-let mut hfs = pipeline.open_hfs()?;
+let mut fs = pipeline.open_filesystem()?;
 
-for entry in hfs.list_directory("/")? {
+for entry in fs.list_directory("/")? {
     println!("{}", entry.name);
 }
+```
+
+Use in-memory mode for faster extraction on small DMGs:
+
+```rust
+use dpp::{DmgPipeline, ExtractMode};
+let mut pipeline = DmgPipeline::open("small.dmg")?;
+let mut fs = pipeline.open_filesystem_with_mode(ExtractMode::InMemory)?;
 ```
 
 Find and extract packages:
@@ -99,6 +117,8 @@ hfs.read_file_to("/System/Library/Kernels/kernel", &mut out)?;
 
 ## CLI Commands
 
+Global options: `--temp-file` (default, low memory) or `--in-memory` (faster for small DMGs).
+
 | Command | Description |
 |---------|-------------|
 | `dpp-tool info <dmg>` | Full pipeline overview |
@@ -107,6 +127,13 @@ hfs.read_file_to("/System/Library/Kernels/kernel", &mut out)?;
 | `dpp-tool dmg info <dmg>` | DMG format and compression stats |
 | `dpp-tool dmg ls <dmg>` | List partitions |
 | `dpp-tool dmg cat <dmg> [id]` | Extract raw partition data |
+| **fs** (auto-detect) | |
+| `dpp-tool fs info <dmg>` | Volume info (auto-detect HFS+/APFS) |
+| `dpp-tool fs ls <dmg> <path>` | List directory |
+| `dpp-tool fs tree <dmg> [path]` | Browse filesystem tree |
+| `dpp-tool fs cat <dmg> <path>` | Extract file to stdout |
+| `dpp-tool fs stat <dmg> <path>` | File metadata |
+| `dpp-tool fs find <dmg> [opts]` | Find files by name/type |
 | **hfs** | |
 | `dpp-tool hfs info <dmg>` | HFS+ volume header |
 | `dpp-tool hfs ls <dmg> <path>` | List directory |
@@ -114,6 +141,13 @@ hfs.read_file_to("/System/Library/Kernels/kernel", &mut out)?;
 | `dpp-tool hfs cat <dmg> <path>` | Extract file to stdout |
 | `dpp-tool hfs stat <dmg> <path>` | File metadata |
 | `dpp-tool hfs find <dmg> [opts]` | Find files by name/type |
+| **apfs** | |
+| `dpp-tool apfs info <dmg>` | APFS volume info |
+| `dpp-tool apfs ls <dmg> <path>` | List directory |
+| `dpp-tool apfs tree <dmg> [path]` | Browse filesystem tree |
+| `dpp-tool apfs cat <dmg> <path>` | Extract file to stdout |
+| `dpp-tool apfs stat <dmg> <path>` | File metadata |
+| `dpp-tool apfs find <dmg> [opts]` | Find files by name/type |
 | **pkg** | |
 | `dpp-tool pkg info <dmg> <pkg>` | Package statistics |
 | `dpp-tool pkg ls <dmg> <pkg>` | List XAR contents |

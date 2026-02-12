@@ -4,7 +4,7 @@ use std::process;
 use std::time::Instant;
 
 use crate::style::*;
-use crate::pipeline::{open_pipeline, open_hfs};
+use crate::pipeline::{open_pipeline, open_filesystem};
 
 pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
@@ -85,11 +85,11 @@ fn open_archive(
     component: &str,
 ) -> Result<pbzx::Archive, Box<dyn std::error::Error>> {
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut hfs = open_hfs(&mut pipeline)?;
+    let mut fs = open_filesystem(&mut pipeline)?;
 
     spinner_msg(&format!("Opening {pkg_path}"));
     let t = Instant::now();
-    let mut pkg = hfs.open_pkg(pkg_path)?;
+    let mut pkg = fs.open_pkg(pkg_path)?;
     spinner_done(&format!(" ({})", format_duration(t.elapsed())));
 
     spinner_msg("Decompressing payload");
@@ -405,8 +405,8 @@ fn cat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let file_path = &args[3];
 
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
-    let mut hfs = pipeline.open_hfs()?;
-    let mut pkg = hfs.open_pkg(pkg_path)?;
+    let mut fs = pipeline.open_filesystem()?;
+    let mut pkg = fs.open_pkg(pkg_path)?;
 
     let payload = pkg.payload(component)?;
     let archive = pbzx::Archive::from_reader(Cursor::new(payload))?;

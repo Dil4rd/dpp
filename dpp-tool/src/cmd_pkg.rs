@@ -3,7 +3,7 @@ use std::process;
 use std::time::Instant;
 
 use crate::style::*;
-use crate::pipeline::{open_pipeline, open_hfs};
+use crate::pipeline::{open_pipeline, open_filesystem};
 
 /// Build a sort key that produces depth-first tree order (dirs before files at each level).
 /// Each path component is prefixed with '\x00' for directories or '\x01' for files,
@@ -63,11 +63,11 @@ fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let pkg_path = &args[1];
 
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut hfs = open_hfs(&mut pipeline)?;
+    let mut fs = open_filesystem(&mut pipeline)?;
 
     spinner_msg(&format!("Opening {pkg_path}"));
     let t = Instant::now();
-    let pkg = hfs.open_pkg(pkg_path)?;
+    let pkg = fs.open_pkg(pkg_path)?;
     spinner_done(&format!(" ({})", format_duration(t.elapsed())));
 
     header(&format!("PKG: {pkg_path}"));
@@ -163,11 +163,11 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let pkg_path = &args[1];
 
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut hfs = open_hfs(&mut pipeline)?;
+    let mut fs = open_filesystem(&mut pipeline)?;
 
     spinner_msg(&format!("Opening {pkg_path}"));
     let t = Instant::now();
-    let pkg = hfs.open_pkg(pkg_path)?;
+    let pkg = fs.open_pkg(pkg_path)?;
     spinner_done(&format!(" ({})", format_duration(t.elapsed())));
 
     header(&format!("PKG: {pkg_path}"));
@@ -267,11 +267,11 @@ fn find(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut hfs = open_hfs(&mut pipeline)?;
+    let mut fs = open_filesystem(&mut pipeline)?;
 
     spinner_msg(&format!("Opening {pkg_path}"));
     let t = Instant::now();
-    let pkg = hfs.open_pkg(pkg_path)?;
+    let pkg = fs.open_pkg(pkg_path)?;
     spinner_done(&format!(" ({})", format_duration(t.elapsed())));
 
     let files = pkg.xar().files();
@@ -335,8 +335,8 @@ fn cat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let file_path = &args[2];
 
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
-    let mut hfs = pipeline.open_hfs()?;
-    let mut pkg = hfs.open_pkg(pkg_path)?;
+    let mut fs = pipeline.open_filesystem()?;
+    let mut pkg = fs.open_pkg(pkg_path)?;
 
     let xar_file = pkg.xar().find(file_path)
         .ok_or_else(|| format!("File not found in XAR: {file_path}"))?

@@ -32,23 +32,28 @@ pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         kv("Main partition", &format!("{} ({})", mp.name, format_size(mp.size)));
     }
 
-    // Stage 2: HFS+ extraction
-    section("Stage 2: HFS+ Extraction (decompress + parse)");
-    let t = Instant::now();
-    let hfs_result = pipeline.open_hfs();
-    let hfs_time = t.elapsed();
+    // Determine filesystem type label from partition metadata
+    let has_hfs = partitions.iter()
+        .any(|p| matches!(p.partition_type, udif::PartitionType::Hfs | udif::PartitionType::Hfsx));
+    let fs_label = if has_hfs { "HFS+" } else { "APFS" };
 
-    match hfs_result {
-        Ok(mut hfs) => {
-            let vh = hfs.volume_header();
-            kv("Time", &format_duration(hfs_time));
-            kv("Block size", &format!("{} bytes", vh.block_size));
-            kv("Files", &format_commas(vh.file_count as u64));
-            kv("Folders", &format_commas(vh.folder_count as u64));
+    // Stage 2: Filesystem extraction
+    section(&format!("Stage 2: {fs_label} Extraction (decompress + parse)"));
+    let t = Instant::now();
+    let fs_result = pipeline.open_filesystem();
+    let fs_time = t.elapsed();
+
+    match fs_result {
+        Ok(mut fs) => {
+            let vi = fs.volume_info();
+            kv("Time", &format_duration(fs_time));
+            kv("Block size", &format!("{} bytes", vi.block_size));
+            kv("Files", &format_commas(vi.file_count));
+            kv("Directories", &format_commas(vi.directory_count));
 
             if let Some(mp) = main_partition {
-                if mp.size > 0 && hfs_time.as_secs_f64() > 0.0 {
-                    let throughput = mp.size as f64 / hfs_time.as_secs_f64() / (1024.0 * 1024.0);
+                if mp.size > 0 && fs_time.as_secs_f64() > 0.0 {
+                    let throughput = mp.size as f64 / fs_time.as_secs_f64() / (1024.0 * 1024.0);
                     kv_highlight("Throughput", &format!("{:.1} MB/s", throughput));
                 }
             }
@@ -56,10 +61,10 @@ pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             // Stage 3: Filesystem walk
             section("Stage 3: Filesystem Walk (B-tree traversal)");
             let t = Instant::now();
-            let entries = hfs.walk()?;
+            let entries = fs.walk()?;
             let walk_time = t.elapsed();
-            let file_count = entries.iter().filter(|e| e.entry.kind == hfsplus::EntryKind::File).count();
-            let dir_count = entries.iter().filter(|e| e.entry.kind == hfsplus::EntryKind::Directory).count();
+            let file_count = entries.iter().filter(|e| e.entry.kind == dpp::FsEntryKind::File).count();
+            let dir_count = entries.iter().filter(|e| e.entry.kind == dpp::FsEntryKind::Directory).count();
             let total_size: u64 = entries.iter().map(|e| e.entry.size).sum();
             kv("Time", &format_duration(walk_time));
             kv("Files", &format_commas(file_count as u64));
@@ -73,14 +78,14 @@ pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             // Stage 4: PKG discovery
             let pkg_files: Vec<_> = entries
                 .iter()
-                .filter(|e| e.entry.kind == hfsplus::EntryKind::File && e.path.ends_with(".pkg"))
+                .filter(|e| e.entry.kind == dpp::FsEntryKind::File && e.path.ends_with(".pkg"))
                 .collect();
 
             if !pkg_files.is_empty() {
                 section("Stage 4: PKG Open (XAR parse)");
                 let pkg_path = &pkg_files[0].path;
                 let t = Instant::now();
-                let pkg = hfs.open_pkg(pkg_path)?;
+                let pkg = fs.open_pkg(pkg_path)?;
                 let pkg_time = t.elapsed();
                 kv("Time", &format_duration(pkg_time));
                 kv("Package", pkg_path);
@@ -108,7 +113,7 @@ pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
 
-                    let mut pkg_mut = hfs.open_pkg(&pkg_files[0].path)?;
+                    let mut pkg_mut = fs.open_pkg(&pkg_files[0].path)?;
                     let t = Instant::now();
                     let payload = pkg_mut.payload(comp)?;
                     let payload_time = t.elapsed();
@@ -133,14 +138,15 @@ pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
             // Summary
             section("Pipeline Summary");
-            let total = dmg_time + hfs_time + walk_time;
+            let total = dmg_time + fs_time + walk_time;
             println!();
             println!("  {DIM}Stage{RESET}                        {DIM}Time{RESET}          {DIM}%{RESET}");
             println!("  {DIM}{}{RESET}", "-".repeat(50));
 
+            let extraction_label = format!("{fs_label} extraction");
             let stages = [
                 ("DMG open", dmg_time),
-                ("HFS+ extraction", hfs_time),
+                (extraction_label.as_str(), fs_time),
                 ("Filesystem walk", walk_time),
             ];
 
@@ -165,103 +171,14 @@ pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             );
             println!();
         }
-        Err(dpp::DppError::NoHfsPartition) => {
-            let has_apfs = partitions.iter().any(|p| p.partition_type == udif::PartitionType::Apfs);
-            if has_apfs {
-                println!("  {DIM}No HFS+ partition — trying APFS...{RESET}");
+        Err(dpp::DppError::NoFilesystemPartition) => {
+            println!("  {YELLOW}No HFS+ or APFS partition found. Skipping filesystem stages.{RESET}");
 
-                // Stage 2: APFS extraction
-                section("Stage 2: APFS Extraction (decompress + parse)");
-                let t = Instant::now();
-                let apfs_result = pipeline.open_apfs();
-                let apfs_time = t.elapsed();
-
-                match apfs_result {
-                    Ok(mut apfs_handle) => {
-                        let vi = apfs_handle.volume_info();
-                        kv("Time", &format_duration(apfs_time));
-                        kv("Block size", &format!("{} bytes", vi.block_size));
-                        kv("Files", &format_commas(vi.num_files));
-                        kv("Directories", &format_commas(vi.num_directories));
-
-                        if let Some(mp) = main_partition {
-                            if mp.size > 0 && apfs_time.as_secs_f64() > 0.0 {
-                                let throughput = mp.size as f64 / apfs_time.as_secs_f64() / (1024.0 * 1024.0);
-                                kv_highlight("Throughput", &format!("{:.1} MB/s", throughput));
-                            }
-                        }
-
-                        // Stage 3: Filesystem walk
-                        section("Stage 3: Filesystem Walk (B-tree traversal)");
-                        let t = Instant::now();
-                        let entries = apfs_handle.walk()?;
-                        let walk_time = t.elapsed();
-                        let file_count = entries.iter().filter(|e| e.entry.kind == apfs::EntryKind::File).count();
-                        let dir_count = entries.iter().filter(|e| e.entry.kind == apfs::EntryKind::Directory).count();
-                        let total_size: u64 = entries.iter().map(|e| e.entry.size).sum();
-                        kv("Time", &format_duration(walk_time));
-                        kv("Files", &format_commas(file_count as u64));
-                        kv("Directories", &format_commas(dir_count as u64));
-                        kv("Total content", &format_size(total_size));
-
-                        if !entries.is_empty() && walk_time.as_secs_f64() > 0.0 {
-                            kv_highlight("Entries/sec", &format!("{:.0}", entries.len() as f64 / walk_time.as_secs_f64()));
-                        }
-
-                        // Summary
-                        section("Pipeline Summary");
-                        let total = dmg_time + apfs_time + walk_time;
-                        println!();
-                        println!("  {DIM}Stage{RESET}                        {DIM}Time{RESET}          {DIM}%{RESET}");
-                        println!("  {DIM}{}{RESET}", "-".repeat(50));
-
-                        let stages = [
-                            ("DMG open", dmg_time),
-                            ("APFS extraction", apfs_time),
-                            ("Filesystem walk", walk_time),
-                        ];
-
-                        let bar_total = 40;
-                        for (name, time) in &stages {
-                            let pct = time.as_secs_f64() / total.as_secs_f64() * 100.0;
-                            let bar_len = (pct / 100.0 * bar_total as f64) as usize;
-                            let bar: String = (0..bar_len).map(|_| '#').collect();
-                            let color = if pct > 50.0 { RED } else if pct > 20.0 { YELLOW } else { GREEN };
-                            println!(
-                                "  {:<25} {:>10}  {color}{:>5.1}%{RESET}  {color}{bar}{RESET}",
-                                name,
-                                format_duration(*time),
-                                pct,
-                            );
-                        }
-                        println!("  {DIM}{}{RESET}", "-".repeat(50));
-                        println!(
-                            "  {BOLD}{:<25}{RESET} {:>10}",
-                            "Total",
-                            format_duration(total),
-                        );
-                        println!();
-                    }
-                    Err(e) => {
-                        kv("Time", &format_duration(apfs_time));
-                        println!("  {YELLOW}APFS extraction failed: {e}{RESET}");
-
-                        section("Pipeline Summary");
-                        println!();
-                        kv("DMG open", &format_duration(dmg_time));
-                        println!("  {DIM}(APFS stages failed){RESET}");
-                        println!();
-                    }
-                }
-            } else {
-                println!("  {YELLOW}No HFS+ or APFS partition found. Skipping filesystem stages.{RESET}");
-
-                section("Pipeline Summary");
-                println!();
-                kv("DMG open", &format_duration(dmg_time));
-                println!("  {DIM}(Filesystem stages skipped — no compatible partition){RESET}");
-                println!();
-            }
+            section("Pipeline Summary");
+            println!();
+            kv("DMG open", &format_duration(dmg_time));
+            println!("  {DIM}(Filesystem stages skipped — no compatible partition){RESET}");
+            println!();
         }
         Err(e) => return Err(e.into()),
     }

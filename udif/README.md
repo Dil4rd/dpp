@@ -4,7 +4,8 @@
 
 **Cross-platform Rust library for Apple DMG disk images (aka Universal Disk Image Format)**
 
-![Version](https://img.shields.io/badge/version-0.1.0-green)
+[![Crates.io](https://img.shields.io/crates/v/udif.svg)](https://crates.io/crates/udif)
+[![Documentation](https://docs.rs/udif/badge.svg)](https://docs.rs/udif)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)
 

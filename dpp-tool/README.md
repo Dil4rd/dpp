@@ -1,12 +1,23 @@
+<div align="center">
+
 # dpp-tool
 
-**Cross-platform CLI for exploring Apple DMG disk images.**
+**Cross-platform Rust library for reading Apple File System (APFS) containers**
+
+[![Crates.io](https://img.shields.io/crates/v/dpp-tool.svg)](https://crates.io/crates/dpp-tool)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)
+
+**Cross-platform pure Rust CLI for exploring Apple DMG disk images.**
 
 Navigate the full stack from DMG container down to individual files — no macOS required:
 
 ```
 DMG (UDIF) → HFS+ or APFS filesystem → PKG installer (XAR) → Payload (PBZX/CPIO) → files
 ```
+
+</div>
+
 
 ## Install
 

@@ -9,7 +9,8 @@ cargo test                         # Run all tests (skips gracefully if fixtures
 cargo test -p dpp                  # Run integration tests only
 cargo test <test_name>             # Run a single test by name
 cargo test -- --nocapture          # Show eprintln diagnostic output
-cargo run -p dpp-tool -- <cmd>     # Run CLI tool (subcommands: dmg, hfs, pkg, payload, info, bench)
+cargo run -p dpp-tool -- <cmd>     # Run CLI tool (subcommands: dmg, fs, hfs, apfs, pkg, payload, info, bench)
+cargo run -p dpp-tool -- --in-memory fs info <dmg>  # In-memory extraction mode
 cargo run -p pbzx --example pbzx-tool --release -- <file>   # Run pbzx example
 cargo run -p udif --example udif-tool --release -- <cmd>    # Run udif example
 cargo bench -p apfs                # Run APFS benchmarks (criterion)

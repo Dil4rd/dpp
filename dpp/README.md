@@ -104,6 +104,20 @@ println!("Files: {}, Dirs: {}", info.file_count, info.directory_count);
 let data = fs.read_file("/path/to/file.txt")?;
 ```
 
+### Choose Extraction Mode
+
+```rust
+use dpp::{DmgPipeline, ExtractMode};
+
+// In-memory mode: faster for small DMGs
+let mut pipeline = DmgPipeline::open("small.dmg")?;
+let mut fs = pipeline.open_filesystem_with_mode(ExtractMode::InMemory)?;
+
+// Temp-file mode (default): low memory for large DMGs
+let mut pipeline = DmgPipeline::open("large.dmg")?;
+let mut fs = pipeline.open_filesystem_with_mode(ExtractMode::TempFile)?;
+```
+
 ### Browse a DMG (HFS+ specific)
 
 ```rust

@@ -4,7 +4,7 @@ use std::process;
 use crate::style::*;
 use crate::pipeline::open_pipeline;
 
-pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(args: &[String], _mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
         print_usage();
         process::exit(1);

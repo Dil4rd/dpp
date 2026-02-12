@@ -4,7 +4,7 @@ use std::time::Instant;
 use crate::style::*;
 use crate::pipeline::{open_pipeline, open_filesystem};
 
-pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
         eprintln!("Usage: dpp-tool info <dmg-file>");
         process::exit(1);
@@ -69,7 +69,7 @@ pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Filesystem layer (HFS+ or APFS, auto-detected)
-    match open_filesystem(&mut pipeline) {
+    match open_filesystem(&mut pipeline, mode) {
         Ok(mut fs) => {
             let vi = fs.volume_info();
 

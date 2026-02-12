@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.3.1] - 2026-02-12
 
+### Added
+
+- Global `--in-memory` / `--temp-file` flags to control partition extraction mode
+  - `--temp-file` (default): streams through temp file, low memory (~4 KB)
+  - `--in-memory`: buffers partition in RAM, faster for small DMGs
+
 ### Changed
 
 - `pkg` and `payload` commands now work on APFS DMGs (previously hard-coded to HFS+ only)

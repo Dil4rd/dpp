@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use crate::style::*;
 
-pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
         eprintln!("Usage: dpp-tool bench <dmg-file>");
         process::exit(1);
@@ -40,7 +40,7 @@ pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     // Stage 2: Filesystem extraction
     section(&format!("Stage 2: {fs_label} Extraction (decompress + parse)"));
     let t = Instant::now();
-    let fs_result = pipeline.open_filesystem();
+    let fs_result = pipeline.open_filesystem_with_mode(mode);
     let fs_time = t.elapsed();
 
     match fs_result {

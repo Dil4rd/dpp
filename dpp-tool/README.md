@@ -44,6 +44,21 @@ dpp-tool pkg ls Kernel_Debug_Kit.dmg /KernelDebugKit.pkg
 dpp-tool payload cat Kernel_Debug_Kit.dmg /KernelDebugKit.pkg com.apple.pkg.KDK /usr/bin/some_tool > tool
 ```
 
+## Global Options
+
+| Flag | Description |
+|------|-------------|
+| `--temp-file` | Extract partitions via temp file **(default)** — low memory (~4 KB) |
+| `--in-memory` | Buffer partitions in memory — faster for small DMGs |
+
+```bash
+# Use in-memory mode for a small DMG
+dpp-tool --in-memory fs info small.dmg
+
+# Explicit temp-file mode (same as default)
+dpp-tool --temp-file info large.dmg
+```
+
 ## Commands
 
 | Command | Description |

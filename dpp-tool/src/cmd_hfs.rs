@@ -5,18 +5,18 @@ use std::time::Instant;
 use crate::style::*;
 use crate::pipeline::{open_pipeline, open_hfs};
 
-pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
         print_usage();
         process::exit(1);
     }
     match args[0].as_str() {
-        "info" => info(&args[1..]),
-        "ls" => ls(&args[1..]),
-        "tree" => tree(&args[1..]),
-        "cat" => cat(&args[1..]),
-        "stat" => stat(&args[1..]),
-        "find" => find(&args[1..]),
+        "info" => info(&args[1..], mode),
+        "ls" => ls(&args[1..], mode),
+        "tree" => tree(&args[1..], mode),
+        "cat" => cat(&args[1..], mode),
+        "stat" => stat(&args[1..], mode),
+        "find" => find(&args[1..], mode),
         "-h" | "--help" | "help" => { print_usage(); Ok(()) }
         _ => {
             eprintln!("{RED}Unknown hfs command: {}{RESET}", args[0]);
@@ -42,7 +42,7 @@ fn print_usage() {
     );
 }
 
-fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
         eprintln!("Usage: dpp-tool hfs info <dmg-file>");
         process::exit(1);
@@ -50,7 +50,7 @@ fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
     let dmg_path = &args[0];
     let mut pipeline = open_pipeline(dmg_path)?;
-    let hfs = open_hfs(&mut pipeline)?;
+    let hfs = open_hfs(&mut pipeline, mode)?;
     let vh = hfs.volume_header();
 
     header(&format!("HFS+ Volume: {dmg_path}"));
@@ -73,7 +73,7 @@ fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 2 {
         eprintln!("Usage: dpp-tool hfs ls <dmg-file> <path>");
         process::exit(1);
@@ -83,7 +83,7 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let path = &args[1];
 
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut hfs = open_hfs(&mut pipeline)?;
+    let mut hfs = open_hfs(&mut pipeline, mode)?;
 
     let mut entries = hfs.list_directory(path)?;
     entries.sort_by(|a, b| {
@@ -127,7 +127,7 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn tree(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn tree(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
         eprintln!("Usage: dpp-tool hfs tree <dmg-file> [path]");
         process::exit(1);
@@ -137,7 +137,7 @@ fn tree(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let base_path = if args.len() > 1 { &args[1] } else { "/" };
 
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut hfs = open_hfs(&mut pipeline)?;
+    let mut hfs = open_hfs(&mut pipeline, mode)?;
 
     header(&format!("Tree: {dmg_path}:{base_path}"));
     println!();
@@ -202,7 +202,7 @@ fn print_tree(
     Ok(())
 }
 
-fn cat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn cat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 2 {
         eprintln!("Usage: dpp-tool hfs cat <dmg-file> <path>");
         process::exit(1);
@@ -212,7 +212,7 @@ fn cat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let path = &args[1];
 
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
-    let mut hfs = pipeline.open_hfs()?;
+    let mut hfs = pipeline.open_hfs_with_mode(mode)?;
 
     let mut stdout = io::stdout().lock();
     hfs.read_file_to(path, &mut stdout)?;
@@ -220,7 +220,7 @@ fn cat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn stat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn stat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 2 {
         eprintln!("Usage: dpp-tool hfs stat <dmg-file> <path>");
         process::exit(1);
@@ -230,7 +230,7 @@ fn stat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let path = &args[1];
 
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut hfs = open_hfs(&mut pipeline)?;
+    let mut hfs = open_hfs(&mut pipeline, mode)?;
 
     let stat = hfs.stat(path)?;
 
@@ -256,7 +256,7 @@ fn stat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn find(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
         eprintln!("Usage: dpp-tool hfs find <dmg> [-name <pattern>] [-type f|d|l]");
         eprintln!("       Default (no flags): -name \"*.pkg\" -type f");
@@ -310,7 +310,7 @@ fn find(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut hfs = open_hfs(&mut pipeline)?;
+    let mut hfs = open_hfs(&mut pipeline, mode)?;
 
     spinner_msg("Walking filesystem");
     let t = Instant::now();

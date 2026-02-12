@@ -10,10 +10,10 @@ pub(crate) fn open_pipeline(dmg_path: &str) -> Result<dpp::DmgPipeline, Box<dyn 
     Ok(pipeline)
 }
 
-pub(crate) fn open_hfs(pipeline: &mut dpp::DmgPipeline) -> Result<dpp::HfsHandle, Box<dyn std::error::Error>> {
+pub(crate) fn open_hfs(pipeline: &mut dpp::DmgPipeline, mode: dpp::ExtractMode) -> Result<dpp::HfsHandle, Box<dyn std::error::Error>> {
     spinner_msg("Extracting HFS+ partition");
     let t = Instant::now();
-    let hfs = match pipeline.open_hfs() {
+    let hfs = match pipeline.open_hfs_with_mode(mode) {
         Ok(hfs) => hfs,
         Err(dpp::DppError::NoHfsPartition) => {
             eprintln!(" {RED}failed{RESET}");
@@ -25,10 +25,10 @@ pub(crate) fn open_hfs(pipeline: &mut dpp::DmgPipeline) -> Result<dpp::HfsHandle
     Ok(hfs)
 }
 
-pub(crate) fn open_filesystem(pipeline: &mut dpp::DmgPipeline) -> Result<dpp::FilesystemHandle, Box<dyn std::error::Error>> {
+pub(crate) fn open_filesystem(pipeline: &mut dpp::DmgPipeline, mode: dpp::ExtractMode) -> Result<dpp::FilesystemHandle, Box<dyn std::error::Error>> {
     spinner_msg("Detecting and extracting filesystem");
     let t = Instant::now();
-    let fs = match pipeline.open_filesystem() {
+    let fs = match pipeline.open_filesystem_with_mode(mode) {
         Ok(fs) => fs,
         Err(dpp::DppError::NoFilesystemPartition) => {
             eprintln!(" {RED}failed{RESET}");
@@ -44,10 +44,10 @@ pub(crate) fn open_filesystem(pipeline: &mut dpp::DmgPipeline) -> Result<dpp::Fi
     Ok(fs)
 }
 
-pub(crate) fn open_apfs(pipeline: &mut dpp::DmgPipeline) -> Result<dpp::ApfsHandle, Box<dyn std::error::Error>> {
+pub(crate) fn open_apfs(pipeline: &mut dpp::DmgPipeline, mode: dpp::ExtractMode) -> Result<dpp::ApfsHandle, Box<dyn std::error::Error>> {
     spinner_msg("Extracting APFS partition");
     let t = Instant::now();
-    let apfs = match pipeline.open_apfs() {
+    let apfs = match pipeline.open_apfs_with_mode(mode) {
         Ok(apfs) => apfs,
         Err(dpp::DppError::NoApfsPartition) => {
             eprintln!(" {RED}failed{RESET}");

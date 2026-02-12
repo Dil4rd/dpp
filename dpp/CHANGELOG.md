@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.3.1] - 2026-02-12
 
+### Added
+
+- `DmgPipeline::open_filesystem_with_mode()` for explicit extraction mode control on the unified filesystem API
+
 ### Changed
 
 - `open_filesystem()` now uses partition metadata for upfront HFS+/APFS detection instead of try-then-fallback

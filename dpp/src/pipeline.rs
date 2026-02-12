@@ -116,8 +116,14 @@ impl DmgPipeline {
     }
 
     /// Auto-detect and open the filesystem partition (HFS+ or APFS).
-    /// Uses partition metadata for upfront detection instead of try-then-fallback.
+    /// Uses TempFile mode by default.
     pub fn open_filesystem(&mut self) -> Result<FilesystemHandle> {
+        self.open_filesystem_with_mode(ExtractMode::default())
+    }
+
+    /// Auto-detect and open the filesystem partition with explicit mode.
+    /// Uses partition metadata for upfront detection instead of try-then-fallback.
+    pub fn open_filesystem_with_mode(&mut self, mode: ExtractMode) -> Result<FilesystemHandle> {
         let partitions = self.archive.partitions();
 
         // Check for HFS+/HFSX partition first (preserves current priority)
@@ -125,14 +131,14 @@ impl DmgPipeline {
             .any(|p| matches!(p.partition_type, udif::PartitionType::Hfs | udif::PartitionType::Hfsx));
 
         if has_hfs {
-            return self.open_hfs().map(FilesystemHandle::Hfs);
+            return self.open_hfs_with_mode(mode).map(FilesystemHandle::Hfs);
         }
 
         let has_apfs = partitions.iter()
             .any(|p| p.partition_type == udif::PartitionType::Apfs);
 
         if has_apfs {
-            return self.open_apfs().map(FilesystemHandle::Apfs);
+            return self.open_apfs_with_mode(mode).map(FilesystemHandle::Apfs);
         }
 
         Err(crate::error::DppError::NoFilesystemPartition)

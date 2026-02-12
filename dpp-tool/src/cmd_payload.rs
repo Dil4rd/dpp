@@ -6,17 +6,17 @@ use std::time::Instant;
 use crate::style::*;
 use crate::pipeline::{open_pipeline, open_filesystem};
 
-pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
         print_usage();
         process::exit(1);
     }
     match args[0].as_str() {
-        "info" => info(&args[1..]),
-        "ls" => ls(&args[1..]),
-        "tree" => tree(&args[1..]),
-        "find" => find(&args[1..]),
-        "cat" => cat(&args[1..]),
+        "info" => info(&args[1..], mode),
+        "ls" => ls(&args[1..], mode),
+        "tree" => tree(&args[1..], mode),
+        "find" => find(&args[1..], mode),
+        "cat" => cat(&args[1..], mode),
         "-h" | "--help" | "help" => { print_usage(); Ok(()) }
         _ => {
             eprintln!("{RED}Unknown payload command: {}{RESET}", args[0]);
@@ -83,9 +83,10 @@ fn open_archive(
     dmg_path: &str,
     pkg_path: &str,
     component: &str,
+    mode: dpp::ExtractMode,
 ) -> Result<pbzx::Archive, Box<dyn std::error::Error>> {
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut fs = open_filesystem(&mut pipeline)?;
+    let mut fs = open_filesystem(&mut pipeline, mode)?;
 
     spinner_msg(&format!("Opening {pkg_path}"));
     let t = Instant::now();
@@ -107,13 +108,13 @@ fn open_archive(
 
 // ── info ────────────────────────────────────────────────────────────────
 
-fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 3 {
         eprintln!("Usage: dpp-tool payload info <dmg> <pkg-path> <component>");
         process::exit(1);
     }
 
-    let archive = open_archive(&args[0], &args[1], &args[2])?;
+    let archive = open_archive(&args[0], &args[1], &args[2], mode)?;
     let entries = archive.list()?;
 
     header(&format!("Payload: {}", args[2]));
@@ -141,7 +142,7 @@ fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
 // ── ls ──────────────────────────────────────────────────────────────────
 
-fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 3 {
         eprintln!("Usage: dpp-tool payload ls <dmg> <pkg-path> <component> [path]");
         process::exit(1);
@@ -150,7 +151,7 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let dir_arg = if args.len() > 3 { &args[3] } else { "/" };
     let dir = normalize_user_path(dir_arg);
 
-    let archive = open_archive(&args[0], &args[1], &args[2])?;
+    let archive = open_archive(&args[0], &args[1], &args[2], mode)?;
     let entries = archive.list()?;
 
     // Collect direct children of `dir`
@@ -208,7 +209,7 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
 // ── tree ────────────────────────────────────────────────────────────────
 
-fn tree(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn tree(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 3 {
         eprintln!("Usage: dpp-tool payload tree <dmg> <pkg-path> <component> [path]");
         process::exit(1);
@@ -217,7 +218,7 @@ fn tree(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let base_arg = if args.len() > 3 { &args[3] } else { "/" };
     let base = normalize_user_path(base_arg);
 
-    let archive = open_archive(&args[0], &args[1], &args[2])?;
+    let archive = open_archive(&args[0], &args[1], &args[2], mode)?;
     let entries = archive.list()?;
 
     // Build parent → children map
@@ -296,7 +297,7 @@ fn print_tree(
 
 // ── find ────────────────────────────────────────────────────────────────
 
-fn find(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 3 {
         eprintln!("Usage: dpp-tool payload find <dmg> <pkg-path> <component> [-name <pattern>] [-type f|d|l]");
         process::exit(1);
@@ -339,7 +340,7 @@ fn find(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         i += 1;
     }
 
-    let archive = open_archive(&args[0], &args[1], &args[2])?;
+    let archive = open_archive(&args[0], &args[1], &args[2], mode)?;
     let entries = archive.list()?;
 
     let matches: Vec<_> = entries
@@ -393,7 +394,7 @@ fn find(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
 // ── cat ─────────────────────────────────────────────────────────────────
 
-fn cat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn cat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 4 {
         eprintln!("Usage: dpp-tool payload cat <dmg> <pkg-path> <component> <file>");
         process::exit(1);
@@ -405,7 +406,7 @@ fn cat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let file_path = &args[3];
 
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
-    let mut fs = pipeline.open_filesystem()?;
+    let mut fs = pipeline.open_filesystem_with_mode(mode)?;
     let mut pkg = fs.open_pkg(pkg_path)?;
 
     let payload = pkg.payload(component)?;

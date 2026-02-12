@@ -70,21 +70,42 @@ fn main() {
         process::exit(1);
     }
 
-    let result = match args[1].as_str() {
-        "dmg" => cmd_dmg::run(&args[2..]),
-        "fs" => cmd_fs::run(&args[2..]),
-        "hfs" => cmd_hfs::run(&args[2..]),
-        "apfs" => cmd_apfs::run(&args[2..]),
-        "pkg" => cmd_pkg::run(&args[2..]),
-        "payload" => cmd_payload::run(&args[2..]),
-        "info" => cmd_info::run(&args[2..]),
-        "bench" | "benchmark" => cmd_bench::run(&args[2..]),
+    // Parse global flags before the subcommand
+    let mut mode = dpp::ExtractMode::default();
+    let mut cmd_args: Vec<String> = Vec::new();
+    let mut found_command = false;
+
+    for arg in &args[1..] {
+        if !found_command {
+            match arg.as_str() {
+                "--in-memory" => { mode = dpp::ExtractMode::InMemory; continue; }
+                "--temp-file" => { mode = dpp::ExtractMode::TempFile; continue; }
+                _ => { found_command = true; }
+            }
+        }
+        cmd_args.push(arg.clone());
+    }
+
+    if cmd_args.is_empty() {
+        print_usage();
+        process::exit(1);
+    }
+
+    let result = match cmd_args[0].as_str() {
+        "dmg" => cmd_dmg::run(&cmd_args[1..], mode),
+        "fs" => cmd_fs::run(&cmd_args[1..], mode),
+        "hfs" => cmd_hfs::run(&cmd_args[1..], mode),
+        "apfs" => cmd_apfs::run(&cmd_args[1..], mode),
+        "pkg" => cmd_pkg::run(&cmd_args[1..], mode),
+        "payload" => cmd_payload::run(&cmd_args[1..], mode),
+        "info" => cmd_info::run(&cmd_args[1..], mode),
+        "bench" | "benchmark" => cmd_bench::run(&cmd_args[1..], mode),
         "-h" | "--help" | "help" => {
             print_usage();
             Ok(())
         }
         _ => {
-            eprintln!("{RED}Unknown command: {}{RESET}", args[1]);
+            eprintln!("{RED}Unknown command: {}{RESET}", cmd_args[0]);
             print_usage();
             process::exit(1);
         }
@@ -104,7 +125,11 @@ fn print_usage() {
 {DIM}Navigate the full stack: DMG → HFS+/APFS → PKG → PBZX → files{RESET}
 
 {BOLD}USAGE:{RESET}
-    dpp-tool <COMMAND> [OPTIONS]
+    dpp-tool [OPTIONS] <COMMAND> ...
+
+{BOLD}OPTIONS:{RESET}
+    {GREEN}--temp-file{RESET}     Extract partitions via temp file {DIM}(default, low memory){RESET}
+    {GREEN}--in-memory{RESET}     Buffer partitions in memory {DIM}(faster for small DMGs){RESET}
 
 {BOLD}COMMANDS:{RESET}
     {GREEN}info{RESET}        <dmg>          Full pipeline overview
@@ -118,6 +143,7 @@ fn print_usage() {
 
 {BOLD}EXAMPLES:{RESET}
     dpp-tool info Kernel_Debug_Kit.dmg
+    dpp-tool --in-memory fs info small.dmg
     dpp-tool dmg ls Kernel_Debug_Kit.dmg
     dpp-tool fs info Kernel_Debug_Kit.dmg
     dpp-tool fs tree Kernel_Debug_Kit.dmg /Library

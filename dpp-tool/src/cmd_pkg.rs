@@ -20,16 +20,16 @@ fn tree_sort_key(path: &str, is_dir: bool) -> String {
     key_parts.join("/")
 }
 
-pub(crate) fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
         print_usage();
         process::exit(1);
     }
     match args[0].as_str() {
-        "info" => info(&args[1..]),
-        "ls" => ls(&args[1..]),
-        "find" => find(&args[1..]),
-        "cat" => cat(&args[1..]),
+        "info" => info(&args[1..], mode),
+        "ls" => ls(&args[1..], mode),
+        "find" => find(&args[1..], mode),
+        "cat" => cat(&args[1..], mode),
         "-h" | "--help" | "help" => { print_usage(); Ok(()) }
         _ => {
             eprintln!("{RED}Unknown pkg command: {}{RESET}", args[0]);
@@ -53,7 +53,7 @@ fn print_usage() {
     );
 }
 
-fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 2 {
         eprintln!("Usage: dpp-tool pkg info <dmg-file> <pkg-path>");
         process::exit(1);
@@ -63,7 +63,7 @@ fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let pkg_path = &args[1];
 
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut fs = open_filesystem(&mut pipeline)?;
+    let mut fs = open_filesystem(&mut pipeline, mode)?;
 
     spinner_msg(&format!("Opening {pkg_path}"));
     let t = Instant::now();
@@ -153,7 +153,7 @@ fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 2 {
         eprintln!("Usage: dpp-tool pkg ls <dmg-file> <pkg-path>");
         process::exit(1);
@@ -163,7 +163,7 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let pkg_path = &args[1];
 
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut fs = open_filesystem(&mut pipeline)?;
+    let mut fs = open_filesystem(&mut pipeline, mode)?;
 
     spinner_msg(&format!("Opening {pkg_path}"));
     let t = Instant::now();
@@ -213,7 +213,7 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn find(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 2 {
         eprintln!("Usage: dpp-tool pkg find <dmg> <pkg-path> [-name <pattern>] [-type f|d|l]");
         process::exit(1);
@@ -267,7 +267,7 @@ fn find(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut pipeline = open_pipeline(dmg_path)?;
-    let mut fs = open_filesystem(&mut pipeline)?;
+    let mut fs = open_filesystem(&mut pipeline, mode)?;
 
     spinner_msg(&format!("Opening {pkg_path}"));
     let t = Instant::now();
@@ -324,7 +324,7 @@ fn find(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn cat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn cat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() < 3 {
         eprintln!("Usage: dpp-tool pkg cat <dmg-file> <pkg-path> <file>");
         process::exit(1);
@@ -335,7 +335,7 @@ fn cat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let file_path = &args[2];
 
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
-    let mut fs = pipeline.open_filesystem()?;
+    let mut fs = pipeline.open_filesystem_with_mode(mode)?;
     let mut pkg = fs.open_pkg(pkg_path)?;
 
     let xar_file = pkg.xar().find(file_path)

@@ -116,21 +116,26 @@ impl DmgPipeline {
     }
 
     /// Auto-detect and open the filesystem partition (HFS+ or APFS).
-    /// Tries HFS+ first, then falls back to APFS.
+    /// Uses partition metadata for upfront detection instead of try-then-fallback.
     pub fn open_filesystem(&mut self) -> Result<FilesystemHandle> {
-        match self.open_hfs() {
-            Ok(hfs) => Ok(FilesystemHandle::Hfs(hfs)),
-            Err(crate::error::DppError::NoHfsPartition) => {
-                match self.open_apfs() {
-                    Ok(apfs) => Ok(FilesystemHandle::Apfs(apfs)),
-                    Err(crate::error::DppError::NoApfsPartition) => {
-                        Err(crate::error::DppError::NoFilesystemPartition)
-                    }
-                    Err(e) => Err(e),
-                }
-            }
-            Err(e) => Err(e),
+        let partitions = self.archive.partitions();
+
+        // Check for HFS+/HFSX partition first (preserves current priority)
+        let has_hfs = partitions.iter()
+            .any(|p| matches!(p.partition_type, udif::PartitionType::Hfs | udif::PartitionType::Hfsx));
+
+        if has_hfs {
+            return self.open_hfs().map(FilesystemHandle::Hfs);
         }
+
+        let has_apfs = partitions.iter()
+            .any(|p| p.partition_type == udif::PartitionType::Apfs);
+
+        if has_apfs {
+            return self.open_apfs().map(FilesystemHandle::Apfs);
+        }
+
+        Err(crate::error::DppError::NoFilesystemPartition)
     }
 
     /// Find the partition ID of the APFS partition.
@@ -677,12 +682,12 @@ impl FilesystemHandle {
 /// Convenience: walk a DMG and list all .pkg files found
 pub fn find_packages(dmg_path: impl AsRef<Path>) -> Result<Vec<String>> {
     let mut pipeline = DmgPipeline::open(dmg_path)?;
-    let mut hfs = pipeline.open_hfs()?;
+    let mut fs = pipeline.open_filesystem()?;
 
-    let entries = hfs.walk()?;
+    let entries = fs.walk()?;
     let pkgs: Vec<String> = entries
         .into_iter()
-        .filter(|e| e.entry.kind == hfsplus::EntryKind::File && e.path.ends_with(".pkg"))
+        .filter(|e| e.entry.kind == FsEntryKind::File && e.path.ends_with(".pkg"))
         .map(|e| e.path)
         .collect();
 
@@ -696,8 +701,8 @@ pub fn extract_pkg_payload(
     component: &str,
 ) -> Result<pbzx::Archive> {
     let mut pipeline = DmgPipeline::open(dmg_path)?;
-    let mut hfs = pipeline.open_hfs()?;
-    let mut pkg = hfs.open_pkg(pkg_path)?;
+    let mut fs = pipeline.open_filesystem()?;
+    let mut pkg = fs.open_pkg(pkg_path)?;
     let payload_data = pkg.payload(component)?;
     let archive = pbzx::Archive::from_reader(Cursor::new(payload_data))?;
     Ok(archive)

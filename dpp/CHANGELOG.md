@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-02-12
+
+### Changed
+
+- `open_filesystem()` now uses partition metadata for upfront HFS+/APFS detection instead of try-then-fallback
+- `find_packages()` and `extract_pkg_payload()` now use `open_filesystem()` and support APFS DMGs
+
 ## [0.3.0] - 2026-02-11
 
 ### Added

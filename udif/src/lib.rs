@@ -15,7 +15,7 @@
 //! - Zlib
 //! - Bzip2
 //! - LZFSE (Apple's native compression)
-//! - LZVN
+//! - XZ (LZMA)
 //!
 //! # Example
 //!
@@ -331,7 +331,7 @@ mod tests {
         assert_eq!(BlockType::try_from(0x80000005).unwrap(), BlockType::Zlib);
         assert_eq!(BlockType::try_from(0x80000006).unwrap(), BlockType::Bzip2);
         assert_eq!(BlockType::try_from(0x80000007).unwrap(), BlockType::Lzfse);
-        assert_eq!(BlockType::try_from(0x80000008).unwrap(), BlockType::Lzvn);
+        assert_eq!(BlockType::try_from(0x80000008).unwrap(), BlockType::Xz);
         assert_eq!(BlockType::try_from(0xFFFFFFFF).unwrap(), BlockType::End);
         assert_eq!(BlockType::try_from(0x7FFFFFFE).unwrap(), BlockType::Comment);
 
@@ -761,6 +761,31 @@ mod tests {
         assert_eq!(&extracted[..original.len()], &original[..]);
     }
 
+    #[test]
+    fn test_xz_roundtrip() {
+        use xz2::write::XzEncoder;
+        use xz2::read::XzDecoder;
+        use std::io::Write;
+
+        let original = b"XZ compression roundtrip test data. ".repeat(100);
+
+        // Compress
+        let mut encoder = XzEncoder::new(Vec::new(), 6);
+        encoder.write_all(&original).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        // Verify XZ magic bytes
+        assert_eq!(&compressed[..6], &[0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]);
+
+        // Decompress
+        let mut decoder = XzDecoder::new(&compressed[..]);
+        let mut decompressed = vec![0u8; original.len()];
+        let n = crate::reader::read_full(&mut decoder, &mut decompressed).unwrap();
+
+        assert_eq!(n, original.len());
+        assert_eq!(&decompressed[..], &original[..]);
+    }
+
     // =========================================================================
     // Integration test with real DMG file (requires fixture)
     // =========================================================================
@@ -804,6 +829,35 @@ mod tests {
 
         assert_eq!(data.len(), buf.len());
         assert_eq!(data, buf, "Buffered and streaming should produce identical output");
+    }
+
+    /// Requires ../tests/googlechrome.dmg fixture (XZ-compressed DMG).
+    /// Run with `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn test_xz_dmg_googlechrome() {
+        let test_dmg = "../tests/googlechrome.dmg";
+
+        let archive = DmgArchive::open(test_dmg).unwrap();
+        let comp_info = archive.compression_info();
+
+        // googlechrome.dmg uses XZ (block type 0x80000008)
+        assert!(comp_info.xz_blocks > 0, "Should have XZ blocks");
+
+        // Decompress main partition and verify non-zero data
+        let mut archive = DmgArchive::open(test_dmg).unwrap();
+        let data = archive.extract_main_partition().unwrap();
+        assert!(!data.iter().all(|&b| b == 0), "Decompressed data should not be all zeros");
+
+        // Check for HFS+ signature (0x482B at offset 1024) or HFSX (0x4858)
+        if data.len() > 1026 {
+            let sig = &data[1024..1026];
+            assert!(
+                sig == &[0x48, 0x2B] || sig == &[0x48, 0x58],
+                "Should have HFS+/HFSX signature, got {:02X}{:02X}",
+                sig[0], sig[1]
+            );
+        }
     }
 
     // =========================================================================

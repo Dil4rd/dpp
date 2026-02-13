@@ -1,6 +1,6 @@
 [package]
 name = "dpp"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 description = "DMG + HFS+/APFS + PKG + PBZX pipeline - walk through Apple disk images to extract packages"
 license = "MIT"
@@ -9,7 +9,7 @@ keywords = ["dmg", "apple", "macos", "pkg", "filesystem"]
 categories = ["compression", "encoding", "parsing"]
 
 [dependencies]
-udif = { version = "0.2.0", path = "../udif" }
+udif = { version = "0.3.0", path = "../udif" }
 pbzx = { version = "0.2.0", path = "../pbzx" }
 hfsplus = { version = "0.2.0", path = "../hfsplus" }
 apfs = { version = "0.2.0", path = "../apfs" }

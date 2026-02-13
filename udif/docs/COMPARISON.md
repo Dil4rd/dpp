@@ -8,7 +8,7 @@ The [apple-dmg](https://crates.io/crates/apple-dmg) crate from the apple-platfor
 |---------|:-------:|:---------:|
 | Zlib | ✓ | ✓ |
 | LZFSE | ✓ | ❌ unimplemented |
-| LZVN | ✓ | ❌ unimplemented |
+| XZ | ✓ | ❌ unimplemented |
 | Bzip2 | ✓ | ❌ unimplemented |
 | ADC | ❌ | ❌ unimplemented |
 | Checksum verification | ✓ | ❌ |
@@ -38,11 +38,11 @@ The [dmgwiz](https://crates.io/crates/dmgwiz) crate is a well-maintained library
 | Zlib | ✓ | ✓ |
 | Bzip2 | ✓ | ✓ |
 | LZFSE | ✓ | ✓ |
-| LZVN | ✓ | ❌ |
+| XZ | ✓ | ❌ |
 | ADC | ❌ | ✓ |
 | Encrypted DMGs | ❌ | ✓ |
 
-**Verdict:** If you only need to **read** DMGs and need encrypted DMG support, dmgwiz is a good choice. If you need to **create** DMGs or handle LZVN compression, use udif.
+**Verdict:** If you only need to **read** DMGs and need encrypted DMG support, dmgwiz is a good choice. If you need to **create** DMGs or handle XZ compression, use udif.
 
 ## vs. dmg-oxide
 
@@ -54,7 +54,7 @@ The [dmg-oxide](https://crates.io/crates/dmg-oxide) crate from the xbuild projec
 | Write | ✓ | ✓ |
 | Zlib | ✓ | ✓ |
 | LZFSE | ✓ | ❌ |
-| LZVN | ✓ | ❌ |
+| XZ | ✓ | ❌ |
 | Bzip2 | ✓ | ❌ |
 | Documentation | ~80% | 12.2% |
 
@@ -66,12 +66,12 @@ The [dmg](https://crates.io/crates/dmg) crate is a thin wrapper around macOS `hd
 
 ### Summary Table
 
-| Crate | Read | Write | LZFSE | LZVN | Bzip2 | Zlib | ADC | Encrypted | Platform |
-|-------|:----:|:-----:|:-----:|:----:|:-----:|:----:|:---:|:---------:|----------|
+| Crate | Read | Write | LZFSE | XZ | Bzip2 | Zlib | ADC | Encrypted | Platform |
+|-------|:----:|:-----:|:-----:|:--:|:-----:|:----:|:---:|:---------:|----------|
 | **udif** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ❌ | ❌ | All |
 | dmgwiz | ✓ | ❌ | ✓ | ❌ | ✓ | ✓ | ✓ | ✓ | All |
 | apple-dmg | ✓ | ❌ | ❌ | ❌ | ❌ | ✓ | ❌ | ❌ | All |
 | dmg-oxide | ✓ | ✓ | ❌ | ❌ | ❌ | ✓ | ❌ | ❌ | All |
 | dmg | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | macOS |
 
-**udif is the only cross-platform Rust crate that supports both reading AND writing DMGs with modern compression formats (LZFSE, LZVN).**
+**udif is the only cross-platform Rust crate that supports both reading AND writing DMGs with modern compression formats (LZFSE, XZ).**

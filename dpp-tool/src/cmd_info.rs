@@ -34,7 +34,7 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
     // Block type summary
     let mut block_types = Vec::new();
     if comp_info.lzfse_blocks > 0 { block_types.push(format!("LZFSE: {}", comp_info.lzfse_blocks)); }
-    if comp_info.lzvn_blocks > 0 { block_types.push(format!("LZVN: {}", comp_info.lzvn_blocks)); }
+    if comp_info.xz_blocks > 0 { block_types.push(format!("XZ: {}", comp_info.xz_blocks)); }
     if comp_info.zlib_blocks > 0 { block_types.push(format!("Zlib: {}", comp_info.zlib_blocks)); }
     if comp_info.bzip2_blocks > 0 { block_types.push(format!("Bzip2: {}", comp_info.bzip2_blocks)); }
     if comp_info.raw_blocks > 0 { block_types.push(format!("Raw: {}", comp_info.raw_blocks)); }

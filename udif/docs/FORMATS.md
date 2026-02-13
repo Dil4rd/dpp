@@ -124,18 +124,22 @@ Each block run is **exactly 40 bytes**:
 | `0x80000005` | Zlib | Zlib compression |
 | `0x80000006` | Bzip2 | Bzip2 compression |
 | `0x80000007` | LZFSE | LZFSE compression (Apple) |
-| `0x80000008` | LZVN | LZVN compression (Apple) |
+| `0x80000008` | XZ | XZ (LZMA2) compression |
 | `0x7FFFFFFE` | Comment | Comment block (no data) |
 | `0xFFFFFFFF` | End | End of partition marker |
 
 ## Compression Formats
 
-### LZFSE / LZVN
+### LZFSE
 
 Apple's native compression. Data starts with magic:
 - `bvxn` - LZFSE compressed
 - `bvx$` - LZFSE end marker
-- `bvx-` - LZVN compressed
+- `bvx-` - LZVN compressed (handled transparently by the lzfse decoder)
+
+### XZ (LZMA2)
+
+Standard XZ format. Data starts with magic bytes `FD 37 7A 58 5A 00`.
 
 ### Zlib
 

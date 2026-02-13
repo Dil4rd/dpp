@@ -26,7 +26,7 @@ DMG → decompress partition → mount HFS+ or APFS filesystem → find .pkg →
 
 ## Crate Responsibilities
 
-- **udif** — UDIF/DMG reader and writer. Parses KOLY headers, MISH blocks, decompresses partitions (LZFSE, LZVN, Zlib, Bzip2, Raw). CRC32 validation.
+- **udif** — UDIF/DMG reader and writer. Parses KOLY headers, MISH blocks, decompresses partitions (LZFSE, XZ, Zlib, Bzip2, Raw). CRC32 validation.
 - **hfsplus** — HFS+/HFSX filesystem reader. B-tree catalog traversal, extent overflow, resource forks, Mac Roman→UTF-8 unicode.
 - **xara** — XAR archive and PKG installer parser. Reads XAR header + gzip-compressed TOC XML, extracts heap entries, understands product/component/flat packages.
 - **pbzx** — PBZX archive reader/writer + CPIO parser. Chunked XZ decompression. Supports CPIO odc (070707), newc (070701), crc (070702 read-only).

@@ -26,7 +26,7 @@ Read, write, and manipulate Apple DMG files on any platform.
 | Read | ✓ | ✓ | ✓ | ✓ |
 | **Write** | ✓ | ❌ | ❌ | ✓ |
 | LZFSE | ✓ | ✓ | ❌ | ❌ |
-| LZVN | ✓ | ❌ | ❌ | ❌ |
+| XZ | ✓ | ❌ | ❌ | ❌ |
 | Bzip2 | ✓ | ✓ | ❌ | ❌ |
 | Zlib | ✓ | ✓ | ✓ | ✓ |
 | **Checksum** | ✓ | ❌ | ❌ | ❌ |
@@ -49,7 +49,7 @@ Read, write, and manipulate Apple DMG files on any platform.
 | Format | Read | Write | Description |
 |--------|:----:|:-----:|-------------|
 | LZFSE | | | Apple's native compression |
-| LZVN | | | Legacy Apple format |
+| XZ | | | XZ (LZMA2) compression |
 | Zlib | | | Best compatibility |
 | Bzip2 | | | Better ratio, slower |
 | Raw | | | No compression |
@@ -149,8 +149,8 @@ Partitions in Kernel_Debug_Kit.dmg:
 
 ## Alternatives
 
-| Crate | Read | Write | LZFSE | LZVN | Bzip2 | Zlib | Checksum | Encrypted | Notes |
-|-------|:----:|:-----:|:-----:|:----:|:-----:|:----:|:--------:|:---------:|-------|
+| Crate | Read | Write | LZFSE | XZ | Bzip2 | Zlib | Checksum | Encrypted | Notes |
+|-------|:----:|:-----:|:-----:|:--:|:-----:|:----:|:--------:|:---------:|-------|
 | **udif** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ❌ | Full featured |
 | [dmgwiz](https://crates.io/crates/dmgwiz) | ✓ | ❌ | ✓ | ❌ | ✓ | ✓ | ❌ | ✓ | Read-only |
 | [apple-dmg](https://crates.io/crates/apple-dmg) | ✓ | ❌ | ❌ | ❌ | ❌ | ✓ | ❌ | ❌ | Zlib only |
@@ -158,9 +158,9 @@ Partitions in Kernel_Debug_Kit.dmg:
 | [dmg](https://crates.io/crates/dmg) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | macOS only (hdiutil) |
 
 **Choose udif if you need:**
-- Write/create DMG support AND modern compression (LZFSE/LZVN)
+- Write/create DMG support AND modern compression (LZFSE/XZ)
 - Cross-platform support (Windows, Linux, macOS)
-- LZVN compression (no other cross-platform crate supports it)
+- XZ compression (no other cross-platform crate supports it)
 - Ensure integrity (no other cross-platform crate have checksum generation / validation)
 
 **Choose dmgwiz if you need:**

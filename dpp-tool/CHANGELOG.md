@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] - 2026-02-12
+
+### Fixed
+
+- DMG block type `0x80000008` now correctly reported as "XZ" instead of "LZVN" in `info` and `dmg info` output
+- XZ-compressed DMGs (e.g. Google Chrome) now decompress correctly instead of producing all-zero data
+
+### Changed
+
+- Updated udif dependency to 0.3.0
+
 ## [0.3.1] - 2026-02-12
 
 ### Added

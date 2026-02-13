@@ -37,8 +37,8 @@ pub enum BlockType {
     Bzip2 = 0x80000006,
     /// LZFSE compressed
     Lzfse = 0x80000007,
-    /// LZVN compressed
-    Lzvn = 0x80000008,
+    /// XZ (LZMA) compressed
+    Xz = 0x80000008,
     /// Comment block (no data)
     Comment = 0x7FFFFFFE,
     /// End of partition marker
@@ -57,7 +57,7 @@ impl TryFrom<u32> for BlockType {
             0x80000005 => Ok(BlockType::Zlib),
             0x80000006 => Ok(BlockType::Bzip2),
             0x80000007 => Ok(BlockType::Lzfse),
-            0x80000008 => Ok(BlockType::Lzvn),
+            0x80000008 => Ok(BlockType::Xz),
             0x7FFFFFFE => Ok(BlockType::Comment),
             0xFFFFFFFF => Ok(BlockType::End),
             _ => Err(DppError::UnsupportedCompression(value)),

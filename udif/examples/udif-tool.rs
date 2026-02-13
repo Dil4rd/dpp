@@ -128,8 +128,8 @@ fn cmd_info(args: &[String]) -> Result<()> {
     if comp_info.lzfse_blocks > 0 {
         println!("  LZFSE:            {} blocks", comp_info.lzfse_blocks);
     }
-    if comp_info.lzvn_blocks > 0 {
-        println!("  LZVN:             {} blocks", comp_info.lzvn_blocks);
+    if comp_info.xz_blocks > 0 {
+        println!("  XZ:               {} blocks", comp_info.xz_blocks);
     }
     if comp_info.adc_blocks > 0 {
         println!("  ADC:              {} blocks", comp_info.adc_blocks);

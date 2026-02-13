@@ -15,7 +15,7 @@ const SECTOR_SIZE: u64 = 512;
 
 /// Read from a decoder until the buffer is full or EOF.
 /// Unlike `read()`, this loops to handle decoders that return partial data.
-fn read_full<R: Read>(reader: &mut R, buf: &mut [u8]) -> std::io::Result<usize> {
+pub(crate) fn read_full<R: Read>(reader: &mut R, buf: &mut [u8]) -> std::io::Result<usize> {
     let mut total = 0;
     while total < buf.len() {
         match reader.read(&mut buf[total..])? {
@@ -212,7 +212,7 @@ impl<R: Read + Seek> DmgReader<R> {
                     let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
                     read_full(&mut decoder, slice)?;
                 }
-                BlockType::Lzfse | BlockType::Lzvn => {
+                BlockType::Lzfse => {
                     self.reader.seek(SeekFrom::Start(
                         self.koly.data_fork_offset + block_run.compressed_offset,
                     ))?;
@@ -224,12 +224,23 @@ impl<R: Read + Seek> DmgReader<R> {
                     let expected_size = out_size as usize;
                     let mut temp_buf = vec![0u8; expected_size * 2];
                     let decoded_size = lzfse::decode_buffer(&compressed, &mut temp_buf)
-                        .map_err(|e| DppError::Decompression(format!("LZFSE/LZVN: {:?}", e)))?;
+                        .map_err(|e| DppError::Decompression(format!("LZFSE: {:?}", e)))?;
 
                     // Copy only the expected amount to output
                     let copy_size = decoded_size.min(expected_size);
                     let end = out_offset as usize + copy_size;
                     output[out_offset as usize..end].copy_from_slice(&temp_buf[..copy_size]);
+                }
+                BlockType::Xz => {
+                    self.reader.seek(SeekFrom::Start(
+                        self.koly.data_fork_offset + block_run.compressed_offset,
+                    ))?;
+                    let mut compressed = vec![0u8; block_run.compressed_length as usize];
+                    self.reader.read_exact(&mut compressed)?;
+
+                    let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
+                    let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
+                    read_full(&mut decoder, slice)?;
                 }
                 BlockType::Adc => {
                     return Err(DppError::Unsupported("ADC compression".into()));
@@ -327,7 +338,7 @@ impl<R: Read + Seek> DmgReader<R> {
                     writer.write_all(&decompressed)?;
                     bytes_written += out_size;
                 }
-                BlockType::Lzfse | BlockType::Lzvn => {
+                BlockType::Lzfse => {
                     self.reader.seek(SeekFrom::Start(
                         self.koly.data_fork_offset + block_run.compressed_offset,
                     ))?;
@@ -337,13 +348,26 @@ impl<R: Read + Seek> DmgReader<R> {
                     let expected_size = out_size as usize;
                     let mut temp_buf = vec![0u8; expected_size * 2];
                     let decoded_size = lzfse::decode_buffer(&compressed, &mut temp_buf)
-                        .map_err(|e| DppError::Decompression(format!("LZFSE/LZVN: {:?}", e)))?;
+                        .map_err(|e| DppError::Decompression(format!("LZFSE: {:?}", e)))?;
 
                     let mut block = vec![0u8; expected_size];
                     let copy_size = decoded_size.min(expected_size);
                     block[..copy_size].copy_from_slice(&temp_buf[..copy_size]);
                     writer.write_all(&block)?;
                     bytes_written += expected_size as u64;
+                }
+                BlockType::Xz => {
+                    self.reader.seek(SeekFrom::Start(
+                        self.koly.data_fork_offset + block_run.compressed_offset,
+                    ))?;
+                    let mut compressed = vec![0u8; block_run.compressed_length as usize];
+                    self.reader.read_exact(&mut compressed)?;
+
+                    let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
+                    let mut decompressed = vec![0u8; out_size as usize];
+                    read_full(&mut decoder, &mut decompressed)?;
+                    writer.write_all(&decompressed)?;
+                    bytes_written += out_size;
                 }
                 BlockType::Adc => {
                     return Err(DppError::Unsupported("ADC compression".into()));
@@ -463,7 +487,7 @@ impl<R: Read + Seek> DmgReader<R> {
                         let end = (out_offset + out_size) as usize;
                         let _ = decoder.read(&mut output[out_offset as usize..end])?;
                     }
-                    BlockType::Lzfse | BlockType::Lzvn => {
+                    BlockType::Lzfse => {
                         self.reader.seek(SeekFrom::Start(
                             self.koly.data_fork_offset + block_run.compressed_offset,
                         ))?;
@@ -474,11 +498,22 @@ impl<R: Read + Seek> DmgReader<R> {
                         let expected_size = out_size as usize;
                         let mut temp_buf = vec![0u8; expected_size * 2];
                         let decoded_size = lzfse::decode_buffer(&compressed, &mut temp_buf)
-                            .map_err(|e| DppError::Decompression(format!("LZFSE/LZVN: {:?}", e)))?;
+                            .map_err(|e| DppError::Decompression(format!("LZFSE: {:?}", e)))?;
 
                         let copy_size = decoded_size.min(expected_size);
                         let end = out_offset as usize + copy_size;
                         output[out_offset as usize..end].copy_from_slice(&temp_buf[..copy_size]);
+                    }
+                    BlockType::Xz => {
+                        self.reader.seek(SeekFrom::Start(
+                            self.koly.data_fork_offset + block_run.compressed_offset,
+                        ))?;
+                        let mut compressed = vec![0u8; block_run.compressed_length as usize];
+                        self.reader.read_exact(&mut compressed)?;
+
+                        let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
+                        let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
+                        read_full(&mut decoder, slice)?;
                     }
                     BlockType::Adc => {
                         return Err(DppError::Unsupported("ADC compression".into()));
@@ -503,7 +538,7 @@ impl<R: Read + Seek> DmgReader<R> {
                     BlockType::Zlib => info.zlib_blocks += 1,
                     BlockType::Bzip2 => info.bzip2_blocks += 1,
                     BlockType::Lzfse => info.lzfse_blocks += 1,
-                    BlockType::Lzvn => info.lzvn_blocks += 1,
+                    BlockType::Xz => info.xz_blocks += 1,
                     BlockType::Adc => info.adc_blocks += 1,
                     _ => {}
                 }
@@ -568,7 +603,7 @@ pub struct CompressionInfo {
     pub zlib_blocks: u32,
     pub bzip2_blocks: u32,
     pub lzfse_blocks: u32,
-    pub lzvn_blocks: u32,
+    pub xz_blocks: u32,
     pub adc_blocks: u32,
 }
 

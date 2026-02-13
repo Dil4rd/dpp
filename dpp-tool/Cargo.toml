@@ -11,8 +11,8 @@ name = "dpp-tool"
 path = "src/main.rs"
 
 [dependencies]
-dpp = { version = "0.3.1", path = "../dpp" }
-udif = { version = "0.2.0", path = "../udif" }
+dpp = { version = "0.3.2", path = "../dpp" }
+udif = { version = "0.3.0", path = "../udif" }
 hfsplus = { version = "0.2.0", path = "../hfsplus" }
 apfs = { version = "0.2.0", path = "../apfs" }
 xara = { version = "0.2.0", path = "../xara" }

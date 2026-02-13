@@ -16,7 +16,7 @@ DMG (UDIF) → HFS+ or APFS filesystem → PKG installer (XAR) → Payload (PBZX
 
 - **Full pipeline** — single API call goes from `.dmg` file to extracted files
 - **Cross-platform** — works on Linux, macOS, and Windows
-- **All Apple compression formats** — LZFSE, LZVN, Zlib, Bzip2
+- **All Apple compression formats** — LZFSE, XZ, Zlib, Bzip2
 - **Memory efficient** — streams through temp files by default (~4KB resident memory)
 - **Pure Rust** — zero `unsafe` in filesystem crates, minimal dependencies
 - **Modular** — use the full pipeline or individual crates standalone
@@ -179,7 +179,7 @@ Each crate is published independently and can be used on its own:
 
 | Crate | Description | Dependencies |
 |-------|-------------|:------------:|
-| [`udif`](udif/) | Apple DMG (UDIF) disk images — read & write with LZFSE/LZVN/Zlib/Bzip2 | 9 |
+| [`udif`](udif/) | Apple DMG (UDIF) disk images — read & write with LZFSE/XZ/Zlib/Bzip2 | 9 |
 | [`hfsplus`](hfsplus/) | HFS+ and HFSX filesystem — B-tree traversal, extent overflow, Unicode | 2 |
 | [`xara`](xara/) | XAR archives and macOS PKG installers — TOC parsing, payload extraction | 4 |
 | [`pbzx`](pbzx/) | PBZX streaming archives — chunked XZ decompression, CPIO read/write | 3 |

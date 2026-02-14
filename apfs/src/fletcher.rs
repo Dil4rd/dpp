@@ -2,7 +2,7 @@
 ///
 /// Every on-disk object has a 64-bit checksum at offset 0, computed over
 /// bytes 8..block_size using a modular Fletcher-64 variant.
-
+///
 /// Compute APFS Fletcher-64 checksum over a byte slice.
 ///
 /// The input should be the object data starting at offset 8 (skipping the
@@ -38,8 +38,7 @@ pub fn verify_object(block: &[u8]) -> bool {
     }
 
     let stored = u64::from_le_bytes([
-        block[0], block[1], block[2], block[3],
-        block[4], block[5], block[6], block[7],
+        block[0], block[1], block[2], block[3], block[4], block[5], block[6], block[7],
     ]);
 
     let computed = fletcher64(&block[8..]);
@@ -62,12 +61,14 @@ mod tests {
         assert!(verify_object(&block), "Block 0 checksum should be valid");
 
         let stored = u64::from_le_bytes([
-            block[0], block[1], block[2], block[3],
-            block[4], block[5], block[6], block[7],
+            block[0], block[1], block[2], block[3], block[4], block[5], block[6], block[7],
         ]);
         let computed = fletcher64(&block[8..]);
-        assert_eq!(stored, computed,
-            "Stored checksum 0x{:016X} should match computed 0x{:016X}", stored, computed);
+        assert_eq!(
+            stored, computed,
+            "Stored checksum 0x{:016X} should match computed 0x{:016X}",
+            stored, computed
+        );
     }
 
     #[test]
@@ -79,7 +80,7 @@ mod tests {
         // check2 = M - ((3 + check1) % M) = M - (3 + M - 7) % M = M - (M - 4) % M = M - (M-4) = 4
         let data = [
             1u8, 0, 0, 0, // word 0 = 1
-            2, 0, 0, 0,   // word 1 = 2
+            2, 0, 0, 0, // word 1 = 2
         ];
         let m: u64 = 0xFFFFFFFF;
         let checksum = fletcher64(&data);

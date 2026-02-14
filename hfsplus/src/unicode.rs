@@ -1,8 +1,8 @@
-/// HFS+ Unicode comparison utilities.
-///
-/// HFSX (case-sensitive) uses binary comparison of UTF-16BE values.
-/// HFS+ (case-insensitive) uses Apple's FastUnicodeCompare with a
-/// case-folding table defined in Apple TN1150.
+//! HFS+ Unicode comparison utilities.
+//!
+//! HFSX (case-sensitive) uses binary comparison of UTF-16BE values.
+//! HFS+ (case-insensitive) uses Apple's FastUnicodeCompare with a
+//! case-folding table defined in Apple TN1150.
 
 /// Compare two HFS+ Unicode names using binary comparison (HFSX / case-sensitive).
 pub fn compare_binary(a: &[u16], b: &[u16]) -> std::cmp::Ordering {

@@ -1,7 +1,7 @@
 [package]
 name = "dpp"
 version = "0.3.2"
-edition = "2021"
+edition = "2024"
 description = "DMG + HFS+/APFS + PKG + PBZX pipeline - walk through Apple disk images to extract packages"
 license = "MIT"
 repository = "https://github.com/Dil4rd/dpp"

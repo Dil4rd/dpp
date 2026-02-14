@@ -51,11 +51,10 @@ impl<R: Read + Seek> PkgReader<R> {
         }
 
         // If no .pkg directories found, this is a component package
-        if components.is_empty() {
-            if self.xar.find("Payload").is_some() || self.xar.find("PackageInfo").is_some() {
+        if components.is_empty()
+            && (self.xar.find("Payload").is_some() || self.xar.find("PackageInfo").is_some()) {
                 components.push(String::new());
             }
-        }
 
         components
     }

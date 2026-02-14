@@ -527,11 +527,10 @@ fn lookup_drec<R: Read + Seek>(
     )?;
 
     for (key, val) in &entries {
-        if let Ok(entry_name) = decode_drec_name(key) {
-            if entry_name == name {
+        if let Ok(entry_name) = decode_drec_name(key)
+            && entry_name == name {
                 return DrecVal::parse(val);
             }
-        }
     }
 
     Err(ApfsError::FileNotFound(name.to_string()))

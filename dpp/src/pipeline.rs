@@ -4,18 +4,13 @@ use std::path::Path;
 use crate::error::Result;
 
 /// Extraction mode for partition data
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum ExtractMode {
     /// Stream to temp file on disk (low memory). Default.
+    #[default]
     TempFile,
     /// Buffer entire partition in memory. Fast for small DMGs.
     InMemory,
-}
-
-impl Default for ExtractMode {
-    fn default() -> Self {
-        ExtractMode::TempFile
-    }
 }
 
 /// Main pipeline entry point: DMG → HFS+/APFS → PKG → PBZX
@@ -65,9 +60,7 @@ impl DmgPipeline {
                 })
             }
             ExtractMode::InMemory => {
-                let partition_data = self
-                    .archive
-                    .extract_partition(partition_id)?;
+                let partition_data = self.archive.extract_partition(partition_id)?;
                 let cursor = Cursor::new(partition_data);
                 let volume = hfsplus::HfsVolume::open(cursor)?;
                 Ok(HfsHandle {
@@ -103,9 +96,7 @@ impl DmgPipeline {
                 })
             }
             ExtractMode::InMemory => {
-                let partition_data = self
-                    .archive
-                    .extract_partition(partition_id)?;
+                let partition_data = self.archive.extract_partition(partition_id)?;
                 let cursor = Cursor::new(partition_data);
                 let volume = apfs::ApfsVolume::open(cursor)?;
                 Ok(ApfsHandle {
@@ -127,14 +118,19 @@ impl DmgPipeline {
         let partitions = self.archive.partitions();
 
         // Check for HFS+/HFSX partition first (preserves current priority)
-        let has_hfs = partitions.iter()
-            .any(|p| matches!(p.partition_type, udif::PartitionType::Hfs | udif::PartitionType::Hfsx));
+        let has_hfs = partitions.iter().any(|p| {
+            matches!(
+                p.partition_type,
+                udif::PartitionType::Hfs | udif::PartitionType::Hfsx
+            )
+        });
 
         if has_hfs {
             return self.open_hfs_with_mode(mode).map(FilesystemHandle::Hfs);
         }
 
-        let has_apfs = partitions.iter()
+        let has_apfs = partitions
+            .iter()
             .any(|p| p.partition_type == udif::PartitionType::Apfs);
 
         if has_apfs {
@@ -191,11 +187,7 @@ impl HfsHandle {
     }
 
     /// Stream a file to a writer (low memory)
-    pub fn read_file_to<W: std::io::Write>(
-        &mut self,
-        path: &str,
-        writer: &mut W,
-    ) -> Result<u64> {
+    pub fn read_file_to<W: std::io::Write>(&mut self, path: &str, writer: &mut W) -> Result<u64> {
         Ok(dispatch!(self, read_file_to, path, writer)?)
     }
 
@@ -281,11 +273,7 @@ impl ApfsHandle {
     }
 
     /// Stream a file to a writer (low memory)
-    pub fn read_file_to<W: std::io::Write>(
-        &mut self,
-        path: &str,
-        writer: &mut W,
-    ) -> Result<u64> {
+    pub fn read_file_to<W: std::io::Write>(&mut self, path: &str, writer: &mut W) -> Result<u64> {
         Ok(dispatch_apfs!(self, read_file_to, path, writer)?)
     }
 
@@ -523,6 +511,7 @@ pub struct FsVolumeInfo {
 
 /// Unified handle to either an HFS+ or APFS volume.
 /// Returned by `DmgPipeline::open_filesystem()`.
+#[allow(clippy::large_enum_variant)]
 pub enum FilesystemHandle {
     Hfs(HfsHandle),
     Apfs(ApfsHandle),
@@ -606,11 +595,7 @@ impl FilesystemHandle {
     }
 
     /// Stream a file to a writer
-    pub fn read_file_to<W: std::io::Write>(
-        &mut self,
-        path: &str,
-        writer: &mut W,
-    ) -> Result<u64> {
+    pub fn read_file_to<W: std::io::Write>(&mut self, path: &str, writer: &mut W) -> Result<u64> {
         match self {
             FilesystemHandle::Hfs(h) => h.read_file_to(path, writer),
             FilesystemHandle::Apfs(h) => h.read_file_to(path, writer),

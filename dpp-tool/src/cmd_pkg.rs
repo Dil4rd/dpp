@@ -278,16 +278,14 @@ fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
     let matches: Vec<_> = files
         .iter()
         .filter(|f| {
-            if let Some(ref kind) = type_filter {
-                if f.file_type != *kind {
+            if let Some(ref kind) = type_filter
+                && f.file_type != *kind {
                     return false;
                 }
-            }
-            if let Some(ref pattern) = name_pattern {
-                if !glob_match(pattern, &f.name) {
+            if let Some(ref pattern) = name_pattern
+                && !glob_match(pattern, &f.name) {
                     return false;
                 }
-            }
             true
         })
         .collect();

@@ -110,7 +110,7 @@ fn parse_catalog_key(data: &[u8]) -> Result<(CatalogKey, usize)> {
     // Record data starts after key_length + 2 bytes for the key_length field itself
     let record_offset = 2 + key_length;
     // Ensure even alignment
-    let record_offset = if record_offset % 2 != 0 { record_offset + 1 } else { record_offset };
+    let record_offset = if !record_offset.is_multiple_of(2) { record_offset + 1 } else { record_offset };
 
     Ok((
         CatalogKey {

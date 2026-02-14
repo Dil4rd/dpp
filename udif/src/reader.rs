@@ -99,9 +99,8 @@ impl<R: Read + Seek> DmgReader<R> {
         reader.read_exact(&mut data_fork)?;
 
         // Verify checksum
-        verify_crc32(koly.data_checksum_type, &koly.data_checksum, &data_fork).map_err(
-            |(expected, actual)| DppError::ChecksumMismatch { expected, actual },
-        )
+        verify_crc32(koly.data_checksum_type, &koly.data_checksum, &data_fork)
+            .map_err(|(expected, actual)| DppError::ChecksumMismatch { expected, actual })
     }
 
     /// Verify the master checksum (CRC32 of all mish checksums concatenated)
@@ -119,9 +118,12 @@ impl<R: Read + Seek> DmgReader<R> {
         }
 
         // Verify master checksum
-        verify_crc32(koly.master_checksum_type, &koly.master_checksum, &all_checksums).map_err(
-            |(expected, actual)| DppError::ChecksumMismatch { expected, actual },
+        verify_crc32(
+            koly.master_checksum_type,
+            &koly.master_checksum,
+            &all_checksums,
         )
+        .map_err(|(expected, actual)| DppError::ChecksumMismatch { expected, actual })
     }
 
     /// Get the koly header
@@ -146,8 +148,16 @@ impl<R: Read + Seek> DmgReader<R> {
 
     /// Get DMG statistics
     pub fn stats(&self) -> DmgStats {
-        let total_sectors: u64 = self.partitions.iter().map(|p| p.block_map.sector_count).sum();
-        let total_compressed: u64 = self.partitions.iter().map(|p| p.block_map.compressed_size()).sum();
+        let total_sectors: u64 = self
+            .partitions
+            .iter()
+            .map(|p| p.block_map.sector_count)
+            .sum();
+        let total_compressed: u64 = self
+            .partitions
+            .iter()
+            .map(|p| p.block_map.compressed_size())
+            .sum();
 
         DmgStats {
             version: self.koly.version,
@@ -187,7 +197,8 @@ impl<R: Read + Seek> DmgReader<R> {
                         // Read only compressed_length bytes (actual stored size)
                         // remaining bytes in the sector stay zero-filled
                         let end = out_offset as usize + block_run.compressed_length as usize;
-                        self.reader.read_exact(&mut output[out_offset as usize..end])?;
+                        self.reader
+                            .read_exact(&mut output[out_offset as usize..end])?;
                     }
                 }
                 BlockType::Zlib => {
@@ -427,13 +438,9 @@ impl<R: Read + Seek> DmgReader<R> {
         let partition = self
             .partitions
             .iter()
-            .filter(|p| {
-                p.name.contains("Apple_HFS") || p.name.contains("Apple_HFSX")
-            })
+            .filter(|p| p.name.contains("Apple_HFS") || p.name.contains("Apple_HFSX"))
             .max_by_key(|p| p.block_map.sector_count)
-            .ok_or_else(|| {
-                DppError::FileNotFound("no HFS+/HFSX partition found".into())
-            })?;
+            .ok_or_else(|| DppError::FileNotFound("no HFS+/HFSX partition found".into()))?;
         Ok(partition.id)
     }
 
@@ -445,7 +452,8 @@ impl<R: Read + Seek> DmgReader<R> {
 
         for partition in self.partitions.clone() {
             for block_run in &partition.block_map.block_runs {
-                let out_offset = (partition.block_map.first_sector + block_run.sector_number) * SECTOR_SIZE;
+                let out_offset =
+                    (partition.block_map.first_sector + block_run.sector_number) * SECTOR_SIZE;
                 let out_size = block_run.sector_count * SECTOR_SIZE;
 
                 if out_offset + out_size > total_size {
@@ -462,7 +470,8 @@ impl<R: Read + Seek> DmgReader<R> {
                             // Read only compressed_length bytes (actual stored size)
                             // remaining bytes in the sector stay zero-filled
                             let end = out_offset as usize + block_run.compressed_length as usize;
-                            self.reader.read_exact(&mut output[out_offset as usize..end])?;
+                            self.reader
+                                .read_exact(&mut output[out_offset as usize..end])?;
                         }
                     }
                     BlockType::Zlib => {
@@ -512,7 +521,8 @@ impl<R: Read + Seek> DmgReader<R> {
                         self.reader.read_exact(&mut compressed)?;
 
                         let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
-                        let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
+                        let slice =
+                            &mut output[out_offset as usize..(out_offset + out_size) as usize];
                         read_full(&mut decoder, slice)?;
                     }
                     BlockType::Adc => {
@@ -650,8 +660,8 @@ fn parse_plist(plist_data: &[u8]) -> Result<Vec<PartitionEntry>> {
             .get("Attributes")
             .and_then(|v| v.as_string())
             .and_then(|s| {
-                if s.starts_with("0x") {
-                    u32::from_str_radix(&s[2..], 16).ok()
+                if let Some(hex_digits) = s.strip_prefix("0x") {
+                    u32::from_str_radix(hex_digits, 16).ok()
                 } else {
                     s.parse().ok()
                 }

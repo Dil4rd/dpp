@@ -86,7 +86,7 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
     header(&format!("Partitions: {dmg_path}"));
     println!();
-    println!("  {DIM}{:>4}  {:>12}  {:>12}  {:>12}  {:>7}  {}{RESET}", "ID", "Sectors", "Size", "Compressed", "Ratio", "Name");
+    println!("  {DIM}{:>4}  {:>12}  {:>12}  {:>12}  {:>7}  Name{RESET}", "ID", "Sectors", "Size", "Compressed", "Ratio");
     println!("  {DIM}{}{RESET}", "-".repeat(72));
 
     for p in &partitions {

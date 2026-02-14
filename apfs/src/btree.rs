@@ -36,7 +36,9 @@ impl BTreeNodeHeader {
 
     pub fn parse(data: &[u8]) -> Result<Self> {
         if data.len() < Self::SIZE {
-            return Err(ApfsError::InvalidBTree("btree node header too short".into()));
+            return Err(ApfsError::InvalidBTree(
+                "btree node header too short".into(),
+            ));
         }
         let mut cursor = Cursor::new(data);
         Ok(BTreeNodeHeader {
@@ -123,9 +125,9 @@ impl BTreeInfo {
 #[derive(Debug, Clone)]
 pub struct TocEntry {
     pub key_off: u16,
-    pub key_len: u16,   // 0 for fixed-size KV
+    pub key_len: u16, // 0 for fixed-size KV
     pub val_off: u16,
-    pub val_len: u16,   // 0 for fixed-size KV
+    pub val_len: u16, // 0 for fixed-size KV
 }
 
 /// A parsed APFS B-tree node with extracted key-value pairs.
@@ -134,8 +136,8 @@ pub struct BTreeNode {
     pub node_header: BTreeNodeHeader,
     pub toc: Vec<TocEntry>,
     pub block_data: Vec<u8>,
-    pub key_area_off: usize,   // Absolute offset within block_data where key area starts
-    pub val_area_end: usize,   // Absolute offset within block_data where val area ends
+    pub key_area_off: usize, // Absolute offset within block_data where key area starts
+    pub val_area_end: usize, // Absolute offset within block_data where val area ends
     pub info: Option<BTreeInfo>,
 }
 
@@ -145,11 +147,13 @@ impl BTreeNode {
         let header = ObjectHeader::parse(block)?;
         let node_header = BTreeNodeHeader::parse(&block[ObjectHeader::SIZE..])?;
 
-        let toc_start = ObjectHeader::SIZE + BTreeNodeHeader::SIZE + node_header.btn_table_space_off as usize;
+        let toc_start =
+            ObjectHeader::SIZE + BTreeNodeHeader::SIZE + node_header.btn_table_space_off as usize;
         let fixed_kv = node_header.is_fixed_kv();
 
         // Key area starts right after the table space
-        let key_area_off = ObjectHeader::SIZE + BTreeNodeHeader::SIZE
+        let key_area_off = ObjectHeader::SIZE
+            + BTreeNodeHeader::SIZE
             + node_header.btn_table_space_off as usize
             + node_header.btn_table_space_len as usize;
 
@@ -218,9 +222,12 @@ impl BTreeNode {
         };
         let end = start + len;
         if end > self.block_data.len() {
-            return Err(ApfsError::InvalidBTree(
-                format!("key out of bounds: start={}, len={}, block_size={}", start, len, self.block_data.len()),
-            ));
+            return Err(ApfsError::InvalidBTree(format!(
+                "key out of bounds: start={}, len={}, block_size={}",
+                start,
+                len,
+                self.block_data.len()
+            )));
         }
         Ok(&self.block_data[start..end])
     }
@@ -246,10 +253,13 @@ impl BTreeNode {
         let start = self.val_area_end - val_off;
         let end = start + len;
         if end > self.block_data.len() || start < self.key_area_off {
-            return Err(ApfsError::InvalidBTree(
-                format!("value out of bounds: start={}, len={}, val_area_end={}, block_size={}",
-                    start, len, self.val_area_end, self.block_data.len()),
-            ));
+            return Err(ApfsError::InvalidBTree(format!(
+                "value out of bounds: start={}, len={}, val_area_end={}, block_size={}",
+                start,
+                len,
+                self.val_area_end,
+                self.block_data.len()
+            )));
         }
         Ok(&self.block_data[start..end])
     }
@@ -261,7 +271,9 @@ impl BTreeNode {
         if val.len() < 8 {
             return Err(ApfsError::InvalidBTree("child oid too short".into()));
         }
-        Ok(u64::from_le_bytes([val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]]))
+        Ok(u64::from_le_bytes([
+            val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7],
+        ]))
     }
 }
 
@@ -308,8 +320,16 @@ where
     // Get fixed sizes from BTreeInfo if available (root node)
     let (fks, fvs) = if let Some(ref info) = node.info {
         (
-            if info.bt_fixed.bt_key_size > 0 { info.bt_fixed.bt_key_size } else { fixed_key_size },
-            if info.bt_fixed.bt_val_size > 0 { info.bt_fixed.bt_val_size } else { fixed_val_size },
+            if info.bt_fixed.bt_key_size > 0 {
+                info.bt_fixed.bt_key_size
+            } else {
+                fixed_key_size
+            },
+            if info.bt_fixed.bt_val_size > 0 {
+                info.bt_fixed.bt_val_size
+            } else {
+                fixed_val_size
+            },
         )
     } else {
         (fixed_key_size, fixed_val_size)
@@ -369,7 +389,15 @@ where
         let child_data = object::read_block(reader, child_block, block_size)?;
         let child_node = BTreeNode::parse(&child_data)?;
 
-        btree_lookup_node(reader, &child_node, block_size, fixed_key_size, fixed_val_size, compare_fn, omap_root)
+        btree_lookup_node(
+            reader,
+            &child_node,
+            block_size,
+            fixed_key_size,
+            fixed_val_size,
+            compare_fn,
+            omap_root,
+        )
     }
 }
 
@@ -398,18 +426,36 @@ where
 
     let (fks, fvs) = if let Some(ref info) = node.info {
         (
-            if info.bt_fixed.bt_key_size > 0 { info.bt_fixed.bt_key_size } else { fixed_key_size },
-            if info.bt_fixed.bt_val_size > 0 { info.bt_fixed.bt_val_size } else { fixed_val_size },
+            if info.bt_fixed.bt_key_size > 0 {
+                info.bt_fixed.bt_key_size
+            } else {
+                fixed_key_size
+            },
+            if info.bt_fixed.bt_val_size > 0 {
+                info.bt_fixed.bt_val_size
+            } else {
+                fixed_val_size
+            },
         )
     } else {
         (fixed_key_size, fixed_val_size)
     };
 
     let mut results = Vec::new();
-    btree_scan_node(reader, &node, block_size, fks, fvs, range_fn, &mut results, omap_root)?;
+    btree_scan_node(
+        reader,
+        &node,
+        block_size,
+        fks,
+        fvs,
+        range_fn,
+        &mut results,
+        omap_root,
+    )?;
     Ok(results)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn btree_scan_node<R: Read + Seek, F>(
     reader: &mut R,
     node: &BTreeNode,
@@ -419,7 +465,8 @@ fn btree_scan_node<R: Read + Seek, F>(
     range_fn: &F,
     results: &mut Vec<(Vec<u8>, Vec<u8>)>,
     omap_root: Option<u64>,
-) -> Result<bool>  // returns false if scanning should stop
+) -> Result<bool>
+// returns false if scanning should stop
 where
     F: Fn(&[u8]) -> Option<bool>,
 {
@@ -447,7 +494,16 @@ where
             let child_data = object::read_block(reader, child_block, block_size)?;
             let child_node = BTreeNode::parse(&child_data)?;
 
-            if !btree_scan_node(reader, &child_node, block_size, fixed_key_size, fixed_val_size, range_fn, results, omap_root)? {
+            if !btree_scan_node(
+                reader,
+                &child_node,
+                block_size,
+                fixed_key_size,
+                fixed_val_size,
+                range_fn,
+                results,
+                omap_root,
+            )? {
                 return Ok(false);
             }
         }

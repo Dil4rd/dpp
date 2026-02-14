@@ -278,14 +278,14 @@ impl CpioBuilder {
         // Pad to 4-byte boundary
         let header_len = 110 + namesize;
         let padding = (4 - (header_len % 4)) % 4;
-        self.data.extend(std::iter::repeat(0).take(padding));
+        self.data.extend(std::iter::repeat_n(0, padding));
 
         // Write file data
         self.data.extend_from_slice(data);
 
         // Pad data to 4-byte boundary
         let data_padding = (4 - (data.len() % 4)) % 4;
-        self.data.extend(std::iter::repeat(0).take(data_padding));
+        self.data.extend(std::iter::repeat_n(0, data_padding));
     }
 
     /// Finish the archive and return the CPIO data.

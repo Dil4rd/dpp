@@ -95,8 +95,8 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
     header(&format!("{dmg_path}:{path}"));
     println!();
     println!(
-        "  {DIM}{:<5} {:>12}  {}{RESET}",
-        "Kind", "Size", "Name"
+        "  {DIM}{:<5} {:>12}  Name{RESET}",
+        "Kind", "Size"
     );
     println!("  {DIM}{}{RESET}", "-".repeat(56));
 
@@ -320,11 +320,10 @@ fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
     let matches: Vec<_> = entries
         .iter()
         .filter(|e| {
-            if let Some(ref kind) = type_filter {
-                if e.entry.kind != *kind {
+            if let Some(ref kind) = type_filter
+                && e.entry.kind != *kind {
                     return false;
                 }
-            }
             if let Some(ref pattern) = name_pattern {
                 let basename = e.path.rsplit('/').next().unwrap_or(&e.path);
                 if !glob_match(pattern, basename) {

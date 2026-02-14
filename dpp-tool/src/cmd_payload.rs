@@ -177,8 +177,8 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
     header(&format!("Payload: {} — {display_dir}", args[2]));
     println!();
     println!(
-        "  {DIM}{:<5} {:>12}  {}{RESET}",
-        "Kind", "Size", "Name"
+        "  {DIM}{:<5} {:>12}  Name{RESET}",
+        "Kind", "Size"
     );
     println!("  {DIM}{}{RESET}", "-".repeat(56));
 
@@ -358,11 +358,10 @@ fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
                 }
             }
 
-            if let Some(ref pattern) = name_pattern {
-                if !glob_match(pattern, basename_of(&np)) {
+            if let Some(ref pattern) = name_pattern
+                && !glob_match(pattern, basename_of(&np)) {
                     return false;
                 }
-            }
 
             true
         })

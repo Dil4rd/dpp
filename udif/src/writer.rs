@@ -111,7 +111,7 @@ impl<W: Write + Seek> DmgWriter<W> {
 
     /// Add raw disk data as a partition
     pub fn add_partition(&mut self, name: &str, data: &[u8]) -> Result<()> {
-        let sector_count = (data.len() as u64 + SECTOR_SIZE - 1) / SECTOR_SIZE;
+        let sector_count = (data.len() as u64).div_ceil(SECTOR_SIZE);
         let first_sector = self.partitions.iter().map(|p| p.first_sector + p.sector_count).max().unwrap_or(0);
 
         let mut block_runs = Vec::new();
@@ -132,7 +132,7 @@ impl<W: Write + Seek> DmgWriter<W> {
         while data_offset < data.len() {
             let chunk_end = (data_offset + self.chunk_size).min(data.len());
             let chunk = &data[data_offset..chunk_end];
-            let chunk_sectors = ((chunk.len() as u64 + SECTOR_SIZE - 1) / SECTOR_SIZE).max(1);
+            let chunk_sectors = (chunk.len() as u64).div_ceil(SECTOR_SIZE).max(1);
 
             // Check if chunk is all zeros
             if chunk.iter().all(|&b| b == 0) {

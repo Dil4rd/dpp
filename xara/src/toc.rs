@@ -185,9 +185,9 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
             }
             Ok(Event::Empty(ref e)) => {
                 let tag = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                if tag == "encoding" {
-                    if let Some(f) = stack.last_mut() {
-                        if f.in_data {
+                if tag == "encoding"
+                    && let Some(f) = stack.last_mut()
+                        && f.in_data {
                             for attr in e.attributes().flatten() {
                                 if attr.key.as_ref() == b"style" {
                                     f.data_encoding = Some(
@@ -196,8 +196,6 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                                 }
                             }
                         }
-                    }
-                }
             }
             Ok(Event::Text(ref e)) => {
                 let text = e.unescape().unwrap_or_default().to_string();

@@ -5,18 +5,15 @@ use crate::error::Result;
 
 /// Extraction mode for partition data
 #[derive(Debug, Clone, Copy)]
+#[derive(Default)]
 pub enum ExtractMode {
     /// Stream to temp file on disk (low memory). Default.
+    #[default]
     TempFile,
     /// Buffer entire partition in memory. Fast for small DMGs.
     InMemory,
 }
 
-impl Default for ExtractMode {
-    fn default() -> Self {
-        ExtractMode::TempFile
-    }
-}
 
 /// Main pipeline entry point: DMG → HFS+/APFS → PKG → PBZX
 pub struct DmgPipeline {

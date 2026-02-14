@@ -45,7 +45,7 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
 
     // Partition table
     println!();
-    println!("  {DIM}{:>4}  {:>12}  {:>12}  {:>7}  {}{RESET}", "ID", "Sectors", "Size", "Ratio", "Name");
+    println!("  {DIM}{:>4}  {:>12}  {:>12}  {:>7}  Name{RESET}", "ID", "Sectors", "Size", "Ratio");
     println!("  {DIM}{}{RESET}", "-".repeat(58));
     for p in &partitions {
         let ratio = if p.size > 0 {

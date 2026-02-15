@@ -57,7 +57,25 @@ dpp-tool payload ls Kernel_Debug_Kit.dmg /KernelDebugKit.pkg com.apple.pkg.KDK /
 dpp-tool payload cat Kernel_Debug_Kit.dmg /KernelDebugKit.pkg com.apple.pkg.KDK /usr/bin/some_tool > tool
 ```
 
-### Library
+### Python
+
+```bash
+pip install dpp
+```
+
+```python
+import dpp
+
+with dpp.open("installer.dmg") as dmg:
+    with dmg.filesystem() as fs:
+        for entry in fs.list_directory("/"):
+            print(entry.name, entry.kind, entry.size)
+        data = fs.read_file("/some/file.txt")
+```
+
+See [`dpp-python/`](dpp-python/) for full Python API documentation.
+
+### Rust Library
 
 Add to `Cargo.toml`:
 
@@ -163,8 +181,8 @@ Global options: `--temp-file` (default, low memory) or `--in-memory` (faster for
 ## Architecture
 
 ```
-dpp-tool  (CLI binary)
-    │
+dpp-tool  (CLI binary)          dpp-python  (Python bindings)
+    │                               │
    dpp  (pipeline library — orchestrates all crates below)
     │
     ├── udif      DMG / UDIF disk image reader & writer
@@ -185,6 +203,7 @@ Each crate is published independently and can be used on its own:
 | [`pbzx`](pbzx/) | PBZX streaming archives — chunked XZ decompression, CPIO read/write | 3 |
 | [`apfs`](apfs/) | APFS containers and volumes — checksums, object maps, catalog B-trees | 2 |
 | [`dpp`](dpp/) | Pipeline library chaining all of the above | 6 |
+| [`dpp-python`](dpp-python/) | Python bindings via PyO3 + maturin | 2 |
 
 ## Building
 

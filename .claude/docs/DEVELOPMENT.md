@@ -14,6 +14,12 @@ cargo run -p dpp-tool -- --in-memory fs info <dmg>  # In-memory extraction mode
 cargo run -p pbzx --example pbzx-tool --release -- <file>   # Run pbzx example
 cargo run -p udif --example udif-tool --release -- <cmd>    # Run udif example
 cargo bench -p apfs                # Run APFS benchmarks (criterion)
+
+# Python bindings (requires maturin + Python 3.9+)
+cd dpp-python && maturin develop            # Build and install into current venv
+cd dpp-python && maturin develop --release   # Release-mode build
+cd dpp-python && python -m pytest tests/     # Run Python tests
+python -c "import dpp; print(dir(dpp))"      # Quick smoke test
 ```
 
 ## Test Fixtures

@@ -1,0 +1,21 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [0.1.0] - 2026-02-15
+
+### Added
+
+- Pipeline API (`dpp.open()`, `DmgPipeline`, `FilesystemHandle`) for high-level DMG → filesystem → PKG workflow
+- DMG access (`DmgArchive`, `DmgBuilder`) for low-level partition access and DMG creation
+- PKG/XAR reading (`PkgReader`, `XarArchive`) for macOS package and XAR archive reading
+- Payload reading and creation (`Archive`, `CpioBuilder`, `PbzxWriter`) for PBZX/CPIO archives
+- Standalone filesystem access (`HfsVolume`, `ApfsVolume`) for raw partition images without DMG wrapper
+- Frozen data types: `PartitionInfo`, `DirEntry`, `FileStat`, `VolumeInfo`, `WalkEntry`, `FileEntry`, `CompressionInfo`, `DmgStats`, `XarFile`, `ChunkInfo`, `ArchiveStats`
+- Exception hierarchy: `DppError`, `IoError`, `InvalidFormatError`, `FileNotFoundError`, `DecompressionError`, `UnsupportedError`
+- Context manager support (`with` statements) for all reader/writer classes
+- Convenience functions: `find_packages()`, `extract_pkg_payload()`
+- Extraction mode selection: `"temp_file"` (default, low memory) or `"in_memory"` (faster)

@@ -1,14 +1,12 @@
 use std::io;
-use std::process;
+use std::path::Path;
 use std::time::Instant;
 
 use crate::style::*;
 use crate::pipeline::{open_pipeline, open_filesystem};
+use crate::{PkgCommand, FindArgs};
 
 /// Build a sort key that produces depth-first tree order (dirs before files at each level).
-/// Each path component is prefixed with '\x00' for directories or '\x01' for files,
-/// so directories sort before sibling files and a directory is immediately followed
-/// by its descendants.
 fn tree_sort_key(path: &str, is_dir: bool) -> String {
     let parts: Vec<&str> = path.split('/').collect();
     let mut key_parts = Vec::with_capacity(parts.len());
@@ -20,48 +18,16 @@ fn tree_sort_key(path: &str, is_dir: bool) -> String {
     key_parts.join("/")
 }
 
-pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        print_usage();
-        process::exit(1);
-    }
-    match args[0].as_str() {
-        "info" => info(&args[1..], mode),
-        "ls" => ls(&args[1..], mode),
-        "find" => find(&args[1..], mode),
-        "cat" => cat(&args[1..], mode),
-        "-h" | "--help" | "help" => { print_usage(); Ok(()) }
-        _ => {
-            eprintln!("{RED}Unknown pkg command: {}{RESET}", args[0]);
-            print_usage();
-            process::exit(1);
-        }
+pub(crate) fn run(cmd: PkgCommand, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    match cmd {
+        PkgCommand::Info { dmg, pkg_path } => info(&dmg, &pkg_path, mode),
+        PkgCommand::Ls { dmg, pkg_path } => ls(&dmg, &pkg_path, mode),
+        PkgCommand::Find { dmg, pkg_path, args } => find(&dmg, &pkg_path, args, mode),
+        PkgCommand::Cat { dmg, pkg_path, file } => cat(&dmg, &pkg_path, &file, mode),
     }
 }
 
-fn print_usage() {
-    eprintln!(
-        r#"
-{BOLD}dpp-tool pkg{RESET} — PKG/XAR archive commands
-
-{BOLD}COMMANDS:{RESET}
-    {GREEN}info{RESET}   <dmg> <pkg-path>                              Package stats
-    {GREEN}ls{RESET}     <dmg> <pkg-path>                              List XAR contents
-    {GREEN}find{RESET}   <dmg> <pkg-path> [-name pat] [-type f|d|l]    Find entries (default: *.pkg components)
-    {GREEN}cat{RESET}    <dmg> <pkg-path> <file>                       XAR entry to stdout
-"#
-    );
-}
-
-fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 2 {
-        eprintln!("Usage: dpp-tool pkg info <dmg-file> <pkg-path>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
-    let pkg_path = &args[1];
-
+fn info(dmg_path: &Path, pkg_path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut fs = open_filesystem(&mut pipeline, mode)?;
 
@@ -70,13 +36,15 @@ fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
     let pkg = fs.open_pkg(pkg_path)?;
     spinner_done(&format!(" ({})", format_duration(t.elapsed())));
 
+    let (d, r, b, g, y) = (dim(), reset(), bold(), green(), yellow());
+
     header(&format!("PKG: {pkg_path}"));
 
     section("Package");
     let pkg_type = if pkg.is_product_package() {
-        format!("{GREEN}Product package{RESET} {DIM}(multi-component){RESET}")
+        format!("{g}Product package{r} {d}(multi-component){r}")
     } else {
-        format!("{YELLOW}Component package{RESET} {DIM}(single){RESET}")
+        format!("{y}Component package{r} {d}(single){r}")
     };
     kv("Type", &pkg_type);
     kv("Components", &pkg.components().len().to_string());
@@ -125,9 +93,9 @@ fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
         for (i, comp) in components.iter().enumerate() {
             let connector = if i == components.len() - 1 { ELBOW } else { TEE };
             let name = if comp.is_empty() {
-                format!("{DIM}(root){RESET}")
+                format!("{d}(root){r}")
             } else {
-                format!("{BOLD}{comp}{RESET}")
+                format!("{b}{comp}{r}")
             };
 
             let payload_path = if comp.is_empty() {
@@ -137,7 +105,7 @@ fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
             };
             let payload_info = if let Some(payload_file) = pkg.xar().find(&payload_path) {
                 if let Some(data) = &payload_file.data {
-                    format!("  {DIM}{} compressed, {} uncompressed{RESET}", format_size(data.length), format_size(data.size))
+                    format!("  {d}{} compressed, {} uncompressed{r}", format_size(data.length), format_size(data.size))
                 } else {
                     String::new()
                 }
@@ -145,7 +113,7 @@ fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
                 String::new()
             };
 
-            println!("  {DIM}{connector}{RESET} {name}{payload_info}");
+            println!("  {d}{connector}{r} {name}{payload_info}");
         }
     }
     println!();
@@ -153,15 +121,7 @@ fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 2 {
-        eprintln!("Usage: dpp-tool pkg ls <dmg-file> <pkg-path>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
-    let pkg_path = &args[1];
-
+fn ls(dmg_path: &Path, pkg_path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut fs = open_filesystem(&mut pipeline, mode)?;
 
@@ -170,13 +130,15 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
     let pkg = fs.open_pkg(pkg_path)?;
     spinner_done(&format!(" ({})", format_duration(t.elapsed())));
 
+    let (d, r) = (dim(), reset());
+    let bl = blue();
+    let cn = cyan();
+
     header(&format!("PKG: {pkg_path}"));
 
     section("XAR Contents");
     let files = pkg.xar().files();
     let mut sorted: Vec<_> = files.iter().collect();
-    // Depth-first tree order: directories before files at each level,
-    // with a directory immediately followed by its children.
     sorted.sort_by(|a, b| {
         let a_is_dir = a.file_type == xara::XarFileType::Directory;
         let b_is_dir = b.file_type == xara::XarFileType::Directory;
@@ -186,16 +148,16 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
     });
     for file in &sorted {
         let size_str = match &file.data {
-            Some(d) => format_size(d.size),
-            None => format!("{DIM}dir{RESET}"),
+            Some(data) => format_size(data.size),
+            None => format!("{d}dir{r}"),
         };
         let type_color = match file.file_type {
-            xara::XarFileType::Directory => BLUE,
-            xara::XarFileType::Symlink => CYAN,
+            xara::XarFileType::Directory => bl,
+            xara::XarFileType::Symlink => cn,
             xara::XarFileType::File => "",
         };
         println!(
-            "  {type_color}{:<50}{RESET} {:>12}",
+            "  {type_color}{:<50}{r} {:>12}",
             file.path,
             size_str
         );
@@ -205,7 +167,7 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
     let file_count = sorted.iter().filter(|f| f.file_type == xara::XarFileType::File).count();
     let dir_count = sorted.iter().filter(|f| f.file_type == xara::XarFileType::Directory).count();
     println!(
-        "  {DIM}{} file(s), {} directory(ies){RESET}",
+        "  {d}{} file(s), {} directory(ies){r}",
         file_count, dir_count
     );
     println!();
@@ -213,52 +175,15 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 2 {
-        eprintln!("Usage: dpp-tool pkg find <dmg> <pkg-path> [-name <pattern>] [-type f|d|l]");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
-    let pkg_path = &args[1];
-    let mut name_pattern: Option<String> = None;
-    let mut type_filter: Option<xara::XarFileType> = None;
-
-    let mut i = 2;
-    while i < args.len() {
-        match args[i].as_str() {
-            "-name" => {
-                i += 1;
-                if i >= args.len() {
-                    eprintln!("{RED}error:{RESET} -name requires a pattern argument");
-                    process::exit(1);
-                }
-                name_pattern = Some(args[i].clone());
-            }
-            "-type" => {
-                i += 1;
-                if i >= args.len() {
-                    eprintln!("{RED}error:{RESET} -type requires an argument (f, d, or l)");
-                    process::exit(1);
-                }
-                type_filter = Some(match args[i].as_str() {
-                    "f" => xara::XarFileType::File,
-                    "d" => xara::XarFileType::Directory,
-                    "l" => xara::XarFileType::Symlink,
-                    other => {
-                        eprintln!("{RED}error:{RESET} unknown type '{other}' (use f, d, or l)");
-                        process::exit(1);
-                    }
-                });
-            }
-            other => {
-                eprintln!("{RED}error:{RESET} unknown flag: {other}");
-                eprintln!("Usage: dpp-tool pkg find <dmg> <pkg-path> [-name <pattern>] [-type f|d|l]");
-                process::exit(1);
-            }
-        }
-        i += 1;
-    }
+fn find(dmg_path: &Path, pkg_path: &str, args: FindArgs, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let mut name_pattern = args.name;
+    let mut type_filter: Option<xara::XarFileType> = match args.file_type {
+        None => None,
+        Some('f') => Some(xara::XarFileType::File),
+        Some('d') => Some(xara::XarFileType::Directory),
+        Some('l') => Some(xara::XarFileType::Symlink),
+        Some(other) => return Err(format!("unknown type '{other}' (use f, d, or l)").into()),
+    };
 
     // Default: find components (*.pkg directories)
     if name_pattern.is_none() && type_filter.is_none() {
@@ -292,15 +217,17 @@ fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
         })
         .collect();
 
+    let (d, r) = (dim(), reset());
+    let (bl, cn, w) = (blue(), cyan(), white());
     println!();
     if matches.is_empty() {
-        println!("  {DIM}No matches found{RESET}");
+        println!("  {d}No matches found{r}");
     } else {
         for file in &matches {
             let type_color = match file.file_type {
-                xara::XarFileType::Directory => BLUE,
-                xara::XarFileType::Symlink => CYAN,
-                xara::XarFileType::File => WHITE,
+                xara::XarFileType::Directory => bl,
+                xara::XarFileType::Symlink => cn,
+                xara::XarFileType::File => w,
             };
             let icon = match file.file_type {
                 xara::XarFileType::Directory => "dir",
@@ -308,32 +235,23 @@ fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
                 xara::XarFileType::Symlink => "lnk",
             };
             let size_str = match &file.data {
-                Some(d) => format!("  {DIM}{}{RESET}", format_size(d.size)),
+                Some(data) => format!("  {d}{}{r}", format_size(data.size)),
                 None => String::new(),
             };
             println!(
-                "  {DIM}{icon}{RESET} {type_color}{}{RESET}{size_str}",
+                "  {d}{icon}{r} {type_color}{}{r}{size_str}",
                 file.path,
             );
         }
         println!();
-        println!("  {DIM}{} match(es){RESET}", matches.len());
+        println!("  {d}{} match(es){r}", matches.len());
     }
     println!();
 
     Ok(())
 }
 
-fn cat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 3 {
-        eprintln!("Usage: dpp-tool pkg cat <dmg-file> <pkg-path> <file>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
-    let pkg_path = &args[1];
-    let file_path = &args[2];
-
+fn cat(dmg_path: &Path, pkg_path: &str, file_path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
     let mut fs = pipeline.open_filesystem_with_mode(mode)?;
     let mut pkg = fs.open_pkg(pkg_path)?;

@@ -1,16 +1,35 @@
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+// ── Color control ───────────────────────────────────────────────────────
+
+/// When true, all ANSI accessors return empty strings.
+static NO_COLOR: AtomicBool = AtomicBool::new(false);
+
+/// Call once at startup. Disables color when stdout is not a terminal
+/// or when the user passes `--no-color`.
+pub(crate) fn init_color(no_color_flag: bool) {
+    if no_color_flag || !io::stdout().is_terminal() {
+        NO_COLOR.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Returns `code` if color is enabled, `""` otherwise.
+fn c(code: &str) -> &str {
+    if NO_COLOR.load(Ordering::Relaxed) { "" } else { code }
+}
 
 // ── ANSI styling ─────────────────────────────────────────────────────────
 
-pub(crate) const RESET: &str = "\x1b[0m";
-pub(crate) const BOLD: &str = "\x1b[1m";
-pub(crate) const DIM: &str = "\x1b[2m";
-pub(crate) const GREEN: &str = "\x1b[32m";
-pub(crate) const CYAN: &str = "\x1b[36m";
-pub(crate) const YELLOW: &str = "\x1b[33m";
-pub(crate) const BLUE: &str = "\x1b[34m";
-pub(crate) const RED: &str = "\x1b[31m";
-pub(crate) const WHITE: &str = "\x1b[37m";
+pub(crate) fn reset() -> &'static str { c("\x1b[0m") }
+pub(crate) fn bold() -> &'static str { c("\x1b[1m") }
+pub(crate) fn dim() -> &'static str { c("\x1b[2m") }
+pub(crate) fn green() -> &'static str { c("\x1b[32m") }
+pub(crate) fn cyan() -> &'static str { c("\x1b[36m") }
+pub(crate) fn yellow() -> &'static str { c("\x1b[33m") }
+pub(crate) fn blue() -> &'static str { c("\x1b[34m") }
+pub(crate) fn red() -> &'static str { c("\x1b[31m") }
+pub(crate) fn white() -> &'static str { c("\x1b[37m") }
 
 // ── Box-drawing ──────────────────────────────────────────────────────────
 
@@ -89,9 +108,9 @@ pub(crate) fn kind_icon(kind: hfsplus::EntryKind) -> &'static str {
 
 pub(crate) fn kind_color(kind: hfsplus::EntryKind) -> &'static str {
     match kind {
-        hfsplus::EntryKind::Directory => BLUE,
-        hfsplus::EntryKind::File => WHITE,
-        hfsplus::EntryKind::Symlink => CYAN,
+        hfsplus::EntryKind::Directory => c("\x1b[34m"),
+        hfsplus::EntryKind::File => c("\x1b[37m"),
+        hfsplus::EntryKind::Symlink => c("\x1b[36m"),
     }
 }
 
@@ -105,9 +124,9 @@ pub(crate) fn apfs_kind_icon(kind: apfs::EntryKind) -> &'static str {
 
 pub(crate) fn apfs_kind_color(kind: apfs::EntryKind) -> &'static str {
     match kind {
-        apfs::EntryKind::Directory => BLUE,
-        apfs::EntryKind::File => WHITE,
-        apfs::EntryKind::Symlink => CYAN,
+        apfs::EntryKind::Directory => c("\x1b[34m"),
+        apfs::EntryKind::File => c("\x1b[37m"),
+        apfs::EntryKind::Symlink => c("\x1b[36m"),
     }
 }
 
@@ -121,9 +140,9 @@ pub(crate) fn fs_kind_icon(kind: dpp::FsEntryKind) -> &'static str {
 
 pub(crate) fn fs_kind_color(kind: dpp::FsEntryKind) -> &'static str {
     match kind {
-        dpp::FsEntryKind::Directory => BLUE,
-        dpp::FsEntryKind::File => WHITE,
-        dpp::FsEntryKind::Symlink => CYAN,
+        dpp::FsEntryKind::Directory => c("\x1b[34m"),
+        dpp::FsEntryKind::File => c("\x1b[37m"),
+        dpp::FsEntryKind::Symlink => c("\x1b[36m"),
     }
 }
 
@@ -161,29 +180,29 @@ pub(crate) fn glob_match(pattern: &str, text: &str) -> bool {
 
 pub(crate) fn header(title: &str) {
     println!();
-    println!("  {BOLD}{title}{RESET}");
-    println!("  {DIM}{DOUBLE_LINE}{RESET}");
+    println!("  {}{title}{}", bold(), reset());
+    println!("  {}{DOUBLE_LINE}{}", dim(), reset());
 }
 
 pub(crate) fn section(title: &str) {
     println!();
-    println!("  {CYAN}{BOLD}{title}{RESET}");
-    println!("  {DIM}{DASH_LINE}{RESET}");
+    println!("  {}{}{title}{}", cyan(), bold(), reset());
+    println!("  {}{DASH_LINE}{}", dim(), reset());
 }
 
 pub(crate) fn kv(key: &str, value: &str) {
-    println!("  {DIM}{key:<24}{RESET} {value}");
+    println!("  {}{key:<24}{} {value}", dim(), reset());
 }
 
 pub(crate) fn kv_highlight(key: &str, value: &str) {
-    println!("  {DIM}{key:<24}{RESET} {BOLD}{GREEN}{value}{RESET}");
+    println!("  {}{key:<24}{} {}{}{value}{}", dim(), reset(), bold(), green(), reset());
 }
 
 pub(crate) fn spinner_msg(msg: &str) {
-    eprint!("  {DIM}{YELLOW}>{RESET} {msg}...");
+    eprint!("  {}{}>{} {msg}...", dim(), yellow(), reset());
     io::stderr().flush().ok();
 }
 
 pub(crate) fn spinner_done(extra: &str) {
-    eprintln!(" {GREEN}done{RESET}{DIM}{extra}{RESET}");
+    eprintln!(" {}done{}{}{extra}{}", green(), reset(), dim(), reset());
 }

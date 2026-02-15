@@ -1,18 +1,13 @@
 use std::io::Cursor;
-use std::process;
+use std::path::Path;
 use std::time::Instant;
 
 use crate::style::*;
 
-pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        eprintln!("Usage: dpp-tool bench <dmg-file>");
-        process::exit(1);
-    }
+pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let dmg_str = dmg_path.display();
 
-    let dmg_path = &args[0];
-
-    header(&format!("Benchmark: {dmg_path}"));
+    header(&format!("Benchmark: {dmg_str}"));
 
     // Stage 1: DMG open
     section("Stage 1: DMG Open (UDIF parse)");
@@ -42,6 +37,8 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
     let t = Instant::now();
     let fs_result = pipeline.open_filesystem_with_mode(mode);
     let fs_time = t.elapsed();
+
+    let (d, r, b, g, y, rd) = (dim(), reset(), bold(), green(), yellow(), red());
 
     match fs_result {
         Ok(mut fs) => {
@@ -140,8 +137,8 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
             section("Pipeline Summary");
             let total = dmg_time + fs_time + walk_time;
             println!();
-            println!("  {DIM}Stage{RESET}                        {DIM}Time{RESET}          {DIM}%{RESET}");
-            println!("  {DIM}{}{RESET}", "-".repeat(50));
+            println!("  {d}Stage{r}                        {d}Time{r}          {d}%{r}");
+            println!("  {d}{}{r}", "-".repeat(50));
 
             let extraction_label = format!("{fs_label} extraction");
             let stages = [
@@ -155,29 +152,29 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
                 let pct = time.as_secs_f64() / total.as_secs_f64() * 100.0;
                 let bar_len = (pct / 100.0 * bar_total as f64) as usize;
                 let bar: String = (0..bar_len).map(|_| '#').collect();
-                let color = if pct > 50.0 { RED } else if pct > 20.0 { YELLOW } else { GREEN };
+                let color = if pct > 50.0 { rd } else if pct > 20.0 { y } else { g };
                 println!(
-                    "  {:<25} {:>10}  {color}{:>5.1}%{RESET}  {color}{bar}{RESET}",
+                    "  {:<25} {:>10}  {color}{:>5.1}%{r}  {color}{bar}{r}",
                     name,
                     format_duration(*time),
                     pct,
                 );
             }
-            println!("  {DIM}{}{RESET}", "-".repeat(50));
+            println!("  {d}{}{r}", "-".repeat(50));
             println!(
-                "  {BOLD}{:<25}{RESET} {:>10}",
+                "  {b}{:<25}{r} {:>10}",
                 "Total",
                 format_duration(total),
             );
             println!();
         }
         Err(dpp::DppError::NoFilesystemPartition) => {
-            println!("  {YELLOW}No HFS+ or APFS partition found. Skipping filesystem stages.{RESET}");
+            println!("  {y}No HFS+ or APFS partition found. Skipping filesystem stages.{r}");
 
             section("Pipeline Summary");
             println!();
             kv("DMG open", &format_duration(dmg_time));
-            println!("  {DIM}(Filesystem stages skipped — no compatible partition){RESET}");
+            println!("  {d}(Filesystem stages skipped — no compatible partition){r}");
             println!();
         }
         Err(e) => return Err(e.into()),

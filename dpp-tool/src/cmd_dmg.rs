@@ -1,52 +1,25 @@
 use std::io;
-use std::process;
+use std::path::Path;
 
 use crate::style::*;
 use crate::pipeline::open_pipeline;
+use crate::DmgCommand;
 
-pub(crate) fn run(args: &[String], _mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        print_usage();
-        process::exit(1);
-    }
-    match args[0].as_str() {
-        "info" => info(&args[1..]),
-        "ls" => ls(&args[1..]),
-        "cat" => cat(&args[1..]),
-        "-h" | "--help" | "help" => { print_usage(); Ok(()) }
-        _ => {
-            eprintln!("{RED}Unknown dmg command: {}{RESET}", args[0]);
-            print_usage();
-            process::exit(1);
-        }
+pub(crate) fn run(cmd: DmgCommand, _mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    match cmd {
+        DmgCommand::Info { dmg } => info(&dmg),
+        DmgCommand::Ls { dmg } => ls(&dmg),
+        DmgCommand::Cat { dmg, partition_id } => cat(&dmg, partition_id),
     }
 }
 
-fn print_usage() {
-    eprintln!(
-        r#"
-{BOLD}dpp-tool dmg{RESET} — DMG/UDIF container commands
-
-{BOLD}COMMANDS:{RESET}
-    {GREEN}info{RESET}   <dmg>                    Format & compression stats
-    {GREEN}ls{RESET}     <dmg>                    List partitions
-    {GREEN}cat{RESET}    <dmg> [partition-id]     Raw partition data to stdout
-"#
-    );
-}
-
-fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        eprintln!("Usage: dpp-tool dmg info <dmg-file>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
+fn info(dmg_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let dmg_str = dmg_path.display();
     let archive = udif::DmgArchive::open(dmg_path)?;
     let stats = archive.stats();
     let comp_info = archive.compression_info();
 
-    header(&format!("DMG: {dmg_path}"));
+    header(&format!("DMG: {dmg_str}"));
 
     section("Format");
     kv("Version", &stats.version.to_string());
@@ -58,7 +31,6 @@ fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     kv("Uncompressed", &format_size(stats.total_uncompressed));
     kv_highlight("Space savings", &format!("{:.1}%", stats.space_savings()));
 
-    // Block type summary
     let mut block_types = Vec::new();
     if comp_info.lzfse_blocks > 0 { block_types.push(format!("LZFSE: {}", comp_info.lzfse_blocks)); }
     if comp_info.xz_blocks > 0 { block_types.push(format!("XZ: {}", comp_info.xz_blocks)); }
@@ -74,20 +46,17 @@ fn info(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        eprintln!("Usage: dpp-tool dmg ls <dmg-file>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
+fn ls(dmg_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let dmg_str = dmg_path.display();
     let pipeline = open_pipeline(dmg_path)?;
     let partitions = pipeline.partitions();
 
-    header(&format!("Partitions: {dmg_path}"));
+    header(&format!("Partitions: {dmg_str}"));
     println!();
-    println!("  {DIM}{:>4}  {:>12}  {:>12}  {:>12}  {:>7}  {}{RESET}", "ID", "Sectors", "Size", "Compressed", "Ratio", "Name");
-    println!("  {DIM}{}{RESET}", "-".repeat(72));
+    let (d, r) = (dim(), reset());
+    let g = green();
+    println!("  {d}{:>4}  {:>12}  {:>12}  {:>12}  {:>7}  {}{r}", "ID", "Sectors", "Size", "Compressed", "Ratio", "Name");
+    println!("  {d}{}{r}", "-".repeat(72));
 
     for p in &partitions {
         let ratio = if p.size > 0 {
@@ -96,12 +65,12 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             "N/A".to_string()
         };
         let name_color = if p.name.contains("Apple_HFS") || p.name.contains("Apple_APFS") {
-            GREEN
+            g
         } else {
             ""
         };
         println!(
-            "  {:>4}  {:>12}  {:>12}  {:>12}  {:>7}  {name_color}{}{RESET}",
+            "  {:>4}  {:>12}  {:>12}  {:>12}  {:>7}  {name_color}{}{r}",
             p.id,
             p.sectors,
             format_size(p.size),
@@ -113,7 +82,7 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
     println!();
     println!(
-        "  {DIM}{} partition(s){RESET}",
+        "  {d}{} partition(s){r}",
         partitions.len()
     );
     println!();
@@ -121,21 +90,11 @@ fn ls(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn cat(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        eprintln!("Usage: dpp-tool dmg cat <dmg-file> [partition-id]");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
+fn cat(dmg_path: &Path, partition_id: Option<i32>) -> Result<(), Box<dyn std::error::Error>> {
     let mut archive = udif::DmgArchive::open(dmg_path)?;
-
     let mut stdout = io::stdout().lock();
 
-    if args.len() > 1 {
-        let id: i32 = args[1].parse().map_err(|_| {
-            format!("Invalid partition ID: {}", args[1])
-        })?;
+    if let Some(id) = partition_id {
         archive.extract_partition_to(id, &mut stdout)?;
     } else {
         archive.extract_main_partition_to(&mut stdout)?;

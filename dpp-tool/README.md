@@ -50,6 +50,7 @@ dpp-tool payload cat Kernel_Debug_Kit.dmg /KernelDebugKit.pkg com.apple.pkg.KDK 
 |------|-------------|
 | `--temp-file` | Extract partitions via temp file **(default)** — low memory (~4 KB) |
 | `--in-memory` | Buffer partitions in memory — faster for small DMGs |
+| `--no-color` | Disable colored output (auto-detected when stdout is not a terminal) |
 
 ```bash
 # Use in-memory mode for a small DMG

@@ -1,44 +1,30 @@
 use std::collections::BTreeMap;
 use std::io::{self, Cursor, Write};
-use std::process;
+use std::path::Path;
 use std::time::Instant;
 
 use crate::style::*;
 use crate::pipeline::{open_pipeline, open_filesystem};
+use crate::{PayloadCommand, FindArgs};
 
-pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        print_usage();
-        process::exit(1);
-    }
-    match args[0].as_str() {
-        "info" => info(&args[1..], mode),
-        "ls" => ls(&args[1..], mode),
-        "tree" => tree(&args[1..], mode),
-        "find" => find(&args[1..], mode),
-        "cat" => cat(&args[1..], mode),
-        "-h" | "--help" | "help" => { print_usage(); Ok(()) }
-        _ => {
-            eprintln!("{RED}Unknown payload command: {}{RESET}", args[0]);
-            print_usage();
-            process::exit(1);
+pub(crate) fn run(cmd: PayloadCommand, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    match cmd {
+        PayloadCommand::Info { dmg, pkg_path, component } => {
+            info(&dmg, &pkg_path, &component, mode)
+        }
+        PayloadCommand::Ls { dmg, pkg_path, component, path } => {
+            ls(&dmg, &pkg_path, &component, path.as_deref(), mode)
+        }
+        PayloadCommand::Tree { dmg, pkg_path, component, path, depth } => {
+            tree(&dmg, &pkg_path, &component, path.as_deref(), depth, mode)
+        }
+        PayloadCommand::Find { dmg, pkg_path, component, args } => {
+            find(&dmg, &pkg_path, &component, args, mode)
+        }
+        PayloadCommand::Cat { dmg, pkg_path, component, file } => {
+            cat(&dmg, &pkg_path, &component, &file, mode)
         }
     }
-}
-
-fn print_usage() {
-    eprintln!(
-        r#"
-{BOLD}dpp-tool payload{RESET} — Component payload (PBZX/CPIO) commands
-
-{BOLD}COMMANDS:{RESET}
-    {GREEN}info{RESET}   <dmg> <pkg-path> <component>                            Payload stats
-    {GREEN}ls{RESET}     <dmg> <pkg-path> <component> [path]                     List files
-    {GREEN}tree{RESET}   <dmg> <pkg-path> <component> [path]                     Browse file tree
-    {GREEN}find{RESET}   <dmg> <pkg-path> <component> [-name pat] [-type f|d|l]  Find files
-    {GREEN}cat{RESET}    <dmg> <pkg-path> <component> <file>                     Extract file to stdout
-"#
-    );
 }
 
 /// Normalize a CPIO path: strip leading "./" or "/" and represent root as "".
@@ -80,7 +66,7 @@ fn basename_of(p: &str) -> &str {
 
 /// Open the PBZX payload for a component and return the parsed Archive.
 fn open_archive(
-    dmg_path: &str,
+    dmg_path: &Path,
     pkg_path: &str,
     component: &str,
     mode: dpp::ExtractMode,
@@ -108,16 +94,11 @@ fn open_archive(
 
 // ── info ────────────────────────────────────────────────────────────────
 
-fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 3 {
-        eprintln!("Usage: dpp-tool payload info <dmg> <pkg-path> <component>");
-        process::exit(1);
-    }
-
-    let archive = open_archive(&args[0], &args[1], &args[2], mode)?;
+fn info(dmg_path: &Path, pkg_path: &str, component: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let archive = open_archive(dmg_path, pkg_path, component, mode)?;
     let entries = archive.list()?;
 
-    header(&format!("Payload: {}", args[2]));
+    header(&format!("Payload: {component}"));
 
     section("CPIO Archive");
     kv("Decompressed size", &format_size(archive.decompressed_size() as u64));
@@ -142,16 +123,11 @@ fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
 
 // ── ls ──────────────────────────────────────────────────────────────────
 
-fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 3 {
-        eprintln!("Usage: dpp-tool payload ls <dmg> <pkg-path> <component> [path]");
-        process::exit(1);
-    }
-
-    let dir_arg = if args.len() > 3 { &args[3] } else { "/" };
+fn ls(dmg_path: &Path, pkg_path: &str, component: &str, path: Option<&str>, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let dir_arg = path.unwrap_or("/");
     let dir = normalize_user_path(dir_arg);
 
-    let archive = open_archive(&args[0], &args[1], &args[2], mode)?;
+    let archive = open_archive(dmg_path, pkg_path, component, mode)?;
     let entries = archive.list()?;
 
     // Collect direct children of `dir`
@@ -173,14 +149,15 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
         })
     });
 
+    let (d, r) = (dim(), reset());
     let display_dir = if dir.is_empty() { "/" } else { dir_arg };
-    header(&format!("Payload: {} — {display_dir}", args[2]));
+    header(&format!("Payload: {component} — {display_dir}"));
     println!();
     println!(
-        "  {DIM}{:<5} {:>12}  {}{RESET}",
+        "  {d}{:<5} {:>12}  {}{r}",
         "Kind", "Size", "Name"
     );
-    println!("  {DIM}{}{RESET}", "-".repeat(56));
+    println!("  {d}{}{r}", "-".repeat(56));
 
     for entry in &children {
         let np = normalize_cpio(&entry.path);
@@ -193,7 +170,7 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
         };
         let suffix = symlink_suffix(entry);
         println!(
-            "  {DIM}{icon}{RESET}   {:>12}  {color}{name}{RESET}{suffix}",
+            "  {d}{icon}{r}   {:>12}  {color}{name}{r}{suffix}",
             size_str,
         );
     }
@@ -201,7 +178,7 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
     println!();
     let fc = children.iter().filter(|e| !e.is_dir && !e.is_symlink).count();
     let dc = children.iter().filter(|e| e.is_dir).count();
-    println!("  {DIM}{fc} file(s), {dc} directory(ies){RESET}");
+    println!("  {d}{fc} file(s), {dc} directory(ies){r}");
     println!();
 
     Ok(())
@@ -209,16 +186,11 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
 
 // ── tree ────────────────────────────────────────────────────────────────
 
-fn tree(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 3 {
-        eprintln!("Usage: dpp-tool payload tree <dmg> <pkg-path> <component> [path]");
-        process::exit(1);
-    }
-
-    let base_arg = if args.len() > 3 { &args[3] } else { "/" };
+fn tree(dmg_path: &Path, pkg_path: &str, component: &str, path: Option<&str>, max_depth: usize, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let base_arg = path.unwrap_or("/");
     let base = normalize_user_path(base_arg);
 
-    let archive = open_archive(&args[0], &args[1], &args[2], mode)?;
+    let archive = open_archive(dmg_path, pkg_path, component, mode)?;
     let entries = archive.list()?;
 
     // Build parent → children map
@@ -240,10 +212,10 @@ fn tree(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
     }
 
     let display_base = if base.is_empty() { "/" } else { base_arg };
-    header(&format!("Tree: {} — {display_base}", args[2]));
+    header(&format!("Tree: {component} — {display_base}"));
     println!();
 
-    print_tree(&children_map, &base, "", 0, 3);
+    print_tree(&children_map, &base, "", 0, max_depth);
     println!();
 
     Ok(())
@@ -256,8 +228,10 @@ fn print_tree(
     depth: usize,
     max_depth: usize,
 ) {
+    let (d, r, b) = (dim(), reset(), bold());
+
     if depth > max_depth {
-        println!("  {prefix}{DIM}{TEE} ...{RESET}");
+        println!("  {prefix}{d}{TEE} ...{r}");
         return;
     }
 
@@ -279,14 +253,14 @@ fn print_tree(
 
         let (color, _) = entry_style(entry);
         let size_str = if !entry.is_dir {
-            format!("  {DIM}{}{RESET}", format_size(entry.size))
+            format!("  {d}{}{r}", format_size(entry.size))
         } else {
             String::new()
         };
         let suffix = symlink_suffix(entry);
 
         println!(
-            "  {prefix}{DIM}{connector}{RESET} {color}{BOLD}{name}{RESET}{suffix}{size_str}",
+            "  {prefix}{d}{connector}{r} {color}{b}{name}{r}{suffix}{size_str}",
         );
 
         if entry.is_dir {
@@ -297,50 +271,17 @@ fn print_tree(
 
 // ── find ────────────────────────────────────────────────────────────────
 
-fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 3 {
-        eprintln!("Usage: dpp-tool payload find <dmg> <pkg-path> <component> [-name <pattern>] [-type f|d|l]");
-        process::exit(1);
-    }
+fn find(dmg_path: &Path, pkg_path: &str, component: &str, args: FindArgs, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let name_pattern = args.name;
+    let type_filter: Option<&str> = match args.file_type {
+        None => None,
+        Some('f') => Some("f"),
+        Some('d') => Some("d"),
+        Some('l') => Some("l"),
+        Some(other) => return Err(format!("unknown type '{other}' (use f, d, or l)").into()),
+    };
 
-    let mut name_pattern: Option<String> = None;
-    let mut type_filter: Option<&str> = None;
-
-    let mut i = 3;
-    while i < args.len() {
-        match args[i].as_str() {
-            "-name" => {
-                i += 1;
-                if i >= args.len() {
-                    eprintln!("{RED}error:{RESET} -name requires a pattern argument");
-                    process::exit(1);
-                }
-                name_pattern = Some(args[i].clone());
-            }
-            "-type" => {
-                i += 1;
-                if i >= args.len() {
-                    eprintln!("{RED}error:{RESET} -type requires an argument (f, d, or l)");
-                    process::exit(1);
-                }
-                match args[i].as_str() {
-                    "f" | "d" | "l" => type_filter = Some(if args[i] == "f" { "f" } else if args[i] == "d" { "d" } else { "l" }),
-                    other => {
-                        eprintln!("{RED}error:{RESET} unknown type '{other}' (use f, d, or l)");
-                        process::exit(1);
-                    }
-                }
-            }
-            other => {
-                eprintln!("{RED}error:{RESET} unknown flag: {other}");
-                eprintln!("Usage: dpp-tool payload find <dmg> <pkg-path> <component> [-name <pattern>] [-type f|d|l]");
-                process::exit(1);
-            }
-        }
-        i += 1;
-    }
-
-    let archive = open_archive(&args[0], &args[1], &args[2], mode)?;
+    let archive = open_archive(dmg_path, pkg_path, component, mode)?;
     let entries = archive.list()?;
 
     let matches: Vec<_> = entries
@@ -368,24 +309,25 @@ fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
         })
         .collect();
 
+    let (d, r) = (dim(), reset());
     println!();
     if matches.is_empty() {
-        println!("  {DIM}No matches found{RESET}");
+        println!("  {d}No matches found{r}");
     } else {
         for entry in &matches {
             let np = normalize_cpio(&entry.path);
             let (color, icon) = entry_style(entry);
             let size_str = if !entry.is_dir {
-                format!("  {DIM}{}{RESET}", format_size(entry.size))
+                format!("  {d}{}{r}", format_size(entry.size))
             } else {
                 String::new()
             };
             println!(
-                "  {DIM}{icon}{RESET} {color}/{np}{RESET}{size_str}",
+                "  {d}{icon}{r} {color}/{np}{r}{size_str}",
             );
         }
         println!();
-        println!("  {DIM}{} match(es){RESET}", matches.len());
+        println!("  {d}{} match(es){r}", matches.len());
     }
     println!();
 
@@ -394,17 +336,7 @@ fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
 
 // ── cat ─────────────────────────────────────────────────────────────────
 
-fn cat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 4 {
-        eprintln!("Usage: dpp-tool payload cat <dmg> <pkg-path> <component> <file>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
-    let pkg_path = &args[1];
-    let component = &args[2];
-    let file_path = &args[3];
-
+fn cat(dmg_path: &Path, pkg_path: &str, component: &str, file_path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
     let mut fs = pipeline.open_filesystem_with_mode(mode)?;
     let mut pkg = fs.open_pkg(pkg_path)?;
@@ -429,17 +361,19 @@ fn cat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error
 
 fn entry_style(entry: &pbzx::FileEntry) -> (&str, &str) {
     if entry.is_dir {
-        (BLUE, "dir")
+        (blue(), "dir")
     } else if entry.is_symlink {
-        (CYAN, "lnk")
+        (cyan(), "lnk")
     } else {
-        (WHITE, "   ")
+        (white(), "   ")
     }
 }
 
 fn symlink_suffix(entry: &pbzx::FileEntry) -> String {
     if let Some(ref target) = entry.link_target {
-        format!(" {DIM}-> {target}{RESET}")
+        let d = dim();
+        let r = reset();
+        format!(" {d}-> {target}{r}")
     } else {
         String::new()
     }

@@ -1,16 +1,11 @@
-use std::process;
+use std::path::Path;
 use std::time::Instant;
 
 use crate::style::*;
 use crate::pipeline::{open_pipeline, open_filesystem};
 
-pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        eprintln!("Usage: dpp-tool info <dmg-file>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
+pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let dmg_str = dmg_path.display();
     let t_total = Instant::now();
 
     // DMG layer
@@ -22,7 +17,7 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
     };
     let (stats, comp_info) = archive_stats;
 
-    header(&format!("DMG Pipeline: {dmg_path}"));
+    header(&format!("DMG Pipeline: {dmg_str}"));
 
     section("DMG (UDIF)");
     kv("Version", &stats.version.to_string());
@@ -44,9 +39,10 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
     }
 
     // Partition table
+    let (d, r, g) = (dim(), reset(), green());
     println!();
-    println!("  {DIM}{:>4}  {:>12}  {:>12}  {:>7}  {}{RESET}", "ID", "Sectors", "Size", "Ratio", "Name");
-    println!("  {DIM}{}{RESET}", "-".repeat(58));
+    println!("  {d}{:>4}  {:>12}  {:>12}  {:>7}  {}{r}", "ID", "Sectors", "Size", "Ratio", "Name");
+    println!("  {d}{}{r}", "-".repeat(58));
     for p in &partitions {
         let ratio = if p.size > 0 {
             format!("{:.1}%", (1.0 - p.compressed_size as f64 / p.size as f64) * 100.0)
@@ -54,12 +50,12 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
             "N/A".to_string()
         };
         let name_color = if p.name.contains("Apple_HFS") || p.name.contains("Apple_APFS") {
-            GREEN
+            g
         } else {
             ""
         };
         println!(
-            "  {:>4}  {:>12}  {:>12}  {:>7}  {name_color}{}{RESET}",
+            "  {:>4}  {:>12}  {:>12}  {:>7}  {name_color}{}{r}",
             p.id,
             p.sectors,
             format_size(p.size),
@@ -78,9 +74,9 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
                     section("HFS+ Volume");
                     if let Some(is_hfsx) = vi.is_hfsx {
                         let sig = if is_hfsx {
-                            format!("HFSX {DIM}(case-sensitive){RESET}")
+                            format!("HFSX {d}(case-sensitive){r}")
                         } else {
-                            format!("HFS+ {DIM}(case-insensitive){RESET}")
+                            format!("HFS+ {d}(case-insensitive){r}")
                         };
                         kv("Signature", &sig);
                     }
@@ -121,14 +117,15 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
                 .collect();
             spinner_done(&format!(" ({})", format_duration(t.elapsed())));
 
+            let b = bold();
             section("Packages");
             if pkg_files.is_empty() {
-                println!("  {DIM}No .pkg files found{RESET}");
+                println!("  {d}No .pkg files found{r}");
             } else {
                 for (i, pkg) in pkg_files.iter().enumerate() {
                     let connector = if i == pkg_files.len() - 1 { ELBOW } else { TEE };
                     println!(
-                        "  {DIM}{connector}{RESET} {BOLD}{}{RESET}  {DIM}{}{RESET}",
+                        "  {d}{connector}{r} {b}{}{r}  {d}{}{r}",
                         pkg.path,
                         format_size(pkg.entry.size),
                     );
@@ -146,8 +143,9 @@ pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn
             kv("Total content size", &format_size(total_size));
         }
         Err(e) => {
+            let y = yellow();
             section("Filesystem");
-            println!("  {YELLOW}No HFS+ or APFS partition found in this DMG: {e}{RESET}");
+            println!("  {y}No HFS+ or APFS partition found in this DMG: {e}{r}");
         }
     }
 

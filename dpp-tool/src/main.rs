@@ -2,49 +2,6 @@
 //!
 //! A cross-platform tool to explore DMG disk images end-to-end:
 //! DMG → HFS+/APFS → PKG → PBZX → files
-//!
-//! # Usage
-//!
-//! ```text
-//! dpp-tool info <dmg>                                    Full pipeline overview
-//! dpp-tool bench <dmg>                                   Benchmark pipeline stages
-//!
-//! dpp-tool dmg info <dmg>                                DMG format & compression stats
-//! dpp-tool dmg ls <dmg>                                  List partitions
-//! dpp-tool dmg cat <dmg> [partition-id]                  Raw partition data to stdout
-//!
-//! dpp-tool fs info <dmg>                                 Volume info (auto-detect HFS+/APFS)
-//! dpp-tool fs ls <dmg> <path>                            List directory contents
-//! dpp-tool fs tree <dmg> [path]                          Browse filesystem tree
-//! dpp-tool fs cat <dmg> <path>                           Extract file to stdout
-//! dpp-tool fs stat <dmg> <path>                          File metadata
-//! dpp-tool fs find <dmg> [-name pat] [-type f|d|l]       Find files (default: *.pkg)
-//!
-//! dpp-tool hfs info <dmg>                                HFS+ volume header
-//! dpp-tool hfs ls <dmg> <path>                           List directory contents
-//! dpp-tool hfs tree <dmg> [path]                         Browse filesystem tree
-//! dpp-tool hfs cat <dmg> <path>                          Extract file to stdout
-//! dpp-tool hfs stat <dmg> <path>                         File metadata
-//! dpp-tool hfs find <dmg> [-name pat] [-type f|d|l]     Find files (default: *.pkg)
-//!
-//! dpp-tool apfs info <dmg>                               APFS volume info
-//! dpp-tool apfs ls <dmg> <path>                          List directory contents
-//! dpp-tool apfs tree <dmg> [path]                        Browse filesystem tree
-//! dpp-tool apfs cat <dmg> <path>                         Extract file to stdout
-//! dpp-tool apfs stat <dmg> <path>                        File metadata
-//! dpp-tool apfs find <dmg> [-name pat] [-type f|d|l]    Find files (default: *.pkg)
-//!
-//! dpp-tool pkg info <dmg> <pkg-path>                     Package stats
-//! dpp-tool pkg ls <dmg> <pkg-path>                       List XAR contents
-//! dpp-tool pkg find <dmg> <pkg-path> [-name p] [-type f|d|l]  Find entries
-//! dpp-tool pkg cat <dmg> <pkg-path> <file>               XAR entry to stdout
-//!
-//! dpp-tool payload info <dmg> <pkg> <comp>               Payload (PBZX/CPIO) stats
-//! dpp-tool payload ls <dmg> <pkg> <comp> [path]          List payload files
-//! dpp-tool payload tree <dmg> <pkg> <comp> [path]        Browse payload tree
-//! dpp-tool payload find <dmg> <pkg> <comp> [-name p] [-type f|d|l]  Find payload files
-//! dpp-tool payload cat <dmg> <pkg> <comp> <file>         Extract payload file to stdout
-//! ```
 
 mod style;
 mod pipeline;
@@ -57,105 +14,431 @@ mod cmd_payload;
 mod cmd_info;
 mod cmd_bench;
 
-use std::env;
+use std::io;
+use std::path::PathBuf;
 use std::process;
 
-use style::{RED, RESET, BOLD, DIM, GREEN};
+use clap::{Parser, Subcommand, Args, CommandFactory};
+use clap_complete::{generate, Shell};
+
+// ── Top-level CLI ────────────────────────────────────────────────────────
+
+#[derive(Parser)]
+#[command(
+    name = "dpp-tool",
+    about = "Apple DMG pipeline explorer — navigate DMG → HFS+/APFS → PKG → PBZX → files",
+    version,
+    after_help = "\
+EXAMPLES:
+    dpp-tool info Kernel_Debug_Kit.dmg
+    dpp-tool --in-memory fs info small.dmg
+    dpp-tool dmg ls Kernel_Debug_Kit.dmg
+    dpp-tool fs tree Kernel_Debug_Kit.dmg /Library
+    dpp-tool fs find Kernel_Debug_Kit.dmg -n \"*.kext\" -t d
+    dpp-tool pkg ls Kernel_Debug_Kit.dmg /KernelDebugKit.pkg
+    dpp-tool payload ls Kernel_Debug_Kit.dmg /path.pkg com.apple.pkg.KDK /"
+)]
+struct Cli {
+    /// Extract partitions via temp file (default, low memory)
+    #[arg(long, global = true, conflicts_with = "in_memory")]
+    temp_file: bool,
+
+    /// Buffer partitions in memory (faster for small DMGs)
+    #[arg(long, global = true)]
+    in_memory: bool,
+
+    /// Disable colored output
+    #[arg(long, global = true)]
+    no_color: bool,
+
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Full pipeline overview
+    Info {
+        /// Path to the DMG file
+        dmg: PathBuf,
+    },
+
+    /// Benchmark pipeline stages
+    #[command(alias = "benchmark")]
+    Bench {
+        /// Path to the DMG file
+        dmg: PathBuf,
+    },
+
+    /// DMG (UDIF) container commands
+    Dmg {
+        #[command(subcommand)]
+        command: DmgCommand,
+    },
+
+    /// Filesystem commands (auto-detect HFS+/APFS)
+    Fs {
+        #[command(subcommand)]
+        command: FsCommand,
+    },
+
+    /// HFS+ filesystem commands
+    Hfs {
+        #[command(subcommand)]
+        command: HfsCommand,
+    },
+
+    /// APFS filesystem commands
+    Apfs {
+        #[command(subcommand)]
+        command: ApfsCommand,
+    },
+
+    /// PKG (XAR) archive commands
+    Pkg {
+        #[command(subcommand)]
+        command: PkgCommand,
+    },
+
+    /// Component payload (PBZX/CPIO) commands
+    Payload {
+        #[command(subcommand)]
+        command: PayloadCommand,
+    },
+
+    /// Generate shell completions
+    #[command(hide = true)]
+    Completions {
+        /// Shell to generate completions for
+        shell: Shell,
+    },
+}
+
+// ── DMG subcommands ──────────────────────────────────────────────────────
+
+#[derive(Subcommand)]
+enum DmgCommand {
+    /// Format & compression stats
+    Info {
+        /// Path to the DMG file
+        dmg: PathBuf,
+    },
+    /// List partitions
+    Ls {
+        /// Path to the DMG file
+        dmg: PathBuf,
+    },
+    /// Raw partition data to stdout
+    Cat {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Partition ID (default: main partition)
+        partition_id: Option<i32>,
+    },
+}
+
+// ── Filesystem subcommands (fs, hfs, apfs share a shape) ────────────────
+
+#[derive(Args)]
+struct FindArgs {
+    /// Glob pattern to match file names
+    #[arg(short, long)]
+    name: Option<String>,
+
+    /// Filter by type: f (file), d (directory), l (symlink)
+    #[arg(short = 't', long = "type")]
+    file_type: Option<char>,
+}
+
+#[derive(Subcommand)]
+enum FsCommand {
+    /// Volume info (auto-detect HFS+/APFS)
+    Info {
+        /// Path to the DMG file
+        dmg: PathBuf,
+    },
+    /// List directory contents
+    Ls {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to list
+        path: String,
+    },
+    /// Browse filesystem tree
+    Tree {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Root path for tree (default: /)
+        path: Option<String>,
+        /// Maximum tree depth
+        #[arg(short, long, default_value_t = 3)]
+        depth: usize,
+    },
+    /// Extract file to stdout
+    Cat {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to extract
+        path: String,
+    },
+    /// File metadata
+    Stat {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to stat
+        path: String,
+    },
+    /// Find files (default: *.pkg)
+    Find {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        #[command(flatten)]
+        args: FindArgs,
+    },
+}
+
+#[derive(Subcommand)]
+enum HfsCommand {
+    /// HFS+ volume header
+    Info {
+        /// Path to the DMG file
+        dmg: PathBuf,
+    },
+    /// List directory contents
+    Ls {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to list
+        path: String,
+    },
+    /// Browse filesystem tree
+    Tree {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Root path for tree (default: /)
+        path: Option<String>,
+        /// Maximum tree depth
+        #[arg(short, long, default_value_t = 3)]
+        depth: usize,
+    },
+    /// Extract file to stdout
+    Cat {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to extract
+        path: String,
+    },
+    /// File metadata (CNID, perms, dates, forks)
+    Stat {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to stat
+        path: String,
+    },
+    /// Find files (default: *.pkg)
+    Find {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        #[command(flatten)]
+        args: FindArgs,
+    },
+}
+
+#[derive(Subcommand)]
+enum ApfsCommand {
+    /// APFS volume info
+    Info {
+        /// Path to the DMG file
+        dmg: PathBuf,
+    },
+    /// List directory contents
+    Ls {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to list
+        path: String,
+    },
+    /// Browse filesystem tree
+    Tree {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Root path for tree (default: /)
+        path: Option<String>,
+        /// Maximum tree depth
+        #[arg(short, long, default_value_t = 3)]
+        depth: usize,
+    },
+    /// Extract file to stdout
+    Cat {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to extract
+        path: String,
+    },
+    /// File metadata (OID, perms, dates)
+    Stat {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to stat
+        path: String,
+    },
+    /// Find files (default: *.pkg)
+    Find {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        #[command(flatten)]
+        args: FindArgs,
+    },
+}
+
+// ── PKG subcommands ──────────────────────────────────────────────────────
+
+#[derive(Subcommand)]
+enum PkgCommand {
+    /// Package stats
+    Info {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+    },
+    /// List XAR contents
+    Ls {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+    },
+    /// Find entries (default: *.pkg components)
+    Find {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+        #[command(flatten)]
+        args: FindArgs,
+    },
+    /// XAR entry to stdout
+    Cat {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+        /// File within the XAR to extract
+        file: String,
+    },
+}
+
+// ── Payload subcommands ──────────────────────────────────────────────────
+
+#[derive(Subcommand)]
+enum PayloadCommand {
+    /// Payload (PBZX/CPIO) stats
+    Info {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+        /// Component identifier
+        component: String,
+    },
+    /// List payload files
+    Ls {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+        /// Component identifier
+        component: String,
+        /// Path within the payload (default: /)
+        path: Option<String>,
+    },
+    /// Browse payload tree
+    Tree {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+        /// Component identifier
+        component: String,
+        /// Root path for tree (default: /)
+        path: Option<String>,
+        /// Maximum tree depth
+        #[arg(short, long, default_value_t = 3)]
+        depth: usize,
+    },
+    /// Find payload files
+    Find {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+        /// Component identifier
+        component: String,
+        #[command(flatten)]
+        args: FindArgs,
+    },
+    /// Extract payload file to stdout
+    Cat {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+        /// Component identifier
+        component: String,
+        /// File within the payload to extract
+        file: String,
+    },
+}
+
+// ── main ─────────────────────────────────────────────────────────────────
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let cli = Cli::parse();
 
-    if args.len() < 2 {
-        print_usage();
-        process::exit(1);
-    }
+    // Initialize color support
+    style::init_color(cli.no_color);
 
-    // Parse global flags before the subcommand
-    let mut mode = dpp::ExtractMode::default();
-    let mut cmd_args: Vec<String> = Vec::new();
-    let mut found_command = false;
+    let mode = if cli.in_memory {
+        dpp::ExtractMode::InMemory
+    } else {
+        dpp::ExtractMode::default()
+    };
 
-    for arg in &args[1..] {
-        if !found_command {
-            match arg.as_str() {
-                "--in-memory" => { mode = dpp::ExtractMode::InMemory; continue; }
-                "--temp-file" => { mode = dpp::ExtractMode::TempFile; continue; }
-                _ => { found_command = true; }
-            }
+    let result = match cli.command {
+        Command::Info { dmg } => {
+            cmd_info::run(&dmg, mode)
         }
-        cmd_args.push(arg.clone());
-    }
-
-    if cmd_args.is_empty() {
-        print_usage();
-        process::exit(1);
-    }
-
-    let result = match cmd_args[0].as_str() {
-        "dmg" => cmd_dmg::run(&cmd_args[1..], mode),
-        "fs" => cmd_fs::run(&cmd_args[1..], mode),
-        "hfs" => cmd_hfs::run(&cmd_args[1..], mode),
-        "apfs" => cmd_apfs::run(&cmd_args[1..], mode),
-        "pkg" => cmd_pkg::run(&cmd_args[1..], mode),
-        "payload" => cmd_payload::run(&cmd_args[1..], mode),
-        "info" => cmd_info::run(&cmd_args[1..], mode),
-        "bench" | "benchmark" => cmd_bench::run(&cmd_args[1..], mode),
-        "-h" | "--help" | "help" => {
-            print_usage();
+        Command::Bench { dmg } => {
+            cmd_bench::run(&dmg, mode)
+        }
+        Command::Dmg { command } => {
+            cmd_dmg::run(command, mode)
+        }
+        Command::Fs { command } => {
+            cmd_fs::run(command, mode)
+        }
+        Command::Hfs { command } => {
+            cmd_hfs::run(command, mode)
+        }
+        Command::Apfs { command } => {
+            cmd_apfs::run(command, mode)
+        }
+        Command::Pkg { command } => {
+            cmd_pkg::run(command, mode)
+        }
+        Command::Payload { command } => {
+            cmd_payload::run(command, mode)
+        }
+        Command::Completions { shell } => {
+            let mut cmd = Cli::command();
+            generate(shell, &mut cmd, "dpp-tool", &mut io::stdout());
             Ok(())
-        }
-        _ => {
-            eprintln!("{RED}Unknown command: {}{RESET}", cmd_args[0]);
-            print_usage();
-            process::exit(1);
         }
     };
 
     if let Err(e) = result {
-        eprintln!("{RED}error:{RESET} {e}");
+        eprintln!("{}error:{} {e}", style::red(), style::reset());
         process::exit(1);
     }
-}
-
-fn print_usage() {
-    eprintln!(
-        r#"
-{BOLD}dpp-tool{RESET} — Apple DMG pipeline explorer
-
-{DIM}Navigate the full stack: DMG → HFS+/APFS → PKG → PBZX → files{RESET}
-
-{BOLD}USAGE:{RESET}
-    dpp-tool [OPTIONS] <COMMAND> ...
-
-{BOLD}OPTIONS:{RESET}
-    {GREEN}--temp-file{RESET}     Extract partitions via temp file {DIM}(default, low memory){RESET}
-    {GREEN}--in-memory{RESET}     Buffer partitions in memory {DIM}(faster for small DMGs){RESET}
-
-{BOLD}COMMANDS:{RESET}
-    {GREEN}info{RESET}        <dmg>          Full pipeline overview
-    {GREEN}bench{RESET}       <dmg>          Benchmark pipeline stages
-    {GREEN}dmg{RESET}         ...            DMG (UDIF) container commands
-    {GREEN}fs{RESET}          ...            Filesystem commands (auto-detect HFS+/APFS)
-    {GREEN}hfs{RESET}         ...            HFS+ filesystem commands
-    {GREEN}apfs{RESET}        ...            APFS filesystem commands
-    {GREEN}pkg{RESET}         ...            PKG (XAR) archive commands
-    {GREEN}payload{RESET}     ...            Component payload (PBZX/CPIO) commands
-
-{BOLD}EXAMPLES:{RESET}
-    dpp-tool info Kernel_Debug_Kit.dmg
-    dpp-tool --in-memory fs info small.dmg
-    dpp-tool dmg ls Kernel_Debug_Kit.dmg
-    dpp-tool fs info Kernel_Debug_Kit.dmg
-    dpp-tool fs tree Kernel_Debug_Kit.dmg /Library
-    dpp-tool fs find Kernel_Debug_Kit.dmg -name "*.kext" -type d
-    dpp-tool hfs tree Kernel_Debug_Kit.dmg /Library
-    dpp-tool hfs find Kernel_Debug_Kit.dmg -name "*.kext" -type d
-    dpp-tool apfs info app.dmg
-    dpp-tool apfs ls app.dmg /
-    dpp-tool pkg ls Kernel_Debug_Kit.dmg /KernelDebugKit.pkg
-    dpp-tool payload ls Kernel_Debug_Kit.dmg /path.pkg com.apple.pkg.KDK /
-
-{DIM}Run dpp-tool <command> help for details{RESET}
-"#
-    );
 }

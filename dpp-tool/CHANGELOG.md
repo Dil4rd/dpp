@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-02-15
+
+### Added
+
+- Migrated CLI to clap 4 derive — auto-generated help, `--version`, short flags (`-n`, `-t`, `-d`), typo suggestions, and proper validation errors
+- `--no-color` global flag to disable ANSI output for scripts and CI
+- Automatic terminal detection: ANSI codes are suppressed when stdout is not a terminal (piping to files works cleanly)
+- `--depth N` / `-d N` flag for all `tree` subcommands (previously hardcoded to 3)
+- Hidden `completions` subcommand for bash/zsh/fish shell completion generation
+- `benchmark` alias for the `bench` command
+
+### Changed
+
+- All argument parsing now uses clap derive structs — eliminates ~600 LOC of manual parsing, ~60 hardcoded usage strings, and ~68 `process::exit(1)` calls
+
+### Dependencies
+
+- Added `clap` 4 with derive feature
+- Added `clap_complete` 4 for shell completions
+
 ## [0.3.2] - 2026-02-12
 
 ### Fixed

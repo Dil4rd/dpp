@@ -135,7 +135,7 @@ hfs.read_file_to("/System/Library/Kernels/kernel", &mut out)?;
 
 ## CLI Commands
 
-Global options: `--temp-file` (default, low memory) or `--in-memory` (faster for small DMGs).
+Global options: `--temp-file` (default, low memory), `--in-memory` (faster for small DMGs), `--no-color` (disable ANSI; auto-detected when piped).
 
 | Command | Description |
 |---------|-------------|

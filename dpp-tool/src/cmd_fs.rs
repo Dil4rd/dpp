@@ -1,63 +1,34 @@
 use std::io;
-use std::process;
+use std::path::Path;
 use std::time::Instant;
 
 use crate::style::*;
 use crate::pipeline::{open_pipeline, open_filesystem};
+use crate::{FsCommand, FindArgs};
 
-pub(crate) fn run(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        print_usage();
-        process::exit(1);
-    }
-    match args[0].as_str() {
-        "info" => info(&args[1..], mode),
-        "ls" => ls(&args[1..], mode),
-        "tree" => tree(&args[1..], mode),
-        "cat" => cat(&args[1..], mode),
-        "stat" => stat(&args[1..], mode),
-        "find" => find(&args[1..], mode),
-        "-h" | "--help" | "help" => { print_usage(); Ok(()) }
-        _ => {
-            eprintln!("{RED}Unknown fs command: {}{RESET}", args[0]);
-            print_usage();
-            process::exit(1);
-        }
+pub(crate) fn run(cmd: FsCommand, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    match cmd {
+        FsCommand::Info { dmg } => info(&dmg, mode),
+        FsCommand::Ls { dmg, path } => ls(&dmg, &path, mode),
+        FsCommand::Tree { dmg, path, depth } => tree(&dmg, path.as_deref(), depth, mode),
+        FsCommand::Cat { dmg, path } => cat(&dmg, &path, mode),
+        FsCommand::Stat { dmg, path } => stat(&dmg, &path, mode),
+        FsCommand::Find { dmg, args } => find(&dmg, args, mode),
     }
 }
 
-fn print_usage() {
-    eprintln!(
-        r#"
-{BOLD}dpp-tool fs{RESET} — Auto-detecting filesystem commands (HFS+ / APFS)
-
-{BOLD}COMMANDS:{RESET}
-    {GREEN}info{RESET}   <dmg>                                  Volume info (auto-detect)
-    {GREEN}ls{RESET}     <dmg> <path>                           List directory contents
-    {GREEN}tree{RESET}   <dmg> [path]                           Browse filesystem tree
-    {GREEN}cat{RESET}    <dmg> <path>                           Extract file to stdout
-    {GREEN}stat{RESET}   <dmg> <path>                           File metadata
-    {GREEN}find{RESET}   <dmg> [-name pat] [-type f|d|l]        Find files (default: *.pkg)
-"#
-    );
-}
-
-fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        eprintln!("Usage: dpp-tool fs info <dmg-file>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
+fn info(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let dmg_str = dmg_path.display();
     let mut pipeline = open_pipeline(dmg_path)?;
     let fs = open_filesystem(&mut pipeline, mode)?;
     let vi = fs.volume_info();
 
+    let (d, r) = (dim(), reset());
     let type_label = match vi.fs_type {
         dpp::FsType::HfsPlus => "HFS+ Volume",
         dpp::FsType::Apfs => "APFS Volume",
     };
-    header(&format!("{type_label}: {dmg_path}"));
+    header(&format!("{type_label}: {dmg_str}"));
 
     section("Volume Info");
     if let Some(ref name) = vi.name {
@@ -65,9 +36,9 @@ fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
     }
     if let Some(is_hfsx) = vi.is_hfsx {
         let sig = if is_hfsx {
-            format!("HFSX {DIM}(case-sensitive){RESET}")
+            format!("HFSX {d}(case-sensitive){r}")
         } else {
-            format!("HFS+ {DIM}(case-insensitive){RESET}")
+            format!("HFS+ {d}(case-insensitive){r}")
         };
         kv("Signature", &sig);
     }
@@ -91,15 +62,8 @@ fn info(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 2 {
-        eprintln!("Usage: dpp-tool fs ls <dmg-file> <path>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
-    let path = &args[1];
-
+fn ls(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let dmg_str = dmg_path.display();
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut fs = open_filesystem(&mut pipeline, mode)?;
 
@@ -110,13 +74,14 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
         b_dir.cmp(&a_dir).then(a.name.cmp(&b.name))
     });
 
-    header(&format!("{dmg_path}:{path}"));
+    let (d, r) = (dim(), reset());
+    header(&format!("{dmg_str}:{path}"));
     println!();
     println!(
-        "  {DIM}{:<5} {:>12}  {}{RESET}",
+        "  {d}{:<5} {:>12}  {}{r}",
         "Kind", "Size", "Name"
     );
-    println!("  {DIM}{}{RESET}", "-".repeat(56));
+    println!("  {d}{}{r}", "-".repeat(56));
 
     for entry in &entries {
         let color = fs_kind_color(entry.kind);
@@ -128,7 +93,7 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
         };
 
         println!(
-            "  {DIM}{icon}{RESET}   {:>12}  {color}{}{RESET}",
+            "  {d}{icon}{r}   {:>12}  {color}{}{r}",
             size_str, entry.name
         );
     }
@@ -137,7 +102,7 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
     let file_count = entries.iter().filter(|e| e.kind == dpp::FsEntryKind::File).count();
     let dir_count = entries.iter().filter(|e| e.kind == dpp::FsEntryKind::Directory).count();
     println!(
-        "  {DIM}{} file(s), {} directory(ies){RESET}",
+        "  {d}{} file(s), {} directory(ies){r}",
         file_count, dir_count
     );
     println!();
@@ -145,22 +110,17 @@ fn ls(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-fn tree(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        eprintln!("Usage: dpp-tool fs tree <dmg-file> [path]");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
-    let base_path = if args.len() > 1 { &args[1] } else { "/" };
+fn tree(dmg_path: &Path, path: Option<&str>, max_depth: usize, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let dmg_str = dmg_path.display();
+    let base_path = path.unwrap_or("/");
 
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut fs = open_filesystem(&mut pipeline, mode)?;
 
-    header(&format!("Tree: {dmg_path}:{base_path}"));
+    header(&format!("Tree: {dmg_str}:{base_path}"));
     println!();
 
-    print_tree(&mut fs, base_path, "", 0, 3)?;
+    print_tree(&mut fs, base_path, "", 0, max_depth)?;
     println!();
 
     Ok(())
@@ -173,8 +133,10 @@ fn print_tree(
     depth: usize,
     max_depth: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let (d, r, b) = (dim(), reset(), bold());
+
     if depth > max_depth {
-        println!("  {prefix}{DIM}{TEE} ...{RESET}");
+        println!("  {prefix}{d}{TEE} ...{r}");
         return Ok(());
     }
 
@@ -196,13 +158,13 @@ fn print_tree(
 
         let color = fs_kind_color(entry.kind);
         let size_str = if entry.kind == dpp::FsEntryKind::File {
-            format!("  {DIM}{}{RESET}", format_size(entry.size))
+            format!("  {d}{}{r}", format_size(entry.size))
         } else {
             String::new()
         };
 
         println!(
-            "  {prefix}{DIM}{connector}{RESET} {color}{BOLD}{}{RESET}{size_str}",
+            "  {prefix}{d}{connector}{r} {color}{b}{}{r}{size_str}",
             entry.name
         );
 
@@ -219,15 +181,7 @@ fn print_tree(
     Ok(())
 }
 
-fn cat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 2 {
-        eprintln!("Usage: dpp-tool fs cat <dmg-file> <path>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
-    let path = &args[1];
-
+fn cat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
     let mut fs = pipeline.open_filesystem_with_mode(mode)?;
 
@@ -237,20 +191,13 @@ fn cat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-fn stat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.len() < 2 {
-        eprintln!("Usage: dpp-tool fs stat <dmg-file> <path>");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
-    let path = &args[1];
-
+fn stat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut fs = open_filesystem(&mut pipeline, mode)?;
 
     let stat = fs.stat(path)?;
 
+    let (d, r) = (dim(), reset());
     header(&format!("stat: {path}"));
 
     section("Metadata");
@@ -278,59 +225,16 @@ fn stat(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
         dpp::FsType::HfsPlus => "HFS+ timestamp",
         dpp::FsType::Apfs => "APFS nanosecond timestamp",
     };
-    kv("Created", &format!("{} {DIM}({time_label}){RESET}", stat.create_time));
-    kv("Modified", &format!("{} {DIM}({time_label}){RESET}", stat.modify_time));
+    kv("Created", &format!("{} {d}({time_label}){r}", stat.create_time));
+    kv("Modified", &format!("{} {d}({time_label}){r}", stat.modify_time));
     println!();
 
     Ok(())
 }
 
-fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
-    if args.is_empty() {
-        eprintln!("Usage: dpp-tool fs find <dmg> [-name <pattern>] [-type f|d|l]");
-        eprintln!("       Default (no flags): -name \"*.pkg\" -type f");
-        process::exit(1);
-    }
-
-    let dmg_path = &args[0];
-    let mut name_pattern: Option<String> = None;
-    let mut type_filter: Option<dpp::FsEntryKind> = None;
-
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "-name" => {
-                i += 1;
-                if i >= args.len() {
-                    eprintln!("{RED}error:{RESET} -name requires a pattern argument");
-                    process::exit(1);
-                }
-                name_pattern = Some(args[i].clone());
-            }
-            "-type" => {
-                i += 1;
-                if i >= args.len() {
-                    eprintln!("{RED}error:{RESET} -type requires an argument (f, d, or l)");
-                    process::exit(1);
-                }
-                type_filter = Some(match args[i].as_str() {
-                    "f" => dpp::FsEntryKind::File,
-                    "d" => dpp::FsEntryKind::Directory,
-                    "l" => dpp::FsEntryKind::Symlink,
-                    other => {
-                        eprintln!("{RED}error:{RESET} unknown type '{other}' (use f, d, or l)");
-                        process::exit(1);
-                    }
-                });
-            }
-            other => {
-                eprintln!("{RED}error:{RESET} unknown flag: {other}");
-                eprintln!("Usage: dpp-tool fs find <dmg> [-name <pattern>] [-type f|d|l]");
-                process::exit(1);
-            }
-        }
-        i += 1;
-    }
+fn find(dmg_path: &Path, args: FindArgs, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+    let mut name_pattern = args.name;
+    let mut type_filter = parse_type_filter(args.file_type)?;
 
     // Default: find *.pkg files
     if name_pattern.is_none() && type_filter.is_none() {
@@ -364,27 +268,38 @@ fn find(args: &[String], mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
         })
         .collect();
 
+    let (d, r) = (dim(), reset());
     println!();
     if matches.is_empty() {
-        println!("  {DIM}No matches found{RESET}");
+        println!("  {d}No matches found{r}");
     } else {
         for entry in &matches {
             let color = fs_kind_color(entry.entry.kind);
             let size_str = if entry.entry.kind == dpp::FsEntryKind::File {
-                format!("  {DIM}{}{RESET}", format_size(entry.entry.size))
+                format!("  {d}{}{r}", format_size(entry.entry.size))
             } else {
                 String::new()
             };
             println!(
-                "  {DIM}{}{RESET} {color}{}{RESET}{size_str}",
+                "  {d}{}{r} {color}{}{r}{size_str}",
                 fs_kind_icon(entry.entry.kind),
                 entry.path,
             );
         }
         println!();
-        println!("  {DIM}{} match(es){RESET}", matches.len());
+        println!("  {d}{} match(es){r}", matches.len());
     }
     println!();
 
     Ok(())
+}
+
+fn parse_type_filter(c: Option<char>) -> Result<Option<dpp::FsEntryKind>, Box<dyn std::error::Error>> {
+    match c {
+        None => Ok(None),
+        Some('f') => Ok(Some(dpp::FsEntryKind::File)),
+        Some('d') => Ok(Some(dpp::FsEntryKind::Directory)),
+        Some('l') => Ok(Some(dpp::FsEntryKind::Symlink)),
+        Some(other) => Err(format!("unknown type '{other}' (use f, d, or l)").into()),
+    }
 }

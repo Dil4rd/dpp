@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Synthetic full-pipeline integration tests (DMG → HFS+ → PKG → PBZX → CPIO) that run without external fixtures
 - Tests for `find_packages()`, filesystem auto-detection, and `.pkg` payload extraction
 
+### Changed
+
+- Renamed test fixtures: `Kernel_Debug_Kit_26.3_build_25D5087f.dmg` → `kdk.dmg`, `upscayl-2.15.0-mac.dmg` → `upscayl.dmg`, `kdk.raw` → `hfsp.raw`, `Payload` → `payload.bin`
+
 ## [0.3.3] - 2026-02-16
 
 ### Fixed

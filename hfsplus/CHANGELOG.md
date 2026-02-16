@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `testutil` feature with `HfsPlusImageBuilder` for generating synthetic HFSX images in memory
 - Synthetic image tests exercising volume header parsing, directory listing, file reading, walk, stat, and streaming I/O — all without external fixtures
 
+### Changed
+
+- Renamed test fixture `kdk.raw` → `hfsp.raw`
+
 ## [0.2.1] - 2026-02-16
 
 ### Fixed

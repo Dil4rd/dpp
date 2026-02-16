@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Renamed test fixture `Kernel_Debug_Kit_26.3_build_25D5087f.dmg` → `kdk.dmg`
+
 ## [0.3.1] - 2026-02-16
 
 ### Fixed

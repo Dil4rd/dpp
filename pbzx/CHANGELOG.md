@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Clippy warnings: `repeat().take()` → `repeat_n()`, needless borrow in example
+- Rustdoc warning: escaped `Vec<u8>` in doc comment
+
 ## [0.2.0] - 2026-02-11
 
 ### Added

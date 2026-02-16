@@ -2,11 +2,14 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 
+use crate::pipeline::{open_apfs, open_pipeline};
 use crate::style::*;
-use crate::pipeline::{open_pipeline, open_apfs};
 use crate::{ApfsCommand, FindArgs};
 
-pub(crate) fn run(cmd: ApfsCommand, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(
+    cmd: ApfsCommand,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
         ApfsCommand::Info { dmg } => info(&dmg, mode),
         ApfsCommand::Ls { dmg, path } => ls(&dmg, &path, mode),
@@ -36,7 +39,11 @@ fn info(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-fn ls(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn ls(
+    dmg_path: &Path,
+    path: &str,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let dmg_str = dmg_path.display();
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut apfs = open_apfs(&mut pipeline, mode)?;
@@ -51,10 +58,7 @@ fn ls(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn
     let (d, r) = (dim(), reset());
     header(&format!("{dmg_str}:{path}"));
     println!();
-    println!(
-        "  {d}{:<5} {:>12}  {}{r}",
-        "Kind", "Size", "Name"
-    );
+    println!("  {d}{:<5} {:>12}  Name{r}", "Kind", "Size");
     println!("  {d}{}{r}", "-".repeat(56));
 
     for entry in &entries {
@@ -73,8 +77,14 @@ fn ls(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn
     }
 
     println!();
-    let file_count = entries.iter().filter(|e| e.kind == apfs::EntryKind::File).count();
-    let dir_count = entries.iter().filter(|e| e.kind == apfs::EntryKind::Directory).count();
+    let file_count = entries
+        .iter()
+        .filter(|e| e.kind == apfs::EntryKind::File)
+        .count();
+    let dir_count = entries
+        .iter()
+        .filter(|e| e.kind == apfs::EntryKind::Directory)
+        .count();
     println!(
         "  {d}{} file(s), {} directory(ies){r}",
         file_count, dir_count
@@ -84,7 +94,12 @@ fn ls(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn
     Ok(())
 }
 
-fn tree(dmg_path: &Path, path: Option<&str>, max_depth: usize, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn tree(
+    dmg_path: &Path,
+    path: Option<&str>,
+    max_depth: usize,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let dmg_str = dmg_path.display();
     let base_path = path.unwrap_or("/");
 
@@ -155,7 +170,11 @@ fn print_tree(
     Ok(())
 }
 
-fn cat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn cat(
+    dmg_path: &Path,
+    path: &str,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
     let mut apfs = pipeline.open_apfs_with_mode(mode)?;
 
@@ -165,7 +184,11 @@ fn cat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dy
     Ok(())
 }
 
-fn stat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn stat(
+    dmg_path: &Path,
+    path: &str,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut apfs = open_apfs(&mut pipeline, mode)?;
 
@@ -177,18 +200,31 @@ fn stat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<d
     section("Metadata");
     kv("OID", &stat.oid.to_string());
     kv("Kind", &format!("{:?}", stat.kind));
-    kv("Size", &format!("{} ({})", format_size(stat.size), format_commas(stat.size)));
+    kv(
+        "Size",
+        &format!("{} ({})", format_size(stat.size), format_commas(stat.size)),
+    );
     kv("Permissions", &mode_string(stat.mode));
     kv("Owner", &format!("{}:{}", stat.uid, stat.gid));
     kv("Links", &stat.nlink.to_string());
-    kv("Created", &format!("{} {d}(APFS nanosecond timestamp){r}", stat.create_time));
-    kv("Modified", &format!("{} {d}(APFS nanosecond timestamp){r}", stat.modify_time));
+    kv(
+        "Created",
+        &format!("{} {d}(APFS nanosecond timestamp){r}", stat.create_time),
+    );
+    kv(
+        "Modified",
+        &format!("{} {d}(APFS nanosecond timestamp){r}", stat.modify_time),
+    );
     println!();
 
     Ok(())
 }
 
-fn find(dmg_path: &Path, args: FindArgs, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn find(
+    dmg_path: &Path,
+    args: FindArgs,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut name_pattern = args.name;
     let mut type_filter: Option<apfs::EntryKind> = match args.file_type {
         None => None,

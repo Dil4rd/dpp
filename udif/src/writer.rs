@@ -11,7 +11,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 
-use crate::checksum::{create_checksum_array, crc32, CHECKSUM_TYPE_CRC32, CHECKSUM_TYPE_NONE};
+use crate::checksum::{crc32, create_checksum_array, CHECKSUM_TYPE_CRC32, CHECKSUM_TYPE_NONE};
 use crate::error::{DppError, Result};
 use crate::format::{BlockRun, BlockType, KolyHeader, KOLY_MAGIC, KOLY_SIZE, MISH_MAGIC};
 
@@ -111,8 +111,13 @@ impl<W: Write + Seek> DmgWriter<W> {
 
     /// Add raw disk data as a partition
     pub fn add_partition(&mut self, name: &str, data: &[u8]) -> Result<()> {
-        let sector_count = (data.len() as u64 + SECTOR_SIZE - 1) / SECTOR_SIZE;
-        let first_sector = self.partitions.iter().map(|p| p.first_sector + p.sector_count).max().unwrap_or(0);
+        let sector_count = (data.len() as u64).div_ceil(SECTOR_SIZE);
+        let first_sector = self
+            .partitions
+            .iter()
+            .map(|p| p.first_sector + p.sector_count)
+            .max()
+            .unwrap_or(0);
 
         let mut block_runs = Vec::new();
         let mut data_offset = 0usize;
@@ -132,7 +137,7 @@ impl<W: Write + Seek> DmgWriter<W> {
         while data_offset < data.len() {
             let chunk_end = (data_offset + self.chunk_size).min(data.len());
             let chunk = &data[data_offset..chunk_end];
-            let chunk_sectors = ((chunk.len() as u64 + SECTOR_SIZE - 1) / SECTOR_SIZE).max(1);
+            let chunk_sectors = (chunk.len() as u64).div_ceil(SECTOR_SIZE).max(1);
 
             // Check if chunk is all zeros
             if chunk.iter().all(|&b| b == 0) {
@@ -198,9 +203,12 @@ impl<W: Write + Seek> DmgWriter<W> {
         match self.compression {
             CompressionMethod::Raw => Ok(data.to_vec()),
             CompressionMethod::Zlib => {
-                let mut encoder = ZlibEncoder::new(Vec::new(), Compression::new(self.compression_level));
+                let mut encoder =
+                    ZlibEncoder::new(Vec::new(), Compression::new(self.compression_level));
                 encoder.write_all(data)?;
-                encoder.finish().map_err(|e| DppError::Compression(e.to_string()))
+                encoder
+                    .finish()
+                    .map_err(|e| DppError::Compression(e.to_string()))
             }
             CompressionMethod::Bzip2 => {
                 let mut encoder = bzip2::write::BzEncoder::new(
@@ -208,7 +216,9 @@ impl<W: Write + Seek> DmgWriter<W> {
                     bzip2::Compression::new(self.compression_level),
                 );
                 encoder.write_all(data)?;
-                encoder.finish().map_err(|e| DppError::Compression(e.to_string()))
+                encoder
+                    .finish()
+                    .map_err(|e| DppError::Compression(e.to_string()))
             }
             CompressionMethod::Lzfse => {
                 // Allocate output buffer with some extra space for overhead
@@ -231,7 +241,8 @@ impl<W: Write + Seek> DmgWriter<W> {
             (CHECKSUM_TYPE_NONE, [0u8; 128], [0u8; 128])
         } else {
             // Calculate data fork checksum (clone hasher since finalize consumes it)
-            let data_fork_checksum = create_checksum_array(self.data_fork_hasher.clone().finalize());
+            let data_fork_checksum =
+                create_checksum_array(self.data_fork_hasher.clone().finalize());
 
             // Calculate master checksum (CRC32 of all partition checksums concatenated)
             let mut master_data = Vec::new();
@@ -250,7 +261,12 @@ impl<W: Write + Seek> DmgWriter<W> {
         let plist_length = plist.len() as u64;
 
         // Calculate total sector count
-        let total_sectors: u64 = self.partitions.iter().map(|p| p.first_sector + p.sector_count).max().unwrap_or(0);
+        let total_sectors: u64 = self
+            .partitions
+            .iter()
+            .map(|p| p.first_sector + p.sector_count)
+            .max()
+            .unwrap_or(0);
 
         // Generate and write koly header
         let koly = KolyHeader {
@@ -299,8 +315,14 @@ impl<W: Write + Seek> DmgWriter<W> {
 
         for partition in &self.partitions {
             plist.push_str("\t\t\t<dict>\n");
-            plist.push_str(&format!("\t\t\t\t<key>Attributes</key>\n\t\t\t\t<string>{:#06x}</string>\n", partition.attributes));
-            plist.push_str(&format!("\t\t\t\t<key>CFName</key>\n\t\t\t\t<string>{}</string>\n", partition.name));
+            plist.push_str(&format!(
+                "\t\t\t\t<key>Attributes</key>\n\t\t\t\t<string>{:#06x}</string>\n",
+                partition.attributes
+            ));
+            plist.push_str(&format!(
+                "\t\t\t\t<key>CFName</key>\n\t\t\t\t<string>{}</string>\n",
+                partition.name
+            ));
 
             // Generate mish data
             let mish_data = self.generate_mish(partition)?;
@@ -316,8 +338,14 @@ impl<W: Write + Seek> DmgWriter<W> {
             }
             plist.push_str("\t\t\t\t</data>\n");
 
-            plist.push_str(&format!("\t\t\t\t<key>ID</key>\n\t\t\t\t<string>{}</string>\n", partition.id));
-            plist.push_str(&format!("\t\t\t\t<key>Name</key>\n\t\t\t\t<string>{}</string>\n", partition.name));
+            plist.push_str(&format!(
+                "\t\t\t\t<key>ID</key>\n\t\t\t\t<string>{}</string>\n",
+                partition.id
+            ));
+            plist.push_str(&format!(
+                "\t\t\t\t<key>Name</key>\n\t\t\t\t<string>{}</string>\n",
+                partition.name
+            ));
             plist.push_str("\t\t\t</dict>\n");
         }
 

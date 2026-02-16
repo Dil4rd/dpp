@@ -1,6 +1,6 @@
 use std::io::{Read, Seek, Write};
 
-use crate::error::{XarError, Result};
+use crate::error::{Result, XarError};
 use crate::toc::XarFileType;
 use crate::XarArchive;
 
@@ -51,10 +51,10 @@ impl<R: Read + Seek> PkgReader<R> {
         }
 
         // If no .pkg directories found, this is a component package
-        if components.is_empty() {
-            if self.xar.find("Payload").is_some() || self.xar.find("PackageInfo").is_some() {
-                components.push(String::new());
-            }
+        if components.is_empty()
+            && (self.xar.find("Payload").is_some() || self.xar.find("PackageInfo").is_some())
+        {
+            components.push(String::new());
         }
 
         components

@@ -16,20 +16,42 @@ pub(crate) fn init_color(no_color_flag: bool) {
 
 /// Returns `code` if color is enabled, `""` otherwise.
 fn c(code: &str) -> &str {
-    if NO_COLOR.load(Ordering::Relaxed) { "" } else { code }
+    if NO_COLOR.load(Ordering::Relaxed) {
+        ""
+    } else {
+        code
+    }
 }
 
 // ── ANSI styling ─────────────────────────────────────────────────────────
 
-pub(crate) fn reset() -> &'static str { c("\x1b[0m") }
-pub(crate) fn bold() -> &'static str { c("\x1b[1m") }
-pub(crate) fn dim() -> &'static str { c("\x1b[2m") }
-pub(crate) fn green() -> &'static str { c("\x1b[32m") }
-pub(crate) fn cyan() -> &'static str { c("\x1b[36m") }
-pub(crate) fn yellow() -> &'static str { c("\x1b[33m") }
-pub(crate) fn blue() -> &'static str { c("\x1b[34m") }
-pub(crate) fn red() -> &'static str { c("\x1b[31m") }
-pub(crate) fn white() -> &'static str { c("\x1b[37m") }
+pub(crate) fn reset() -> &'static str {
+    c("\x1b[0m")
+}
+pub(crate) fn bold() -> &'static str {
+    c("\x1b[1m")
+}
+pub(crate) fn dim() -> &'static str {
+    c("\x1b[2m")
+}
+pub(crate) fn green() -> &'static str {
+    c("\x1b[32m")
+}
+pub(crate) fn cyan() -> &'static str {
+    c("\x1b[36m")
+}
+pub(crate) fn yellow() -> &'static str {
+    c("\x1b[33m")
+}
+pub(crate) fn blue() -> &'static str {
+    c("\x1b[34m")
+}
+pub(crate) fn red() -> &'static str {
+    c("\x1b[31m")
+}
+pub(crate) fn white() -> &'static str {
+    c("\x1b[37m")
+}
 
 // ── Box-drawing ──────────────────────────────────────────────────────────
 
@@ -195,7 +217,14 @@ pub(crate) fn kv(key: &str, value: &str) {
 }
 
 pub(crate) fn kv_highlight(key: &str, value: &str) {
-    println!("  {}{key:<24}{} {}{}{value}{}", dim(), reset(), bold(), green(), reset());
+    println!(
+        "  {}{key:<24}{} {}{}{value}{}",
+        dim(),
+        reset(),
+        bold(),
+        green(),
+        reset()
+    );
 }
 
 pub(crate) fn spinner_msg(msg: &str) {

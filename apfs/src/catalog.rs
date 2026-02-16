@@ -20,13 +20,13 @@ pub const J_TYPE_SNAP_NAME: u8 = 11;
 pub const J_TYPE_SIBLING_MAP: u8 = 12;
 
 // Well-known OIDs
-pub const ROOT_DIR_PARENT: u64 = 1;   // Parent OID of root directory
-pub const ROOT_DIR_RECORD: u64 = 2;   // OID of the root directory inode
+pub const ROOT_DIR_PARENT: u64 = 1; // Parent OID of root directory
+pub const ROOT_DIR_RECORD: u64 = 2; // OID of the root directory inode
 
 // Inode types (from BSD mode)
-pub const INODE_DIR_TYPE: u16 = 0o040000;      // S_IFDIR
-pub const INODE_FILE_TYPE: u16 = 0o100000;     // S_IFREG
-pub const INODE_SYMLINK_TYPE: u16 = 0o120000;  // S_IFLNK
+pub const INODE_DIR_TYPE: u16 = 0o040000; // S_IFDIR
+pub const INODE_FILE_TYPE: u16 = 0o100000; // S_IFREG
+pub const INODE_SYMLINK_TYPE: u16 = 0o120000; // S_IFLNK
 
 // Extended field types (INO_EXT_TYPE_*)
 const INO_EXT_TYPE_DSTREAM: u8 = 8;
@@ -61,9 +61,10 @@ impl InodeVal {
     /// Parse from raw catalog value bytes.
     pub fn parse(data: &[u8]) -> Result<Self> {
         if data.len() < Self::FIXED_SIZE {
-            return Err(ApfsError::CorruptedData(
-                format!("inode value too short: {} bytes", data.len()),
-            ));
+            return Err(ApfsError::CorruptedData(format!(
+                "inode value too short: {} bytes",
+                data.len()
+            )));
         }
         let mut cursor = Cursor::new(data);
         let parent_id = cursor.read_u64::<LittleEndian>()?;
@@ -133,9 +134,12 @@ impl InodeVal {
         for i in 0..xf_num_exts {
             let entry_off = entries_start + i * 4;
             let x_type = xfield_data[entry_off];
-            let x_size = u16::from_le_bytes([xfield_data[entry_off + 2], xfield_data[entry_off + 3]]) as usize;
+            let x_size =
+                u16::from_le_bytes([xfield_data[entry_off + 2], xfield_data[entry_off + 3]])
+                    as usize;
 
-            if x_type == INO_EXT_TYPE_DSTREAM && x_size >= 8 && data_offset + 8 <= xfield_data.len() {
+            if x_type == INO_EXT_TYPE_DSTREAM && x_size >= 8 && data_offset + 8 <= xfield_data.len()
+            {
                 // j_dstream_t.size is the first u64
                 let size = u64::from_le_bytes([
                     xfield_data[data_offset],
@@ -185,9 +189,10 @@ pub struct DrecVal {
 impl DrecVal {
     pub fn parse(data: &[u8]) -> Result<Self> {
         if data.len() < 18 {
-            return Err(ApfsError::CorruptedData(
-                format!("drec value too short: {} bytes", data.len()),
-            ));
+            return Err(ApfsError::CorruptedData(format!(
+                "drec value too short: {} bytes",
+                data.len()
+            )));
         }
         let mut cursor = Cursor::new(data);
         let file_id = cursor.read_u64::<LittleEndian>()?;
@@ -208,9 +213,9 @@ impl DrecVal {
 }
 
 // DT_* constants for directory entry types
-pub const DT_REG: u16 = 8;    // Regular file
-pub const DT_DIR: u16 = 4;    // Directory
-pub const DT_LNK: u16 = 10;   // Symbolic link
+pub const DT_REG: u16 = 8; // Regular file
+pub const DT_DIR: u16 = 4; // Directory
+pub const DT_LNK: u16 = 10; // Symbolic link
 
 /// File extent value (j_file_extent_val_t)
 #[derive(Debug, Clone)]
@@ -223,9 +228,10 @@ pub struct FileExtentVal {
 impl FileExtentVal {
     pub fn parse(data: &[u8]) -> Result<Self> {
         if data.len() < 24 {
-            return Err(ApfsError::CorruptedData(
-                format!("file extent value too short: {} bytes", data.len()),
-            ));
+            return Err(ApfsError::CorruptedData(format!(
+                "file extent value too short: {} bytes",
+                data.len()
+            )));
         }
         let mut cursor = Cursor::new(data);
         let flags_and_length = cursor.read_u64::<LittleEndian>()?;
@@ -251,8 +257,14 @@ fn decode_catalog_key(key_bytes: &[u8]) -> Result<(u64, u8)> {
         return Err(ApfsError::InvalidBTree("catalog key too short".into()));
     }
     let obj_id_and_type = u64::from_le_bytes([
-        key_bytes[0], key_bytes[1], key_bytes[2], key_bytes[3],
-        key_bytes[4], key_bytes[5], key_bytes[6], key_bytes[7],
+        key_bytes[0],
+        key_bytes[1],
+        key_bytes[2],
+        key_bytes[3],
+        key_bytes[4],
+        key_bytes[5],
+        key_bytes[6],
+        key_bytes[7],
     ]);
 
     let obj_id = obj_id_and_type & 0x0FFFFFFFFFFFFFFF;
@@ -266,26 +278,34 @@ fn decode_catalog_key(key_bytes: &[u8]) -> Result<(u64, u8)> {
 /// followed by the UTF-8 name.
 fn decode_drec_name(key_bytes: &[u8]) -> Result<String> {
     if key_bytes.len() < 12 {
-        return Err(ApfsError::InvalidBTree("drec key too short for name".into()));
+        return Err(ApfsError::InvalidBTree(
+            "drec key too short for name".into(),
+        ));
     }
 
     // key[8..12]: name_len_and_hash (u32 LE)
     // name_len = lower 10 bits
-    let name_len_and_hash = u32::from_le_bytes([key_bytes[8], key_bytes[9], key_bytes[10], key_bytes[11]]);
+    let name_len_and_hash =
+        u32::from_le_bytes([key_bytes[8], key_bytes[9], key_bytes[10], key_bytes[11]]);
     let name_len = (name_len_and_hash & 0x000003FF) as usize;
 
     let name_start = 12;
     let name_end = name_start + name_len;
 
     if name_end > key_bytes.len() {
-        return Err(ApfsError::InvalidBTree(
-            format!("drec name extends beyond key: name_end={}, key_len={}", name_end, key_bytes.len()),
-        ));
+        return Err(ApfsError::InvalidBTree(format!(
+            "drec name extends beyond key: name_end={}, key_len={}",
+            name_end,
+            key_bytes.len()
+        )));
     }
 
     // Name is null-terminated UTF-8
     let name_bytes = &key_bytes[name_start..name_end];
-    let nul_pos = name_bytes.iter().position(|&b| b == 0).unwrap_or(name_bytes.len());
+    let nul_pos = name_bytes
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(name_bytes.len());
     Ok(String::from_utf8_lossy(&name_bytes[..nul_pos]).to_string())
 }
 
@@ -306,7 +326,7 @@ pub fn list_directory<R: Read + Seek>(
             Ok((oid, j_type)) => {
                 match compare_catalog_keys(oid, j_type, parent_oid, J_TYPE_DIR_REC) {
                     std::cmp::Ordering::Less => Some(false), // before target, keep scanning
-                    std::cmp::Ordering::Equal => Some(true),  // match (DIR_REC entries have extra name data but oid+type matches)
+                    std::cmp::Ordering::Equal => Some(true), // match (DIR_REC entries have extra name data but oid+type matches)
                     std::cmp::Ordering::Greater => {
                         // For DIR_REC matching: same OID with type > DIR_REC, or higher OID
                         if oid == parent_oid && j_type == J_TYPE_DIR_REC {
@@ -325,7 +345,8 @@ pub fn list_directory<R: Read + Seek>(
         reader,
         catalog_root,
         block_size,
-        0, 0, // variable-size keys and values
+        0,
+        0, // variable-size keys and values
         &range_fn,
         Some(omap_root),
     )?;
@@ -349,12 +370,11 @@ pub fn list_directory<R: Read + Seek>(
         };
 
         // Look up the inode for size/timestamps
-        let (size, create_time, modify_time) = match lookup_inode(
-            reader, catalog_root, omap_root, block_size, drec.file_id,
-        ) {
-            Ok(inode) => (inode.size(), inode.create_time, inode.modify_time),
-            Err(_) => (0, 0, 0),
-        };
+        let (size, create_time, modify_time) =
+            match lookup_inode(reader, catalog_root, omap_root, block_size, drec.file_id) {
+                Ok(inode) => (inode.size(), inode.create_time, inode.modify_time),
+                Err(_) => (0, 0, 0),
+            };
 
         dir_entries.push(DirEntry {
             name,
@@ -395,7 +415,8 @@ pub fn lookup_inode<R: Read + Seek>(
         reader,
         catalog_root,
         block_size,
-        0, 0,
+        0,
+        0,
         &compare_fn,
         Some(omap_root),
     )?;
@@ -435,7 +456,8 @@ pub fn lookup_extents<R: Read + Seek>(
         reader,
         catalog_root,
         block_size,
-        0, 0,
+        0,
+        0,
         &range_fn,
         Some(omap_root),
     )?;
@@ -469,7 +491,14 @@ pub fn resolve_path<R: Read + Seek>(
 
     for (i, component) in components.iter().enumerate() {
         // Look up the directory record for this component under current_parent
-        let drec = lookup_drec(reader, omap_root, catalog_root, block_size, current_parent, component)?;
+        let drec = lookup_drec(
+            reader,
+            omap_root,
+            catalog_root,
+            block_size,
+            current_parent,
+            component,
+        )?;
 
         if i == components.len() - 1 {
             // Final component — look up its inode
@@ -479,9 +508,7 @@ pub fn resolve_path<R: Read + Seek>(
 
         // Not the final component — it must be a directory
         if drec.file_type() != DT_DIR {
-            return Err(ApfsError::NotADirectory(
-                components[..=i].join("/"),
-            ));
+            return Err(ApfsError::NotADirectory(components[..=i].join("/")));
         }
 
         current_parent = drec.file_id;
@@ -521,7 +548,8 @@ fn lookup_drec<R: Read + Seek>(
         reader,
         catalog_root,
         block_size,
-        0, 0,
+        0,
+        0,
         &range_fn,
         Some(omap_root),
     )?;
@@ -549,8 +577,8 @@ fn compare_catalog_keys(oid_a: u64, type_a: u8, oid_b: u64, type_b: u8) -> std::
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::superblock;
     use crate::omap as omap_mod;
+    use crate::superblock;
     use std::io::BufReader;
 
     fn open_volume() -> (BufReader<std::fs::File>, u64, u64, u32) {
@@ -561,16 +589,21 @@ mod tests {
         let latest = superblock::find_latest_nxsb(&mut reader, &nxsb).unwrap();
         let block_size = latest.block_size;
 
-        let container_omap_root = omap_mod::read_omap_tree_root(&mut reader, latest.omap_oid, block_size).unwrap();
+        let container_omap_root =
+            omap_mod::read_omap_tree_root(&mut reader, latest.omap_oid, block_size).unwrap();
 
         let vol_oid = latest.fs_oids.iter().find(|&&o| o != 0).copied().unwrap();
-        let vol_block = omap_mod::omap_lookup(&mut reader, container_omap_root, block_size, vol_oid).unwrap();
+        let vol_block =
+            omap_mod::omap_lookup(&mut reader, container_omap_root, block_size, vol_oid).unwrap();
 
         let vol_data = crate::object::read_block(&mut reader, vol_block, block_size).unwrap();
         let vol_sb = superblock::ApfsSuperblock::parse(&vol_data).unwrap();
 
-        let vol_omap_root = omap_mod::read_omap_tree_root(&mut reader, vol_sb.omap_oid, block_size).unwrap();
-        let catalog_root = omap_mod::omap_lookup(&mut reader, vol_omap_root, block_size, vol_sb.root_tree_oid).unwrap();
+        let vol_omap_root =
+            omap_mod::read_omap_tree_root(&mut reader, vol_sb.omap_oid, block_size).unwrap();
+        let catalog_root =
+            omap_mod::omap_lookup(&mut reader, vol_omap_root, block_size, vol_sb.root_tree_oid)
+                .unwrap();
 
         (reader, catalog_root, vol_omap_root, block_size)
     }
@@ -581,7 +614,14 @@ mod tests {
     fn test_list_root() {
         let (mut reader, catalog_root, omap_root, block_size) = open_volume();
 
-        let entries = list_directory(&mut reader, catalog_root, omap_root, block_size, ROOT_DIR_RECORD).unwrap();
+        let entries = list_directory(
+            &mut reader,
+            catalog_root,
+            omap_root,
+            block_size,
+            ROOT_DIR_RECORD,
+        )
+        .unwrap();
         assert!(!entries.is_empty(), "Root directory should have entries");
     }
 
@@ -591,10 +631,18 @@ mod tests {
     fn test_resolve_path() {
         let (mut reader, catalog_root, omap_root, block_size) = open_volume();
 
-        let entries = list_directory(&mut reader, catalog_root, omap_root, block_size, ROOT_DIR_RECORD).unwrap();
+        let entries = list_directory(
+            &mut reader,
+            catalog_root,
+            omap_root,
+            block_size,
+            ROOT_DIR_RECORD,
+        )
+        .unwrap();
         let first = entries.first().expect("Root should have entries");
         let path = format!("/{}", first.name);
-        let (oid, inode) = resolve_path(&mut reader, catalog_root, omap_root, block_size, &path).unwrap();
+        let (oid, inode) =
+            resolve_path(&mut reader, catalog_root, omap_root, block_size, &path).unwrap();
         assert!(oid > 0);
         assert!(inode.kind() != 0);
     }
@@ -603,9 +651,9 @@ mod tests {
     fn test_drec_val_parse() {
         // Construct DrecVal bytes: file_id(u64) + date_added(i64) + flags(u16)
         let mut data = Vec::new();
-        data.extend_from_slice(&42u64.to_le_bytes());       // file_id = 42
-        data.extend_from_slice(&1000i64.to_le_bytes());     // date_added = 1000
-        data.extend_from_slice(&(DT_DIR as u16).to_le_bytes()); // flags = DT_DIR (4)
+        data.extend_from_slice(&42u64.to_le_bytes()); // file_id = 42
+        data.extend_from_slice(&1000i64.to_le_bytes()); // date_added = 1000
+        data.extend_from_slice(&DT_DIR.to_le_bytes()); // flags = DT_DIR (4)
 
         let drec = DrecVal::parse(&data).unwrap();
         assert_eq!(drec.file_id, 42);
@@ -620,8 +668,8 @@ mod tests {
         let flags_and_length: u64 = 0xAB00_0000_0000_1000; // upper byte = flags 0xAB, lower 56 = 0x1000
         let mut data = Vec::new();
         data.extend_from_slice(&flags_and_length.to_le_bytes());
-        data.extend_from_slice(&100u64.to_le_bytes());  // phys_block_num = 100
-        data.extend_from_slice(&0u64.to_le_bytes());    // crypto_id = 0
+        data.extend_from_slice(&100u64.to_le_bytes()); // phys_block_num = 100
+        data.extend_from_slice(&0u64.to_le_bytes()); // crypto_id = 0
 
         let extent = FileExtentVal::parse(&data).unwrap();
         assert_eq!(extent.length(), 0x1000);

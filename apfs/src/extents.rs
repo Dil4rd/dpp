@@ -110,11 +110,12 @@ impl<R: Read + Seek> Read for ApfsForkReader<'_, R> {
         while total_read < to_read {
             let logical_pos = self.position + total_read as u64;
 
-            let physical_pos = self.logical_to_physical(logical_pos)
-                .ok_or_else(|| std::io::Error::new(
+            let physical_pos = self.logical_to_physical(logical_pos).ok_or_else(|| {
+                std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
                     "logical offset beyond extent map",
-                ))?;
+                )
+            })?;
 
             // Calculate contiguous bytes available in this extent
             let mut extent_remaining = 0u64;
@@ -128,7 +129,8 @@ impl<R: Read + Seek> Read for ApfsForkReader<'_, R> {
             let chunk_size = ((to_read - total_read) as u64).min(extent_remaining) as usize;
 
             self.reader.seek(SeekFrom::Start(physical_pos))?;
-            self.reader.read_exact(&mut buf[total_read..total_read + chunk_size])?;
+            self.reader
+                .read_exact(&mut buf[total_read..total_read + chunk_size])?;
 
             total_read += chunk_size;
         }
@@ -169,8 +171,9 @@ mod tests {
         let mut vol = crate::ApfsVolume::open(reader).unwrap();
 
         let walk = vol.walk().unwrap();
-        let small_file = walk.iter()
-            .find(|e| e.entry.kind == crate::EntryKind::File && e.entry.size > 0 && e.entry.size < 100_000);
+        let small_file = walk.iter().find(|e| {
+            e.entry.kind == crate::EntryKind::File && e.entry.size > 0 && e.entry.size < 100_000
+        });
 
         let entry = small_file.expect("Should find a small file in the test image");
         let data = vol.read_file(&entry.path).unwrap();

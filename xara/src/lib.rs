@@ -1,13 +1,13 @@
 pub mod error;
 pub mod header;
-pub mod toc;
 pub mod heap;
 pub mod pkg;
+pub mod toc;
 
-pub use error::{XarError, Result};
+pub use error::{Result, XarError};
 pub use header::XarHeader;
-pub use toc::{XarFile, XarFileType, XarFileData};
 pub use pkg::PkgReader;
+pub use toc::{XarFile, XarFileData, XarFileType};
 
 use std::io::{Read, Seek, Write};
 
@@ -70,11 +70,11 @@ mod tests {
         // Build a 28-byte XAR header (big-endian)
         let mut buf = Vec::new();
         buf.extend_from_slice(&0x78617221u32.to_be_bytes()); // magic "xar!"
-        buf.extend_from_slice(&28u16.to_be_bytes());         // header_size
-        buf.extend_from_slice(&1u16.to_be_bytes());          // version
-        buf.extend_from_slice(&100u64.to_be_bytes());        // toc_compressed_len
-        buf.extend_from_slice(&200u64.to_be_bytes());        // toc_uncompressed_len
-        buf.extend_from_slice(&1u32.to_be_bytes());          // checksum_algo = SHA1
+        buf.extend_from_slice(&28u16.to_be_bytes()); // header_size
+        buf.extend_from_slice(&1u16.to_be_bytes()); // version
+        buf.extend_from_slice(&100u64.to_be_bytes()); // toc_compressed_len
+        buf.extend_from_slice(&200u64.to_be_bytes()); // toc_uncompressed_len
+        buf.extend_from_slice(&1u32.to_be_bytes()); // checksum_algo = SHA1
 
         let mut cursor = Cursor::new(&buf);
         let hdr = header::parse_header(&mut cursor).unwrap();

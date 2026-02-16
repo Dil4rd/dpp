@@ -63,7 +63,8 @@ fn bench_stat(c: &mut Criterion) {
 
     // Find a file path to stat
     let walk = vol.walk().unwrap();
-    let file_path = walk.iter()
+    let file_path = walk
+        .iter()
         .find(|e| e.entry.kind == apfs::EntryKind::File && e.entry.size > 0)
         .map(|e| e.path.clone());
 
@@ -86,8 +87,11 @@ fn bench_read_small_file(c: &mut Criterion) {
 
     // Find a small file to read
     let walk = vol.walk().unwrap();
-    let file_path = walk.iter()
-        .find(|e| e.entry.kind == apfs::EntryKind::File && e.entry.size > 0 && e.entry.size < 100_000)
+    let file_path = walk
+        .iter()
+        .find(|e| {
+            e.entry.kind == apfs::EntryKind::File && e.entry.size > 0 && e.entry.size < 100_000
+        })
         .map(|e| e.path.clone());
 
     if let Some(path) = file_path {
@@ -99,5 +103,12 @@ fn bench_read_small_file(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, bench_open, bench_list_root, bench_walk_all, bench_stat, bench_read_small_file);
+criterion_group!(
+    benches,
+    bench_open,
+    bench_list_root,
+    bench_walk_all,
+    bench_stat,
+    bench_read_small_file
+);
 criterion_main!(benches);

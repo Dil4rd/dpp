@@ -57,7 +57,11 @@ impl PyDmgPipeline {
     #[getter]
     fn partitions(&mut self) -> PyResult<Vec<PyPartitionInfo>> {
         let pipeline = self.pipeline()?;
-        Ok(pipeline.partitions().iter().map(PyPartitionInfo::from).collect())
+        Ok(pipeline
+            .partitions()
+            .iter()
+            .map(PyPartitionInfo::from)
+            .collect())
     }
 
     /// Open the filesystem (auto-detects HFS+/APFS).
@@ -136,20 +140,18 @@ impl PyFilesystemHandle {
     /// The filesystem type: "hfsplus" or "apfs".
     #[getter]
     fn fs_type(&self) -> PyResult<String> {
-        let handle = self
-            .inner
-            .as_ref()
-            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("FilesystemHandle is closed"))?;
+        let handle = self.inner.as_ref().ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("FilesystemHandle is closed")
+        })?;
         Ok(format!("{:?}", handle.fs_type()).to_lowercase())
     }
 
     /// Volume metadata.
     #[getter]
     fn volume_info(&self) -> PyResult<PyVolumeInfo> {
-        let handle = self
-            .inner
-            .as_ref()
-            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("FilesystemHandle is closed"))?;
+        let handle = self.inner.as_ref().ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("FilesystemHandle is closed")
+        })?;
         Ok(PyVolumeInfo::from(&handle.volume_info()))
     }
 

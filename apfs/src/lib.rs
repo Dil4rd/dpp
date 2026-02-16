@@ -1,11 +1,11 @@
+pub mod btree;
+pub mod catalog;
 pub mod error;
+pub mod extents;
 pub mod fletcher;
 pub mod object;
-pub mod superblock;
-pub mod btree;
 pub mod omap;
-pub mod catalog;
-pub mod extents;
+pub mod superblock;
 
 pub use error::{ApfsError, Result};
 
@@ -89,10 +89,13 @@ impl<R: Read + Seek> ApfsVolume<R> {
         let block_size = nxsb.block_size;
 
         // Step 3: Read container OMAP
-        let container_omap_root = omap::read_omap_tree_root(&mut reader, nxsb.omap_oid, block_size)?;
+        let container_omap_root =
+            omap::read_omap_tree_root(&mut reader, nxsb.omap_oid, block_size)?;
 
         // Step 4: Find first non-zero volume OID
-        let vol_oid = nxsb.fs_oids.iter()
+        let vol_oid = nxsb
+            .fs_oids
+            .iter()
             .find(|&&o| o != 0)
             .copied()
             .ok_or(ApfsError::NoVolume)?;
@@ -105,11 +108,15 @@ impl<R: Read + Seek> ApfsVolume<R> {
         let vol_sb = superblock::ApfsSuperblock::parse(&vol_data)?;
 
         // Step 7: Read volume OMAP
-        let vol_omap_root_block = omap::read_omap_tree_root(&mut reader, vol_sb.omap_oid, block_size)?;
+        let vol_omap_root_block =
+            omap::read_omap_tree_root(&mut reader, vol_sb.omap_oid, block_size)?;
 
         // Step 8: Resolve catalog root tree OID via volume OMAP
         let catalog_root_block = omap::omap_lookup(
-            &mut reader, vol_omap_root_block, block_size, vol_sb.root_tree_oid,
+            &mut reader,
+            vol_omap_root_block,
+            block_size,
+            vol_sb.root_tree_oid,
         )?;
 
         // Step 9: Store state
@@ -353,13 +360,17 @@ mod tests {
         let mut vol = ApfsVolume::open(reader).unwrap();
 
         let walk = vol.walk().unwrap();
-        let small_file = walk.iter()
-            .find(|e| e.entry.kind == EntryKind::File && e.entry.size > 0 && e.entry.size < 1_000_000);
+        let small_file = walk.iter().find(|e| {
+            e.entry.kind == EntryKind::File && e.entry.size > 0 && e.entry.size < 1_000_000
+        });
 
         let entry = small_file.expect("Should find a small file in the test image");
         let data = vol.read_file(&entry.path).unwrap();
-        assert_eq!(data.len() as u64, entry.entry.size,
-            "Read size should match stat size");
+        assert_eq!(
+            data.len() as u64,
+            entry.entry.size,
+            "Read size should match stat size"
+        );
 
         let stat = vol.stat(&entry.path).unwrap();
         assert_eq!(stat.size, entry.entry.size);

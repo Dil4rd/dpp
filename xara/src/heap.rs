@@ -1,7 +1,7 @@
 use flate2::read::ZlibDecoder;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use crate::error::{XarError, Result};
+use crate::error::{Result, XarError};
 use crate::toc::XarFile;
 
 /// Read a file entry's data from the heap.
@@ -35,7 +35,8 @@ pub fn read_entry<R: Read + Seek, W: Write>(
         "application/x-gzip" => {
             let mut decoder = flate2::read::GzDecoder::new(&compressed[..]);
             let mut decompressed = Vec::with_capacity(data.size as usize);
-            decoder.read_to_end(&mut decompressed)
+            decoder
+                .read_to_end(&mut decompressed)
                 .map_err(|e| XarError::DecompressionFailed(format!("gzip: {}", e)))?;
             let len = decompressed.len() as u64;
             writer.write_all(&decompressed)?;
@@ -50,7 +51,8 @@ pub fn read_entry<R: Read + Seek, W: Write>(
         "application/zlib" | "application/x-zlib" => {
             let mut decoder = ZlibDecoder::new(&compressed[..]);
             let mut decompressed = Vec::with_capacity(data.size as usize);
-            decoder.read_to_end(&mut decompressed)
+            decoder
+                .read_to_end(&mut decompressed)
                 .map_err(|e| XarError::DecompressionFailed(format!("zlib: {}", e)))?;
             let len = decompressed.len() as u64;
             writer.write_all(&decompressed)?;

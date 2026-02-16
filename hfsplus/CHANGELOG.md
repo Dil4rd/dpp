@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Clippy warnings: `derivable_impls`, `manual_is_multiple_of`, `ptr_arg`, `empty_line_after_doc_comments`
+- Rustdoc warnings: escaped `Vec<u16>` in doc comments
+
 ## [0.2.0] - 2026-02-11
 
 ### Changed

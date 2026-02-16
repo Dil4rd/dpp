@@ -2,9 +2,9 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 
+use crate::pipeline::{open_filesystem, open_pipeline};
 use crate::style::*;
-use crate::pipeline::{open_pipeline, open_filesystem};
-use crate::{PkgCommand, FindArgs};
+use crate::{FindArgs, PkgCommand};
 
 /// Build a sort key that produces depth-first tree order (dirs before files at each level).
 fn tree_sort_key(path: &str, is_dir: bool) -> String {
@@ -18,16 +18,31 @@ fn tree_sort_key(path: &str, is_dir: bool) -> String {
     key_parts.join("/")
 }
 
-pub(crate) fn run(cmd: PkgCommand, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(
+    cmd: PkgCommand,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
         PkgCommand::Info { dmg, pkg_path } => info(&dmg, &pkg_path, mode),
         PkgCommand::Ls { dmg, pkg_path } => ls(&dmg, &pkg_path, mode),
-        PkgCommand::Find { dmg, pkg_path, args } => find(&dmg, &pkg_path, args, mode),
-        PkgCommand::Cat { dmg, pkg_path, file } => cat(&dmg, &pkg_path, &file, mode),
+        PkgCommand::Find {
+            dmg,
+            pkg_path,
+            args,
+        } => find(&dmg, &pkg_path, args, mode),
+        PkgCommand::Cat {
+            dmg,
+            pkg_path,
+            file,
+        } => cat(&dmg, &pkg_path, &file, mode),
     }
 }
 
-fn info(dmg_path: &Path, pkg_path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn info(
+    dmg_path: &Path,
+    pkg_path: &str,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut fs = open_filesystem(&mut pipeline, mode)?;
 
@@ -52,22 +67,36 @@ fn info(dmg_path: &Path, pkg_path: &str, mode: dpp::ExtractMode) -> Result<(), B
     let xar_header = pkg.xar().header();
     kv("XAR version", &xar_header.version.to_string());
     kv("Checksum", &format!("{:?}", xar_header.checksum_algo));
-    kv("TOC size", &format!(
-        "{} compressed, {} uncompressed",
-        format_size(xar_header.toc_compressed_len),
-        format_size(xar_header.toc_uncompressed_len),
-    ));
+    kv(
+        "TOC size",
+        &format!(
+            "{} compressed, {} uncompressed",
+            format_size(xar_header.toc_compressed_len),
+            format_size(xar_header.toc_uncompressed_len),
+        ),
+    );
 
     let files = pkg.xar().files();
-    let file_count = files.iter().filter(|f| f.file_type == xara::XarFileType::File).count();
-    let dir_count = files.iter().filter(|f| f.file_type == xara::XarFileType::Directory).count();
-    let symlink_count = files.iter().filter(|f| f.file_type == xara::XarFileType::Symlink).count();
+    let file_count = files
+        .iter()
+        .filter(|f| f.file_type == xara::XarFileType::File)
+        .count();
+    let dir_count = files
+        .iter()
+        .filter(|f| f.file_type == xara::XarFileType::Directory)
+        .count();
+    let symlink_count = files
+        .iter()
+        .filter(|f| f.file_type == xara::XarFileType::Symlink)
+        .count();
 
-    let total_compressed: u64 = files.iter()
+    let total_compressed: u64 = files
+        .iter()
         .filter_map(|f| f.data.as_ref())
         .map(|d| d.length)
         .sum();
-    let total_uncompressed: u64 = files.iter()
+    let total_uncompressed: u64 = files
+        .iter()
         .filter_map(|f| f.data.as_ref())
         .map(|d| d.size)
         .sum();
@@ -91,7 +120,11 @@ fn info(dmg_path: &Path, pkg_path: &str, mode: dpp::ExtractMode) -> Result<(), B
     if !components.is_empty() {
         section("Components");
         for (i, comp) in components.iter().enumerate() {
-            let connector = if i == components.len() - 1 { ELBOW } else { TEE };
+            let connector = if i == components.len() - 1 {
+                ELBOW
+            } else {
+                TEE
+            };
             let name = if comp.is_empty() {
                 format!("{d}(root){r}")
             } else {
@@ -105,7 +138,11 @@ fn info(dmg_path: &Path, pkg_path: &str, mode: dpp::ExtractMode) -> Result<(), B
             };
             let payload_info = if let Some(payload_file) = pkg.xar().find(&payload_path) {
                 if let Some(data) = &payload_file.data {
-                    format!("  {d}{} compressed, {} uncompressed{r}", format_size(data.length), format_size(data.size))
+                    format!(
+                        "  {d}{} compressed, {} uncompressed{r}",
+                        format_size(data.length),
+                        format_size(data.size)
+                    )
                 } else {
                     String::new()
                 }
@@ -121,7 +158,11 @@ fn info(dmg_path: &Path, pkg_path: &str, mode: dpp::ExtractMode) -> Result<(), B
     Ok(())
 }
 
-fn ls(dmg_path: &Path, pkg_path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn ls(
+    dmg_path: &Path,
+    pkg_path: &str,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut fs = open_filesystem(&mut pipeline, mode)?;
 
@@ -156,16 +197,18 @@ fn ls(dmg_path: &Path, pkg_path: &str, mode: dpp::ExtractMode) -> Result<(), Box
             xara::XarFileType::Symlink => cn,
             xara::XarFileType::File => "",
         };
-        println!(
-            "  {type_color}{:<50}{r} {:>12}",
-            file.path,
-            size_str
-        );
+        println!("  {type_color}{:<50}{r} {:>12}", file.path, size_str);
     }
 
     println!();
-    let file_count = sorted.iter().filter(|f| f.file_type == xara::XarFileType::File).count();
-    let dir_count = sorted.iter().filter(|f| f.file_type == xara::XarFileType::Directory).count();
+    let file_count = sorted
+        .iter()
+        .filter(|f| f.file_type == xara::XarFileType::File)
+        .count();
+    let dir_count = sorted
+        .iter()
+        .filter(|f| f.file_type == xara::XarFileType::Directory)
+        .count();
     println!(
         "  {d}{} file(s), {} directory(ies){r}",
         file_count, dir_count
@@ -175,7 +218,12 @@ fn ls(dmg_path: &Path, pkg_path: &str, mode: dpp::ExtractMode) -> Result<(), Box
     Ok(())
 }
 
-fn find(dmg_path: &Path, pkg_path: &str, args: FindArgs, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn find(
+    dmg_path: &Path,
+    pkg_path: &str,
+    args: FindArgs,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut name_pattern = args.name;
     let mut type_filter: Option<xara::XarFileType> = match args.file_type {
         None => None,
@@ -238,10 +286,7 @@ fn find(dmg_path: &Path, pkg_path: &str, args: FindArgs, mode: dpp::ExtractMode)
                 Some(data) => format!("  {d}{}{r}", format_size(data.size)),
                 None => String::new(),
             };
-            println!(
-                "  {d}{icon}{r} {type_color}{}{r}{size_str}",
-                file.path,
-            );
+            println!("  {d}{icon}{r} {type_color}{}{r}{size_str}", file.path,);
         }
         println!();
         println!("  {d}{} match(es){r}", matches.len());
@@ -251,12 +296,19 @@ fn find(dmg_path: &Path, pkg_path: &str, args: FindArgs, mode: dpp::ExtractMode)
     Ok(())
 }
 
-fn cat(dmg_path: &Path, pkg_path: &str, file_path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn cat(
+    dmg_path: &Path,
+    pkg_path: &str,
+    file_path: &str,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
     let mut fs = pipeline.open_filesystem_with_mode(mode)?;
     let mut pkg = fs.open_pkg(pkg_path)?;
 
-    let xar_file = pkg.xar().find(file_path)
+    let xar_file = pkg
+        .xar()
+        .find(file_path)
         .ok_or_else(|| format!("File not found in XAR: {file_path}"))?
         .clone();
 

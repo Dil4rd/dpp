@@ -136,11 +136,9 @@ pub struct PyCpioBuilder {
 
 impl PyCpioBuilder {
     fn builder(&mut self) -> PyResult<&mut dpp::pbzx::CpioBuilder> {
-        self.inner
-            .as_mut()
-            .ok_or_else(|| {
-                pyo3::exceptions::PyRuntimeError::new_err("CpioBuilder already finished")
-            })
+        self.inner.as_mut().ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("CpioBuilder already finished")
+        })
     }
 }
 
@@ -226,7 +224,9 @@ pub struct PyPbzxWriter {
 }
 
 impl PyPbzxWriter {
-    fn writer(&mut self) -> PyResult<&mut dpp::pbzx::PbzxWriter<std::io::BufWriter<std::fs::File>>> {
+    fn writer(
+        &mut self,
+    ) -> PyResult<&mut dpp::pbzx::PbzxWriter<std::io::BufWriter<std::fs::File>>> {
         self.inner
             .as_mut()
             .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("PbzxWriter already finished"))
@@ -257,9 +257,7 @@ impl PyPbzxWriter {
         if let Some(cl) = compression_level {
             pbzx = pbzx.compression_level(cl);
         }
-        Ok(PyPbzxWriter {
-            inner: Some(pbzx),
-        })
+        Ok(PyPbzxWriter { inner: Some(pbzx) })
     }
 
     /// Write CPIO data to the PBZX archive.

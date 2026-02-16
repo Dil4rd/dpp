@@ -97,8 +97,8 @@ mod tests {
         assert_eq!(array[2], 0xBE);
         assert_eq!(array[3], 0xEF);
         // Rest should be zeros
-        for i in 4..128 {
-            assert_eq!(array[i], 0);
+        for val in &array[4..128] {
+            assert_eq!(*val, 0);
         }
     }
 

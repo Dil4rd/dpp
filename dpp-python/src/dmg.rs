@@ -37,9 +37,8 @@ impl PyDmgArchive {
     /// Open a DMG file.
     #[staticmethod]
     fn open(path: &str) -> PyResult<Self> {
-        let archive = dpp::udif::DmgArchive::open(path).map_err(|e| {
-            to_pyerr(dpp::DppError::Dmg(e))
-        })?;
+        let archive =
+            dpp::udif::DmgArchive::open(path).map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
         Ok(PyDmgArchive {
             inner: Some(archive),
         })
@@ -92,9 +91,9 @@ impl PyDmgArchive {
         id: i32,
     ) -> PyResult<Bound<'py, PyBytes>> {
         let archive = self.archive()?;
-        let data = archive.extract_partition(id).map_err(|e| {
-            to_pyerr(dpp::DppError::Dmg(e))
-        })?;
+        let data = archive
+            .extract_partition(id)
+            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
         Ok(PyBytes::new(py, &data))
     }
 
@@ -105,38 +104,35 @@ impl PyDmgArchive {
         name: &str,
     ) -> PyResult<Bound<'py, PyBytes>> {
         let archive = self.archive()?;
-        let data = archive.extract_partition_by_name(name).map_err(|e| {
-            to_pyerr(dpp::DppError::Dmg(e))
-        })?;
+        let data = archive
+            .extract_partition_by_name(name)
+            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
         Ok(PyBytes::new(py, &data))
     }
 
     /// Extract a partition to a file on disk.
     fn extract_partition_to(&mut self, id: i32, path: &str) -> PyResult<()> {
         let archive = self.archive()?;
-        archive.extract_partition_to_file(id, path).map_err(|e| {
-            to_pyerr(dpp::DppError::Dmg(e))
-        })
+        archive
+            .extract_partition_to_file(id, path)
+            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))
     }
 
     /// Extract the main partition, returning its data as bytes.
-    fn extract_main_partition<'py>(
-        &mut self,
-        py: Python<'py>,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    fn extract_main_partition<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let archive = self.archive()?;
-        let data = archive.extract_main_partition().map_err(|e| {
-            to_pyerr(dpp::DppError::Dmg(e))
-        })?;
+        let data = archive
+            .extract_main_partition()
+            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
         Ok(PyBytes::new(py, &data))
     }
 
     /// Extract the main partition to a file on disk.
     fn extract_main_partition_to(&mut self, path: &str) -> PyResult<()> {
         let archive = self.archive()?;
-        archive.extract_main_partition_to_file(path).map_err(|e| {
-            to_pyerr(dpp::DppError::Dmg(e))
-        })
+        archive
+            .extract_main_partition_to_file(path)
+            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))
     }
 
     fn __repr__(&self) -> String {
@@ -245,7 +241,9 @@ impl PyDmgBuilder {
             builder = builder.add_partition(name, data.clone());
         }
 
-        builder.build(path).map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))
+        builder
+            .build(path)
+            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))
     }
 
     fn __repr__(&self) -> String {

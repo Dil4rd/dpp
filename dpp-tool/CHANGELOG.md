@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- CI pipeline: GitHub Actions workflow with formatting, clippy, cross-platform tests (Linux/macOS/Windows), feature-flag tests, and doc build
+
+### Fixed
+
+- Resolved all clippy warnings across the workspace (print_literal, manual_strip, derivable_impls, collapsible_if, and others)
+- Fixed rustdoc warnings for unescaped HTML tags in doc comments (pbzx, hfsplus)
+- Fixed formatting drift in apfs, xara, and other crates
+
 ## [0.4.0] - 2026-02-15
 
 ### Added

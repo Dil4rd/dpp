@@ -402,10 +402,7 @@ impl MishHeader {
 
     /// Calculate total compressed size in bytes
     pub fn compressed_size(&self) -> u64 {
-        self.block_runs
-            .iter()
-            .map(|r| r.compressed_length)
-            .sum()
+        self.block_runs.iter().map(|r| r.compressed_length).sum()
     }
 }
 

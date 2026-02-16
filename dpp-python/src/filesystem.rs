@@ -36,8 +36,8 @@ impl PyHfsVolume {
     fn open(path: &str) -> PyResult<Self> {
         let file = std::fs::File::open(path).map_err(|e| to_pyerr(dpp::DppError::Io(e)))?;
         let reader = BufReader::new(file);
-        let volume = dpp::hfsplus::HfsVolume::open(reader)
-            .map_err(|e| to_pyerr(dpp::DppError::Hfs(e)))?;
+        let volume =
+            dpp::hfsplus::HfsVolume::open(reader).map_err(|e| to_pyerr(dpp::DppError::Hfs(e)))?;
         Ok(PyHfsVolume {
             inner: Some(volume),
         })
@@ -96,9 +96,7 @@ impl PyHfsVolume {
     /// Walk all entries in the volume.
     fn walk(&mut self) -> PyResult<Vec<PyWalkEntry>> {
         let vol = self.vol()?;
-        let entries = vol
-            .walk()
-            .map_err(|e| to_pyerr(dpp::DppError::Hfs(e)))?;
+        let entries = vol.walk().map_err(|e| to_pyerr(dpp::DppError::Hfs(e)))?;
         Ok(entries
             .iter()
             .map(|e| {
@@ -111,7 +109,8 @@ impl PyHfsVolume {
     /// Check if a path exists.
     fn exists(&mut self, path: &str) -> PyResult<bool> {
         let vol = self.vol()?;
-        vol.exists(path).map_err(|e| to_pyerr(dpp::DppError::Hfs(e)))
+        vol.exists(path)
+            .map_err(|e| to_pyerr(dpp::DppError::Hfs(e)))
     }
 
     fn __repr__(&self) -> String {
@@ -153,8 +152,8 @@ impl PyApfsVolume {
     fn open(path: &str) -> PyResult<Self> {
         let file = std::fs::File::open(path).map_err(|e| to_pyerr(dpp::DppError::Io(e)))?;
         let reader = BufReader::new(file);
-        let volume = dpp::apfs::ApfsVolume::open(reader)
-            .map_err(|e| to_pyerr(dpp::DppError::Apfs(e)))?;
+        let volume =
+            dpp::apfs::ApfsVolume::open(reader).map_err(|e| to_pyerr(dpp::DppError::Apfs(e)))?;
         Ok(PyApfsVolume {
             inner: Some(volume),
         })
@@ -232,9 +231,7 @@ impl PyApfsVolume {
     /// Walk all entries in the volume.
     fn walk(&mut self) -> PyResult<Vec<PyWalkEntry>> {
         let vol = self.vol()?;
-        let entries = vol
-            .walk()
-            .map_err(|e| to_pyerr(dpp::DppError::Apfs(e)))?;
+        let entries = vol.walk().map_err(|e| to_pyerr(dpp::DppError::Apfs(e)))?;
         Ok(entries
             .iter()
             .map(|e| {

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Clippy warnings: `empty_line_after_doc_comments`, `unnecessary_cast`, `too_many_arguments` allow
+- Formatting drift in benchmark and source files
+
 ## [0.2.0] - 2026-02-11
 
 ### Changed

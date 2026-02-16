@@ -18,11 +18,7 @@ pub struct ForkReader<'a, R: Read + Seek> {
 impl<'a, R: Read + Seek> ForkReader<'a, R> {
     /// Create a ForkReader from a fork's inline extents.
     /// For files with overflow extents, call `with_overflow_extents` instead.
-    pub fn new(
-        reader: &'a mut R,
-        fork: &ForkData,
-        block_size: u32,
-    ) -> Self {
+    pub fn new(reader: &'a mut R, fork: &ForkData, block_size: u32) -> Self {
         let block_size = block_size as u64;
         let mut extent_map = Vec::new();
         let mut logical_offset = 0u64;
@@ -73,11 +69,12 @@ impl<R: Read + Seek> Read for ForkReader<'_, R> {
             let logical_pos = self.position + total_read as u64;
 
             // Find which extent this position falls in
-            let physical_pos = self.logical_to_physical(logical_pos)
-                .ok_or_else(|| std::io::Error::new(
+            let physical_pos = self.logical_to_physical(logical_pos).ok_or_else(|| {
+                std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
                     "logical offset beyond extent map",
-                ))?;
+                )
+            })?;
 
             // Calculate how many contiguous bytes we can read from this extent
             let mut extent_remaining = 0u64;
@@ -91,7 +88,8 @@ impl<R: Read + Seek> Read for ForkReader<'_, R> {
             let chunk_size = ((to_read - total_read) as u64).min(extent_remaining) as usize;
 
             self.reader.seek(SeekFrom::Start(physical_pos))?;
-            self.reader.read_exact(&mut buf[total_read..total_read + chunk_size])?;
+            self.reader
+                .read_exact(&mut buf[total_read..total_read + chunk_size])?;
 
             total_read += chunk_size;
         }
@@ -151,7 +149,12 @@ pub fn read_fork_data<R: Read + Seek, W: Write>(
             break;
         }
         bytes_written += read_extent(
-            reader, extent, block_size, total_bytes - bytes_written, &mut buf, writer,
+            reader,
+            extent,
+            block_size,
+            total_bytes - bytes_written,
+            &mut buf,
+            writer,
         )?;
     }
 
@@ -161,9 +164,7 @@ pub fn read_fork_data<R: Read + Seek, W: Write>(
     }
 
     // Otherwise, look up overflow extents from the Extents B-tree
-    let mut start_block = fork.extents.iter()
-        .map(|e| e.block_count)
-        .sum::<u32>();
+    let mut start_block = fork.extents.iter().map(|e| e.block_count).sum::<u32>();
 
     loop {
         if bytes_written >= total_bytes {
@@ -171,13 +172,8 @@ pub fn read_fork_data<R: Read + Seek, W: Write>(
         }
 
         // Look up the next extent record in the overflow B-tree
-        let overflow_extents = lookup_overflow_extents(
-            reader,
-            extents_btree,
-            file_id,
-            FORK_TYPE_DATA,
-            start_block,
-        )?;
+        let overflow_extents =
+            lookup_overflow_extents(reader, extents_btree, file_id, FORK_TYPE_DATA, start_block)?;
 
         if overflow_extents.is_empty() {
             break;
@@ -188,7 +184,12 @@ pub fn read_fork_data<R: Read + Seek, W: Write>(
                 break;
             }
             bytes_written += read_extent(
-                reader, extent, block_size, total_bytes - bytes_written, &mut buf, writer,
+                reader,
+                extent,
+                block_size,
+                total_bytes - bytes_written,
+                &mut buf,
+                writer,
             )?;
             start_block += extent.block_count;
         }
@@ -204,7 +205,7 @@ fn read_extent<R: Read + Seek, W: Write>(
     extent: &ExtentDescriptor,
     block_size: u64,
     remaining: u64,
-    buf: &mut Vec<u8>,
+    buf: &mut [u8],
     writer: &mut W,
 ) -> Result<u64> {
     let mut written = 0u64;
@@ -244,10 +245,16 @@ fn lookup_overflow_extents<R: Read + Seek>(
         let _key_length = u16::from_be_bytes([record_data[0], record_data[1]]);
         let rec_fork_type = record_data[2];
         let rec_file_id = u32::from_be_bytes([
-            record_data[4], record_data[5], record_data[6], record_data[7],
+            record_data[4],
+            record_data[5],
+            record_data[6],
+            record_data[7],
         ]);
         let rec_start_block = u32::from_be_bytes([
-            record_data[8], record_data[9], record_data[10], record_data[11],
+            record_data[8],
+            record_data[9],
+            record_data[10],
+            record_data[11],
         ]);
 
         match rec_file_id.cmp(&file_id) {
@@ -298,34 +305,46 @@ mod tests {
         let file = std::fs::File::open("../tests/kdk.raw").unwrap();
         let mut reader = std::io::BufReader::new(file);
         let vol = crate::volume::VolumeHeader::parse(&mut reader).unwrap();
-        let catalog_header = btree::read_btree_header(
-            &mut reader, &vol.catalog_file, vol.block_size,
-        ).unwrap();
-        let _extents_header = btree::read_btree_header(
-            &mut reader, &vol.extents_file, vol.block_size,
-        ).unwrap();
+        let catalog_header =
+            btree::read_btree_header(&mut reader, &vol.catalog_file, vol.block_size).unwrap();
+        let _extents_header =
+            btree::read_btree_header(&mut reader, &vol.extents_file, vol.block_size).unwrap();
 
         let record = crate::catalog::lookup_catalog(
-            &mut reader, &vol, &catalog_header,
-            crate::catalog::CNID_ROOT_FOLDER, "KernelDebugKit.pkg",
-        ).unwrap();
+            &mut reader,
+            &vol,
+            &catalog_header,
+            crate::catalog::CNID_ROOT_FOLDER,
+            "KernelDebugKit.pkg",
+        )
+        .unwrap();
 
         let file_rec = match record {
             Some(crate::catalog::CatalogRecord::File(f)) => f,
-            other => panic!("Expected File record, got {:?}", other.map(|r| format!("{:?}", r))),
+            other => panic!(
+                "Expected File record, got {:?}",
+                other.map(|r| format!("{:?}", r))
+            ),
         };
 
         let offset = file_rec.data_fork.extents[0].start_block as u64 * vol.block_size as u64;
         reader.seek(std::io::SeekFrom::Start(offset)).unwrap();
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic).unwrap();
-        assert_eq!(&magic, b"xar!", "PKG file should start with XAR magic 'xar!'");
+        assert_eq!(
+            &magic, b"xar!",
+            "PKG file should start with XAR magic 'xar!'"
+        );
 
         let mut fork_reader = ForkReader::new(&mut reader, &file_rec.data_fork, vol.block_size);
 
         let mut xar_header = [0u8; 28];
         fork_reader.read_exact(&mut xar_header).unwrap();
-        assert_eq!(&xar_header[..4], b"xar!", "ForkReader should read XAR magic");
+        assert_eq!(
+            &xar_header[..4],
+            b"xar!",
+            "ForkReader should read XAR magic"
+        );
 
         fork_reader.seek(SeekFrom::Start(0)).unwrap();
         let mut magic2 = [0u8; 4];
@@ -333,6 +352,9 @@ mod tests {
         assert_eq!(&magic2, b"xar!", "ForkReader seek+read should work");
 
         let end = fork_reader.seek(SeekFrom::End(0)).unwrap();
-        assert_eq!(end, file_rec.data_fork.logical_size, "SeekFrom::End should match file size");
+        assert_eq!(
+            end, file_rec.data_fork.logical_size,
+            "SeekFrom::End should match file size"
+        );
     }
 }

@@ -2,11 +2,14 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 
+use crate::pipeline::{open_filesystem, open_pipeline};
 use crate::style::*;
-use crate::pipeline::{open_pipeline, open_filesystem};
-use crate::{FsCommand, FindArgs};
+use crate::{FindArgs, FsCommand};
 
-pub(crate) fn run(cmd: FsCommand, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(
+    cmd: FsCommand,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
         FsCommand::Info { dmg } => info(&dmg, mode),
         FsCommand::Ls { dmg, path } => ls(&dmg, &path, mode),
@@ -62,7 +65,11 @@ fn info(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-fn ls(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn ls(
+    dmg_path: &Path,
+    path: &str,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let dmg_str = dmg_path.display();
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut fs = open_filesystem(&mut pipeline, mode)?;
@@ -77,10 +84,7 @@ fn ls(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn
     let (d, r) = (dim(), reset());
     header(&format!("{dmg_str}:{path}"));
     println!();
-    println!(
-        "  {d}{:<5} {:>12}  {}{r}",
-        "Kind", "Size", "Name"
-    );
+    println!("  {d}{:<5} {:>12}  Name{r}", "Kind", "Size");
     println!("  {d}{}{r}", "-".repeat(56));
 
     for entry in &entries {
@@ -99,8 +103,14 @@ fn ls(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn
     }
 
     println!();
-    let file_count = entries.iter().filter(|e| e.kind == dpp::FsEntryKind::File).count();
-    let dir_count = entries.iter().filter(|e| e.kind == dpp::FsEntryKind::Directory).count();
+    let file_count = entries
+        .iter()
+        .filter(|e| e.kind == dpp::FsEntryKind::File)
+        .count();
+    let dir_count = entries
+        .iter()
+        .filter(|e| e.kind == dpp::FsEntryKind::Directory)
+        .count();
     println!(
         "  {d}{} file(s), {} directory(ies){r}",
         file_count, dir_count
@@ -110,7 +120,12 @@ fn ls(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn
     Ok(())
 }
 
-fn tree(dmg_path: &Path, path: Option<&str>, max_depth: usize, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn tree(
+    dmg_path: &Path,
+    path: Option<&str>,
+    max_depth: usize,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let dmg_str = dmg_path.display();
     let base_path = path.unwrap_or("/");
 
@@ -181,7 +196,11 @@ fn print_tree(
     Ok(())
 }
 
-fn cat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn cat(
+    dmg_path: &Path,
+    path: &str,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = dpp::DmgPipeline::open(dmg_path)?;
     let mut fs = pipeline.open_filesystem_with_mode(mode)?;
 
@@ -191,7 +210,11 @@ fn cat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dy
     Ok(())
 }
 
-fn stat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn stat(
+    dmg_path: &Path,
+    path: &str,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = open_pipeline(dmg_path)?;
     let mut fs = open_filesystem(&mut pipeline, mode)?;
 
@@ -207,7 +230,10 @@ fn stat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<d
     };
     kv(id_label, &stat.id.to_string());
     kv("Kind", &format!("{:?}", stat.kind));
-    kv("Size", &format!("{} ({})", format_size(stat.size), format_commas(stat.size)));
+    kv(
+        "Size",
+        &format!("{} ({})", format_size(stat.size), format_commas(stat.size)),
+    );
     kv("Permissions", &mode_string(stat.mode));
     kv("Owner", &format!("{}:{}", stat.uid, stat.gid));
 
@@ -225,14 +251,24 @@ fn stat(dmg_path: &Path, path: &str, mode: dpp::ExtractMode) -> Result<(), Box<d
         dpp::FsType::HfsPlus => "HFS+ timestamp",
         dpp::FsType::Apfs => "APFS nanosecond timestamp",
     };
-    kv("Created", &format!("{} {d}({time_label}){r}", stat.create_time));
-    kv("Modified", &format!("{} {d}({time_label}){r}", stat.modify_time));
+    kv(
+        "Created",
+        &format!("{} {d}({time_label}){r}", stat.create_time),
+    );
+    kv(
+        "Modified",
+        &format!("{} {d}({time_label}){r}", stat.modify_time),
+    );
     println!();
 
     Ok(())
 }
 
-fn find(dmg_path: &Path, args: FindArgs, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+fn find(
+    dmg_path: &Path,
+    args: FindArgs,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut name_pattern = args.name;
     let mut type_filter = parse_type_filter(args.file_type)?;
 
@@ -294,7 +330,9 @@ fn find(dmg_path: &Path, args: FindArgs, mode: dpp::ExtractMode) -> Result<(), B
     Ok(())
 }
 
-fn parse_type_filter(c: Option<char>) -> Result<Option<dpp::FsEntryKind>, Box<dyn std::error::Error>> {
+fn parse_type_filter(
+    c: Option<char>,
+) -> Result<Option<dpp::FsEntryKind>, Box<dyn std::error::Error>> {
     match c {
         None => Ok(None),
         Some('f') => Ok(Some(dpp::FsEntryKind::File)),

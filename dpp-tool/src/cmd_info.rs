@@ -1,10 +1,13 @@
 use std::path::Path;
 use std::time::Instant;
 
+use crate::pipeline::{open_filesystem, open_pipeline};
 use crate::style::*;
-use crate::pipeline::{open_pipeline, open_filesystem};
 
-pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(
+    dmg_path: &Path,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let dmg_str = dmg_path.display();
     let t_total = Instant::now();
 
@@ -22,18 +25,37 @@ pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn
     section("DMG (UDIF)");
     kv("Version", &stats.version.to_string());
     kv("Partitions", &partitions.len().to_string());
-    kv("Compressed", &format!("{} ({})", format_size(stats.total_compressed), format_size(stats.data_fork_length)));
+    kv(
+        "Compressed",
+        &format!(
+            "{} ({})",
+            format_size(stats.total_compressed),
+            format_size(stats.data_fork_length)
+        ),
+    );
     kv("Uncompressed", &format_size(stats.total_uncompressed));
     kv_highlight("Space savings", &format!("{:.1}%", stats.space_savings()));
 
     // Block type summary
     let mut block_types = Vec::new();
-    if comp_info.lzfse_blocks > 0 { block_types.push(format!("LZFSE: {}", comp_info.lzfse_blocks)); }
-    if comp_info.xz_blocks > 0 { block_types.push(format!("XZ: {}", comp_info.xz_blocks)); }
-    if comp_info.zlib_blocks > 0 { block_types.push(format!("Zlib: {}", comp_info.zlib_blocks)); }
-    if comp_info.bzip2_blocks > 0 { block_types.push(format!("Bzip2: {}", comp_info.bzip2_blocks)); }
-    if comp_info.raw_blocks > 0 { block_types.push(format!("Raw: {}", comp_info.raw_blocks)); }
-    if comp_info.zero_fill_blocks > 0 { block_types.push(format!("Zero: {}", comp_info.zero_fill_blocks)); }
+    if comp_info.lzfse_blocks > 0 {
+        block_types.push(format!("LZFSE: {}", comp_info.lzfse_blocks));
+    }
+    if comp_info.xz_blocks > 0 {
+        block_types.push(format!("XZ: {}", comp_info.xz_blocks));
+    }
+    if comp_info.zlib_blocks > 0 {
+        block_types.push(format!("Zlib: {}", comp_info.zlib_blocks));
+    }
+    if comp_info.bzip2_blocks > 0 {
+        block_types.push(format!("Bzip2: {}", comp_info.bzip2_blocks));
+    }
+    if comp_info.raw_blocks > 0 {
+        block_types.push(format!("Raw: {}", comp_info.raw_blocks));
+    }
+    if comp_info.zero_fill_blocks > 0 {
+        block_types.push(format!("Zero: {}", comp_info.zero_fill_blocks));
+    }
     if !block_types.is_empty() {
         kv("Block types", &block_types.join(", "));
     }
@@ -41,11 +63,17 @@ pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn
     // Partition table
     let (d, r, g) = (dim(), reset(), green());
     println!();
-    println!("  {d}{:>4}  {:>12}  {:>12}  {:>7}  {}{r}", "ID", "Sectors", "Size", "Ratio", "Name");
+    println!(
+        "  {d}{:>4}  {:>12}  {:>12}  {:>7}  Name{r}",
+        "ID", "Sectors", "Size", "Ratio"
+    );
     println!("  {d}{}{r}", "-".repeat(58));
     for p in &partitions {
         let ratio = if p.size > 0 {
-            format!("{:.1}%", (1.0 - p.compressed_size as f64 / p.size as f64) * 100.0)
+            format!(
+                "{:.1}%",
+                (1.0 - p.compressed_size as f64 / p.size as f64) * 100.0
+            )
         } else {
             "N/A".to_string()
         };
@@ -133,9 +161,19 @@ pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn
             }
 
             // Summary
-            let total_files: u64 = entries.iter().filter(|e| e.entry.kind == dpp::FsEntryKind::File).count() as u64;
-            let total_size: u64 = entries.iter().filter(|e| e.entry.kind == dpp::FsEntryKind::File).map(|e| e.entry.size).sum();
-            let total_dirs: u64 = entries.iter().filter(|e| e.entry.kind == dpp::FsEntryKind::Directory).count() as u64;
+            let total_files: u64 = entries
+                .iter()
+                .filter(|e| e.entry.kind == dpp::FsEntryKind::File)
+                .count() as u64;
+            let total_size: u64 = entries
+                .iter()
+                .filter(|e| e.entry.kind == dpp::FsEntryKind::File)
+                .map(|e| e.entry.size)
+                .sum();
+            let total_dirs: u64 = entries
+                .iter()
+                .filter(|e| e.entry.kind == dpp::FsEntryKind::Directory)
+                .count() as u64;
 
             section("Summary");
             kv("Total files", &format_commas(total_files));

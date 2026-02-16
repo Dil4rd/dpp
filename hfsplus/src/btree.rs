@@ -1,11 +1,11 @@
 use byteorder::{BigEndian, ReadBytesExt};
-use std::io::{Read, Seek, SeekFrom, Cursor};
+use std::io::{Cursor, Read, Seek, SeekFrom};
 
 use crate::error::{HfsPlusError, Result};
 use crate::volume::ForkData;
 
 /// B-tree node kinds
-pub const NODE_KIND_LEAF: u8 = 0xFF;   // -1 as i8
+pub const NODE_KIND_LEAF: u8 = 0xFF; // -1 as i8
 pub const NODE_KIND_INDEX: u8 = 0x00;
 pub const NODE_KIND_HEADER: u8 = 0x01;
 pub const NODE_KIND_MAP: u8 = 0x02;
@@ -66,9 +66,10 @@ pub fn read_btree_header<R: Read + Seek>(
     // Parse node descriptor
     let desc = parse_node_descriptor(&mut cursor)?;
     if desc.kind != NODE_KIND_HEADER {
-        return Err(HfsPlusError::InvalidBTree(
-            format!("expected header node, got kind {}", desc.kind),
-        ));
+        return Err(HfsPlusError::InvalidBTree(format!(
+            "expected header node, got kind {}",
+            desc.kind
+        )));
     }
 
     // Header record starts at offset 14
@@ -152,7 +153,9 @@ pub fn read_node<R: Read + Seek>(
     for i in 0..num_offsets {
         let offset_pos = node_size as usize - (i + 1) * 2;
         if offset_pos + 1 >= data.len() {
-            return Err(HfsPlusError::InvalidBTree("offset table out of bounds".into()));
+            return Err(HfsPlusError::InvalidBTree(
+                "offset table out of bounds".into(),
+            ));
         }
         let offset = u16::from_be_bytes([data[offset_pos], data[offset_pos + 1]]);
         record_offsets.push(offset);
@@ -169,16 +172,20 @@ impl BTreeNode {
     /// Get the raw bytes for record `index` in this node
     pub fn record_data(&self, index: usize) -> Result<&[u8]> {
         if index >= self.descriptor.num_records as usize {
-            return Err(HfsPlusError::InvalidBTree(
-                format!("record index {} >= num_records {}", index, self.descriptor.num_records),
-            ));
+            return Err(HfsPlusError::InvalidBTree(format!(
+                "record index {} >= num_records {}",
+                index, self.descriptor.num_records
+            )));
         }
         let start = self.record_offsets[index] as usize;
         let end = self.record_offsets[index + 1] as usize;
         if start > end || end > self.data.len() {
-            return Err(HfsPlusError::InvalidBTree(
-                format!("invalid record offsets: start={}, end={}, len={}", start, end, self.data.len()),
-            ));
+            return Err(HfsPlusError::InvalidBTree(format!(
+                "invalid record offsets: start={}, end={}, len={}",
+                start,
+                end,
+                self.data.len()
+            )));
         }
         Ok(&self.data[start..end])
     }
@@ -197,11 +204,7 @@ fn parse_node_descriptor<R: Read>(reader: &mut R) -> Result<NodeDescriptor> {
 
 /// Compute the absolute byte offset in the volume for a given byte offset within a fork.
 /// Walks through the fork's extent descriptors to find the right allocation block.
-pub fn compute_fork_offset(
-    fork: &ForkData,
-    block_size: u32,
-    offset_in_fork: u64,
-) -> Result<u64> {
+pub fn compute_fork_offset(fork: &ForkData, block_size: u32, offset_in_fork: u64) -> Result<u64> {
     let block_size = block_size as u64;
     let mut remaining = offset_in_fork;
 
@@ -219,9 +222,10 @@ pub fn compute_fork_offset(
         remaining -= extent_bytes;
     }
 
-    Err(HfsPlusError::InvalidBTree(
-        format!("fork offset {} exceeds extent capacity", offset_in_fork),
-    ))
+    Err(HfsPlusError::InvalidBTree(format!(
+        "fork offset {} exceeds extent capacity",
+        offset_in_fork
+    )))
 }
 
 /// Search a B-tree for a key. Returns the leaf node and record index where the key
@@ -289,9 +293,10 @@ where
                 current_node_num = child_node;
             }
             other => {
-                return Err(HfsPlusError::InvalidBTree(
-                    format!("unexpected node kind {} during search", other),
-                ));
+                return Err(HfsPlusError::InvalidBTree(format!(
+                    "unexpected node kind {} during search",
+                    other
+                )));
             }
         }
     }
@@ -322,9 +327,10 @@ where
         let node = read_node(reader, btree_header, current_node_num)?;
 
         if node.descriptor.kind != NODE_KIND_LEAF {
-            return Err(HfsPlusError::InvalidBTree(
-                format!("expected leaf node, got kind {}", node.descriptor.kind),
-            ));
+            return Err(HfsPlusError::InvalidBTree(format!(
+                "expected leaf node, got kind {}",
+                node.descriptor.kind
+            )));
         }
 
         for i in 0..node.descriptor.num_records as usize {
@@ -359,9 +365,11 @@ fn extract_index_child(record_data: &[u8]) -> Result<u32> {
     let key_length = u16::from_be_bytes([record_data[0], record_data[1]]) as usize;
     let child_offset = 2 + key_length;
     if child_offset + 4 > record_data.len() {
-        return Err(HfsPlusError::InvalidBTree(
-            format!("index record too short for child pointer: key_len={}, record_len={}", key_length, record_data.len()),
-        ));
+        return Err(HfsPlusError::InvalidBTree(format!(
+            "index record too short for child pointer: key_len={}, record_len={}",
+            key_length,
+            record_data.len()
+        )));
     }
     Ok(u32::from_be_bytes([
         record_data[child_offset],
@@ -383,7 +391,8 @@ mod tests {
         let mut reader = std::io::BufReader::new(file);
         let vol = crate::volume::VolumeHeader::parse(&mut reader).unwrap();
 
-        let catalog_header = read_btree_header(&mut reader, &vol.catalog_file, vol.block_size).unwrap();
+        let catalog_header =
+            read_btree_header(&mut reader, &vol.catalog_file, vol.block_size).unwrap();
 
         assert!(catalog_header.node_size > 0);
         assert!(catalog_header.root_node > 0);

@@ -29,7 +29,7 @@ pub struct NxSuperblock {
     pub next_xid: u64,
     pub xp_desc_blocks: u32,
     pub xp_data_blocks: u32,
-    pub xp_desc_base: u64,  // paddr_t — physical block of checkpoint descriptor area
+    pub xp_desc_base: u64, // paddr_t — physical block of checkpoint descriptor area
     pub xp_data_base: u64,
     pub xp_desc_next: u32,
     pub xp_data_next: u32,
@@ -38,10 +38,10 @@ pub struct NxSuperblock {
     pub xp_data_index: u32,
     pub xp_data_len: u32,
     pub spaceman_oid: u64,
-    pub omap_oid: u64,      // Physical block of container object map
+    pub omap_oid: u64, // Physical block of container object map
     pub reaper_oid: u64,
     pub max_file_systems: u32,
-    pub fs_oids: Vec<u64>,  // Volume superblock OIDs (virtual)
+    pub fs_oids: Vec<u64>, // Volume superblock OIDs (virtual)
 }
 
 impl NxSuperblock {
@@ -139,8 +139,8 @@ pub struct ApfsSuperblock {
     pub root_tree_type: u32,
     pub extentref_tree_type: u32,
     pub snap_meta_tree_type: u32,
-    pub omap_oid: u64,       // Physical block of volume object map
-    pub root_tree_oid: u64,  // Virtual OID of the catalog (fs root) B-tree
+    pub omap_oid: u64,      // Physical block of volume object map
+    pub root_tree_oid: u64, // Virtual OID of the catalog (fs root) B-tree
     pub extentref_tree_oid: u64,
     pub snap_meta_tree_oid: u64,
     pub revert_to_xid: u64,
@@ -386,9 +386,11 @@ mod tests {
 
         let file_size = reader.seek(SeekFrom::End(0)).unwrap();
         let expected_size = nxsb.block_count * nxsb.block_size as u64;
-        assert_eq!(file_size, expected_size,
+        assert_eq!(
+            file_size, expected_size,
             "File size {} should match block_count({}) * block_size({})",
-            file_size, nxsb.block_count, nxsb.block_size);
+            file_size, nxsb.block_count, nxsb.block_size
+        );
     }
 
     /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
@@ -400,8 +402,12 @@ mod tests {
         let nxsb = read_nxsb(&mut reader).unwrap();
         let latest = find_latest_nxsb(&mut reader, &nxsb).unwrap();
 
-        assert!(latest.header.xid >= nxsb.header.xid,
-            "Latest xid {} should be >= block 0 xid {}", latest.header.xid, nxsb.header.xid);
+        assert!(
+            latest.header.xid >= nxsb.header.xid,
+            "Latest xid {} should be >= block 0 xid {}",
+            latest.header.xid,
+            nxsb.header.xid
+        );
     }
 
     /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
@@ -413,9 +419,13 @@ mod tests {
         let nxsb = read_nxsb(&mut reader).unwrap();
         let latest = find_latest_nxsb(&mut reader, &nxsb).unwrap();
 
-        assert!(latest.fs_oids.iter().any(|&o| o != 0), "Should have at least one volume");
+        assert!(
+            latest.fs_oids.iter().any(|&o| o != 0),
+            "Should have at least one volume"
+        );
 
-        let omap_block = crate::object::read_block(&mut reader, latest.omap_oid, latest.block_size).unwrap();
+        let omap_block =
+            crate::object::read_block(&mut reader, latest.omap_oid, latest.block_size).unwrap();
         let omap_header = crate::object::ObjectHeader::parse(&omap_block).unwrap();
         assert_ne!(omap_header.object_type(), 0);
 
@@ -434,7 +444,7 @@ mod tests {
         let mut block = vec![0u8; 4096];
         // ObjectHeader: checksum [0..8], oid [8..16], xid [16..24], type [24..28], subtype [28..32]
         block[24..28].copy_from_slice(&0x01u32.to_le_bytes()); // type = NX_SUPERBLOCK
-        // Wrong magic at offset 32
+                                                               // Wrong magic at offset 32
         block[32..36].copy_from_slice(&0xDEADBEEFu32.to_le_bytes());
 
         let result = NxSuperblock::parse(&block);

@@ -7,6 +7,7 @@ name = "dpp-py"
 dynamic = ["version"]
 requires-python = ">=3.9"
 description = "Python bindings for parsing Apple DMG disk images, HFS+/APFS filesystems, PKG installers, and PBZX/CPIO payloads"
+readme = "README.md"
 license = { text = "MIT" }
 classifiers = [
     "Development Status :: 3 - Alpha",

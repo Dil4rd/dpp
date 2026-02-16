@@ -4,7 +4,7 @@
 
 **Python bindings for the Apple DMG extraction pipeline**
 
-[![PyPI](https://img.shields.io/pypi/v/dpp.svg)](https://pypi.org/project/dpp/)
+[![PyPI](https://img.shields.io/pypi/v/dpp-py.svg)](https://pypi.org/project/dpp-py/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)
@@ -63,7 +63,7 @@ Without dpp, extracting files from a macOS `.dmg` in Python requires shelling ou
 ## Installation
 
 ```bash
-pip install dpp
+pip install dpp-py
 ```
 
 ### From source (development)

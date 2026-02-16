@@ -1,6 +1,6 @@
 [package]
 name = "dpp-python"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "Python bindings for the dpp Apple disk image and package toolkit"

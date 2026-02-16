@@ -21,7 +21,7 @@ jobs:
           echo "Local version: $LOCAL_VERSION"
           echo "version=$LOCAL_VERSION" >> "$GITHUB_OUTPUT"
 
-          PYPI_VERSION=$(curl -sf https://pypi.org/pypi/dpp/json | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['version'])" 2>/dev/null) || PYPI_VERSION=""
+          PYPI_VERSION=$(curl -sf https://pypi.org/pypi/dpp-py/json | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['version'])" 2>/dev/null) || PYPI_VERSION=""
           echo "PyPI version: $PYPI_VERSION"
 
           if [ "$LOCAL_VERSION" != "$PYPI_VERSION" ]; then

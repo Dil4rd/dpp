@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-02-16
+
+### Changed
+
+- Rename PyPI distribution from `dpp` to `dpp-py` (import name `import dpp` unchanged)
+
 ## [0.1.0] - 2026-02-15
 
 ### Added

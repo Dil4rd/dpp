@@ -52,6 +52,8 @@ jobs:
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
+        env:
+          CFLAGS_aarch64_unknown_linux_gnu: "-std=gnu99"
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter --manifest-path dpp-python/Cargo.toml

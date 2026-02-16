@@ -1,6 +1,6 @@
 [package]
 name = "dpp-tool"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "CLI to explore Apple DMG disk images: DMG → HFS+/APFS → PKG → PBZX → files"
 license = "MIT"

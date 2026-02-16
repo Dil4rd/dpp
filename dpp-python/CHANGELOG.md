@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-02-16
+
+### Changed
+
+- Upgrade pyo3 from 0.23 to 0.28.1 for Python 3.14 support
+
 ## [0.1.1] - 2026-02-16
 
 ### Changed

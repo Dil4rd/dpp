@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 
 // ── Partition Info ──────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "PartitionInfo")]
+#[pyclass(frozen, skip_from_py_object, name = "PartitionInfo")]
 #[derive(Clone)]
 pub struct PyPartitionInfo {
     #[pyo3(get)]
@@ -44,7 +44,7 @@ impl From<&dpp::udif::PartitionInfo> for PyPartitionInfo {
 
 // ── Directory Entry ─────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "DirEntry")]
+#[pyclass(frozen, skip_from_py_object, name = "DirEntry")]
 #[derive(Clone)]
 pub struct PyDirEntry {
     #[pyo3(get)]
@@ -77,7 +77,7 @@ impl From<&dpp::FsDirEntry> for PyDirEntry {
 
 // ── File Stat ───────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "FileStat")]
+#[pyclass(frozen, skip_from_py_object, name = "FileStat")]
 #[derive(Clone)]
 pub struct PyFileStat {
     #[pyo3(get)]
@@ -137,7 +137,7 @@ impl From<&dpp::FsFileStat> for PyFileStat {
 
 // ── Volume Info ─────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "VolumeInfo")]
+#[pyclass(frozen, skip_from_py_object, name = "VolumeInfo")]
 #[derive(Clone)]
 pub struct PyVolumeInfo {
     #[pyo3(get)]
@@ -191,7 +191,7 @@ impl From<&dpp::FsVolumeInfo> for PyVolumeInfo {
 
 // ── Walk Entry ──────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "WalkEntry")]
+#[pyclass(frozen, skip_from_py_object, name = "WalkEntry")]
 #[derive(Clone)]
 pub struct PyWalkEntry {
     #[pyo3(get)]
@@ -227,7 +227,7 @@ impl From<&dpp::FsWalkEntry> for PyWalkEntry {
 
 // ── File Entry (CPIO) ───────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "FileEntry")]
+#[pyclass(frozen, skip_from_py_object, name = "FileEntry")]
 #[derive(Clone)]
 pub struct PyFileEntry {
     #[pyo3(get)]
@@ -285,7 +285,7 @@ impl From<&dpp::pbzx::FileEntry> for PyFileEntry {
 
 // ── Compression Info ────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "CompressionInfo")]
+#[pyclass(frozen, skip_from_py_object, name = "CompressionInfo")]
 #[derive(Clone)]
 pub struct PyCompressionInfo {
     #[pyo3(get)]
@@ -335,7 +335,7 @@ impl From<&dpp::udif::CompressionInfo> for PyCompressionInfo {
 
 // ── DMG Stats ───────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "DmgStats")]
+#[pyclass(frozen, skip_from_py_object, name = "DmgStats")]
 #[derive(Clone)]
 pub struct PyDmgStats {
     #[pyo3(get)]
@@ -386,7 +386,7 @@ impl From<&dpp::udif::DmgStats> for PyDmgStats {
 
 // ── XAR File ────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "XarFile")]
+#[pyclass(frozen, skip_from_py_object, name = "XarFile")]
 #[derive(Clone)]
 pub struct PyXarFile {
     #[pyo3(get)]
@@ -433,7 +433,7 @@ impl From<&dpp::xara::XarFile> for PyXarFile {
 
 // ── Chunk Info (PBZX) ───────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "ChunkInfo")]
+#[pyclass(frozen, skip_from_py_object, name = "ChunkInfo")]
 #[derive(Clone)]
 pub struct PyChunkInfo {
     #[pyo3(get)]
@@ -475,7 +475,7 @@ impl From<&dpp::pbzx::ChunkInfo> for PyChunkInfo {
 
 // ── Archive Stats (PBZX) ────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "ArchiveStats")]
+#[pyclass(frozen, skip_from_py_object, name = "ArchiveStats")]
 #[derive(Clone)]
 pub struct PyArchiveStats {
     #[pyo3(get)]

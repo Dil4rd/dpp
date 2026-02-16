@@ -11,3 +11,6 @@ categories = ["parsing", "filesystem"]
 [dependencies]
 byteorder = "1.5"
 thiserror = "2"
+
+[features]
+testutil = []

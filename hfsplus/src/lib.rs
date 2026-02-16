@@ -5,6 +5,9 @@ pub mod extents;
 pub mod unicode;
 pub mod volume;
 
+#[cfg(any(test, feature = "testutil"))]
+pub mod testutil;
+
 pub use error::{HfsPlusError, Result};
 pub use volume::VolumeHeader;
 

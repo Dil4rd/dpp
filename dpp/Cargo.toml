@@ -17,5 +17,9 @@ xara = { version = "0.2.0", path = "../xara" }
 thiserror = "2"
 tempfile = "3"
 
+[dev-dependencies]
+flate2 = "1.0"
+hfsplus = { path = "../hfsplus", features = ["testutil"] }
+
 [features]
 parallel = ["pbzx/parallel"]

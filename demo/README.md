@@ -32,7 +32,7 @@ Pick a monospace font installed on your system (`fc-list :spacing=mono family`):
 ```bash
 agg --font-family "Ubuntu Mono" \
     --font-size 14 \
-    --theme monokai \
+    --theme dracula \
     demo/demo.cast demo/demo.gif
 ```
 

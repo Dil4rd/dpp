@@ -17,7 +17,7 @@ type_cmd() {
     for (( i=0; i<${#cmd}; i++ )); do
         printf '%s' "${cmd:$i:1}"
         # Random delay between 20-70ms
-        sleep "0.0$(( RANDOM % 5 + 2 ))$(( RANDOM % 10 ))"
+        sleep "0.0$(( RANDOM % 3 + 4 ))$(( RANDOM % 10 ))"
     done
     printf '\n'
     sleep 0.3

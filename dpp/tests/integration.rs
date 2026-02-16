@@ -50,8 +50,8 @@ fn build_test_dmg() -> Vec<u8> {
 
 /// Build a minimal XAR archive (component .pkg) with the given data as "Payload".
 fn build_xar_pkg(payload: &[u8]) -> Vec<u8> {
-    use flate2::write::ZlibEncoder;
     use flate2::Compression;
+    use flate2::write::ZlibEncoder;
     use std::io::Write;
 
     let toc_xml = format!(

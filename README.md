@@ -189,10 +189,9 @@ dpp-tool  (CLI binary)          dpp-python  (Python bindings)
     │
     ├── udif      DMG / UDIF disk image reader & writer
     ├── hfsplus   HFS+ / HFSX filesystem parser
+    ├── apfs      APFS filesystem parser
     ├── xara      XAR archive & macOS PKG parser
     └── pbzx      PBZX streaming archive & CPIO parser
-
-   apfs  (standalone APFS filesystem parser)
 ```
 
 Each crate is published independently and can be used on its own:

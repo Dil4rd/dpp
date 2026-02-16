@@ -1,7 +1,7 @@
 [package]
 name = "dpp-python"
-version = "0.1.3"
-edition = "2021"
+version = "0.1.4"
+edition = "2024"
 license = "MIT"
 description = "Python bindings for the dpp Apple disk image and package toolkit"
 
@@ -10,5 +10,5 @@ name = "dpp"
 crate-type = ["cdylib"]
 
 [dependencies]
-dpp = { path = "../dpp" }
+dpp = { version = "0.3.4", path = "../dpp" }
 pyo3 = { version = "0.28.1", features = ["extension-module"] }

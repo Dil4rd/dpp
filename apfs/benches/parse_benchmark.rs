@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::io::BufReader;
 
 fn open_appfs() -> Option<BufReader<std::fs::File>> {

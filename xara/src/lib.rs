@@ -105,8 +105,8 @@ mod tests {
     #[test]
     fn test_xar_roundtrip() {
         // Build a minimal in-memory XAR: header + zlib-compressed TOC + heap
-        use flate2::write::ZlibEncoder;
         use flate2::Compression;
+        use flate2::write::ZlibEncoder;
         use std::io::Write;
 
         let toc_xml = br#"<?xml version="1.0" encoding="UTF-8"?>

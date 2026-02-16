@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use std::process;
 
 use clap::{Args, CommandFactory, Parser, Subcommand};
-use clap_complete::{generate, Shell};
+use clap_complete::{Shell, generate};
 
 // ── Top-level CLI ────────────────────────────────────────────────────────
 

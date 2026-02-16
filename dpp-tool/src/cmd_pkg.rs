@@ -251,15 +251,15 @@ fn find(
     let matches: Vec<_> = files
         .iter()
         .filter(|f| {
-            if let Some(ref kind) = type_filter {
-                if f.file_type != *kind {
-                    return false;
-                }
+            if let Some(ref kind) = type_filter
+                && f.file_type != *kind
+            {
+                return false;
             }
-            if let Some(ref pattern) = name_pattern {
-                if !glob_match(pattern, &f.name) {
-                    return false;
-                }
+            if let Some(ref pattern) = name_pattern
+                && !glob_match(pattern, &f.name)
+            {
+                return false;
             }
             true
         })

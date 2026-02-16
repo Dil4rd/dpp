@@ -5,11 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.4] - 2026-02-16
 
 ### Added
 
 - Basic test suite for Python bindings (imports, error handling, CpioBuilder, DmgBuilder, context managers)
+
+### Changed
+
+- Rust edition upgraded from 2021 to 2024
+- Updated dpp dependency to 0.3.4
 
 ## [0.1.3] - 2026-02-16
 

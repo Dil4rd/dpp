@@ -11,7 +11,7 @@ use xz2::read::XzDecoder;
 use rayon::prelude::*;
 
 use crate::error::{PbzxError, Result};
-use crate::format::{ChunkHeader, PbzxHeader, CHUNK_HEADER_SIZE, HEADER_SIZE, PBZX_MAGIC};
+use crate::format::{CHUNK_HEADER_SIZE, ChunkHeader, HEADER_SIZE, PBZX_MAGIC, PbzxHeader};
 
 /// A reader for PBZX archives.
 ///
@@ -223,10 +223,7 @@ impl<R: Read> PbzxReader<R> {
         let chunks = self.read_all_chunks()?;
 
         // Parallel decompress each chunk
-        let results: Vec<Result<Vec<u8>>> = chunks
-            .into_par_iter()
-            .map(|chunk| decompress_chunk(chunk))
-            .collect();
+        let results: Vec<Result<Vec<u8>>> = chunks.into_par_iter().map(decompress_chunk).collect();
 
         // Calculate total size for pre-allocation
         let mut total_size = 0usize;

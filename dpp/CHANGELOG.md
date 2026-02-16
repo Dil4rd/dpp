@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.4] - 2026-02-16
 
 ### Added
 
@@ -14,7 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Rust edition upgraded from 2021 to 2024
 - Renamed test fixtures: `Kernel_Debug_Kit_26.3_build_25D5087f.dmg` → `kdk.dmg`, `upscayl-2.15.0-mac.dmg` → `upscayl.dmg`, `kdk.raw` → `hfsp.raw`, `Payload` → `payload.bin`
+- Updated all workspace dependencies to latest versions
+
+### Fixed
+
+- Clippy fixes for Rust 2024 edition
 
 ## [0.3.3] - 2026-02-16
 

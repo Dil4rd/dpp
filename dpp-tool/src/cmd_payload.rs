@@ -363,10 +363,10 @@ fn find(
                 }
             }
 
-            if let Some(ref pattern) = name_pattern {
-                if !glob_match(pattern, basename_of(&np)) {
-                    return false;
-                }
+            if let Some(ref pattern) = name_pattern
+                && !glob_match(pattern, basename_of(&np))
+            {
+                return false;
             }
 
             true

@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{PbzxError, Result};
 use crate::format::{
-    CpioFormat, CpioHeader, FileEntry, CPIO_MAGIC_CRC, CPIO_MAGIC_NEWC, CPIO_MAGIC_ODC,
+    CPIO_MAGIC_CRC, CPIO_MAGIC_NEWC, CPIO_MAGIC_ODC, CpioFormat, CpioHeader, FileEntry,
 };
 
 /// A reader for CPIO archives.

@@ -8,12 +8,12 @@ use std::path::Path;
 
 use base64::Engine;
 use byteorder::{BigEndian, WriteBytesExt};
-use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use flate2::write::ZlibEncoder;
 
-use crate::checksum::{crc32, create_checksum_array, CHECKSUM_TYPE_CRC32, CHECKSUM_TYPE_NONE};
+use crate::checksum::{CHECKSUM_TYPE_CRC32, CHECKSUM_TYPE_NONE, crc32, create_checksum_array};
 use crate::error::{DppError, Result};
-use crate::format::{BlockRun, BlockType, KolyHeader, KOLY_MAGIC, KOLY_SIZE, MISH_MAGIC};
+use crate::format::{BlockRun, BlockType, KOLY_MAGIC, KOLY_SIZE, KolyHeader, MISH_MAGIC};
 
 /// Sector size in bytes
 const SECTOR_SIZE: u64 = 512;

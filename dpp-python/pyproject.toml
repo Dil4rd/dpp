@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "dpp"
+name = "dpp-py"
 requires-python = ">=3.9"
 description = "Python bindings for parsing Apple DMG disk images, HFS+/APFS filesystems, PKG installers, and PBZX/CPIO payloads"
 license = { text = "MIT" }

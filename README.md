@@ -60,7 +60,7 @@ dpp-tool payload cat Kernel_Debug_Kit.dmg /KernelDebugKit.pkg com.apple.pkg.KDK 
 ### Python
 
 ```bash
-pip install dpp
+pip install dpp-py
 ```
 
 ```python

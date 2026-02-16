@@ -2,8 +2,6 @@
 
 # dpp-tool
 
-**Cross-platform Rust library for reading Apple File System (APFS) containers**
-
 [![Crates.io](https://img.shields.io/crates/v/dpp-tool.svg)](https://crates.io/crates/dpp-tool)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)

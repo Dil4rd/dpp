@@ -90,7 +90,7 @@ For faster PBZX payload extraction with multi-threaded decompression:
 
 ```toml
 [dependencies]
-dpp = { version = "0.3.1", features = ["parallel"] }
+dpp = { version = "0.3", features = ["parallel"] }
 ```
 
 Open a DMG and list the root directory (auto-detects HFS+ or APFS):
@@ -198,12 +198,12 @@ Each crate is published independently and can be used on its own:
 
 | Crate | Description | Dependencies |
 |-------|-------------|:------------:|
-| [`udif`](udif/) | Apple DMG (UDIF) disk images — read & write with LZFSE/XZ/Zlib/Bzip2 | 9 |
+| [`udif`](udif/) | Apple DMG (UDIF) disk images — read & write with LZFSE/XZ/Zlib/Bzip2 | 10 |
 | [`hfsplus`](hfsplus/) | HFS+ and HFSX filesystem — B-tree traversal, extent overflow, Unicode | 2 |
 | [`xara`](xara/) | XAR archives and macOS PKG installers — TOC parsing, payload extraction | 4 |
 | [`pbzx`](pbzx/) | PBZX streaming archives — chunked XZ decompression, CPIO read/write | 3 |
 | [`apfs`](apfs/) | APFS containers and volumes — checksums, object maps, catalog B-trees | 2 |
-| [`dpp`](dpp/) | Pipeline library chaining all of the above | 6 |
+| [`dpp`](dpp/) | Pipeline library chaining all of the above | 7 |
 | [`dpp-python`](dpp-python/) | Python bindings via PyO3 + maturin | 2 |
 
 ## Building

@@ -4,6 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "dpp-py"
+dynamic = ["version"]
 requires-python = ">=3.9"
 description = "Python bindings for parsing Apple DMG disk images, HFS+/APFS filesystems, PKG installers, and PBZX/CPIO payloads"
 license = { text = "MIT" }

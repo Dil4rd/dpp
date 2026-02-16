@@ -61,11 +61,12 @@ pub(crate) fn run(
             kv("Files", &format_commas(vi.file_count));
             kv("Directories", &format_commas(vi.directory_count));
 
-            if let Some(mp) = main_partition {
-                if mp.size > 0 && fs_time.as_secs_f64() > 0.0 {
-                    let throughput = mp.size as f64 / fs_time.as_secs_f64() / (1024.0 * 1024.0);
-                    kv_highlight("Throughput", &format!("{:.1} MB/s", throughput));
-                }
+            if let Some(mp) = main_partition
+                && mp.size > 0
+                && fs_time.as_secs_f64() > 0.0
+            {
+                let throughput = mp.size as f64 / fs_time.as_secs_f64() / (1024.0 * 1024.0);
+                kv_highlight("Throughput", &format!("{:.1} MB/s", throughput));
             }
 
             // Stage 3: Filesystem walk
@@ -131,12 +132,12 @@ pub(crate) fn run(
                     };
 
                     // Find payload size
-                    if let Some(payload_file) = pkg.xar().find(&payload_path) {
-                        if let Some(data) = &payload_file.data {
-                            kv("Component", if comp.is_empty() { "(root)" } else { comp });
-                            kv("Compressed payload", &format_size(data.length));
-                            kv("Uncompressed payload", &format_size(data.size));
-                        }
+                    if let Some(payload_file) = pkg.xar().find(&payload_path)
+                        && let Some(data) = &payload_file.data
+                    {
+                        kv("Component", if comp.is_empty() { "(root)" } else { comp });
+                        kv("Compressed payload", &format_size(data.length));
+                        kv("Uncompressed payload", &format_size(data.size));
                     }
 
                     let mut pkg_mut = fs.open_pkg(&pkg_files[0].path)?;

@@ -46,8 +46,6 @@ pub struct DmgReader<R> {
     reader: R,
     koly: KolyHeader,
     partitions: Vec<PartitionEntry>,
-    #[allow(dead_code)]
-    options: DmgReaderOptions,
 }
 
 impl<R: Read + Seek> DmgReader<R> {
@@ -82,7 +80,6 @@ impl<R: Read + Seek> DmgReader<R> {
             reader,
             koly,
             partitions,
-            options,
         })
     }
 

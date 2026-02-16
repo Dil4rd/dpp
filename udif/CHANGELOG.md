@@ -5,11 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.2] - 2026-02-16
 
 ### Changed
 
+- Rust edition upgraded from 2021 to 2024
 - Renamed test fixture `Kernel_Debug_Kit_26.3_build_25D5087f.dmg` → `kdk.dmg`
+
+### Fixed
+
+- Clippy fixes for Rust 2024 edition
+- Removed `#[allow(dead_code)]` by dropping unused `options` field from `DmgReader`
 
 ## [0.3.1] - 2026-02-16
 

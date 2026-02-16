@@ -1,6 +1,6 @@
 use flate2::read::ZlibDecoder;
-use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::events::Event;
 use std::io::Read;
 
 use crate::error::{Result, XarError};
@@ -180,15 +180,14 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
             }
             Ok(Event::Empty(ref e)) => {
                 let tag = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                if tag == "encoding" {
-                    if let Some(f) = stack.last_mut() {
-                        if f.in_data {
-                            for attr in e.attributes().flatten() {
-                                if attr.key.as_ref() == b"style" {
-                                    f.data_encoding =
-                                        Some(String::from_utf8_lossy(&attr.value).to_string());
-                                }
-                            }
+                if tag == "encoding"
+                    && let Some(f) = stack.last_mut()
+                    && f.in_data
+                {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"style" {
+                            f.data_encoding =
+                                Some(String::from_utf8_lossy(&attr.value).to_string());
                         }
                     }
                 }

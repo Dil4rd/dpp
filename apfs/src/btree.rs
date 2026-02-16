@@ -277,6 +277,14 @@ impl BTreeNode {
     }
 }
 
+/// Tree-shape constants passed through recursive B-tree traversal.
+struct BTreeParams {
+    block_size: u32,
+    fixed_key_size: u32,
+    fixed_val_size: u32,
+    omap_root: Option<u64>,
+}
+
 /// Resolve a child OID to a physical block number.
 /// If `omap_root` is Some, the OID is virtual and needs OMAP resolution.
 /// If `omap_root` is None, the OID is already a physical block number.
@@ -335,17 +343,20 @@ where
         (fixed_key_size, fixed_val_size)
     };
 
-    btree_lookup_node(reader, &node, block_size, fks, fvs, compare_fn, omap_root)
+    let params = BTreeParams {
+        block_size,
+        fixed_key_size: fks,
+        fixed_val_size: fvs,
+        omap_root,
+    };
+    btree_lookup_node(reader, &node, &params, compare_fn)
 }
 
 fn btree_lookup_node<R: Read + Seek, F>(
     reader: &mut R,
     node: &BTreeNode,
-    block_size: u32,
-    fixed_key_size: u32,
-    fixed_val_size: u32,
+    params: &BTreeParams,
     compare_fn: &F,
-    omap_root: Option<u64>,
 ) -> Result<Option<Vec<u8>>>
 where
     F: Fn(&[u8]) -> std::cmp::Ordering,
@@ -353,10 +364,10 @@ where
     if node.node_header.is_leaf() {
         // Search leaf for exact match
         for i in 0..node.node_header.btn_nkeys as usize {
-            let key = node.key(i, fixed_key_size)?;
+            let key = node.key(i, params.fixed_key_size)?;
             match compare_fn(key) {
                 std::cmp::Ordering::Equal => {
-                    let val = node.value(i, fixed_val_size)?;
+                    let val = node.value(i, params.fixed_val_size)?;
                     return Ok(Some(val.to_vec()));
                 }
                 std::cmp::Ordering::Greater => return Ok(None),
@@ -369,7 +380,7 @@ where
         let mut child_idx: Option<usize> = None;
 
         for i in 0..node.node_header.btn_nkeys as usize {
-            let key = node.key(i, fixed_key_size)?;
+            let key = node.key(i, params.fixed_key_size)?;
             match compare_fn(key) {
                 std::cmp::Ordering::Less | std::cmp::Ordering::Equal => {
                     child_idx = Some(i);
@@ -384,20 +395,13 @@ where
         };
 
         let child_oid = node.child_oid(child_idx)?;
-        let child_block = resolve_child_oid(reader, child_oid, block_size, omap_root)?;
+        let child_block =
+            resolve_child_oid(reader, child_oid, params.block_size, params.omap_root)?;
 
-        let child_data = object::read_block(reader, child_block, block_size)?;
+        let child_data = object::read_block(reader, child_block, params.block_size)?;
         let child_node = BTreeNode::parse(&child_data)?;
 
-        btree_lookup_node(
-            reader,
-            &child_node,
-            block_size,
-            fixed_key_size,
-            fixed_val_size,
-            compare_fn,
-            omap_root,
-        )
+        btree_lookup_node(reader, &child_node, params, compare_fn)
     }
 }
 
@@ -441,30 +445,23 @@ where
         (fixed_key_size, fixed_val_size)
     };
 
-    let mut results = Vec::new();
-    btree_scan_node(
-        reader,
-        &node,
+    let params = BTreeParams {
         block_size,
-        fks,
-        fvs,
-        range_fn,
-        &mut results,
+        fixed_key_size: fks,
+        fixed_val_size: fvs,
         omap_root,
-    )?;
+    };
+    let mut results = Vec::new();
+    btree_scan_node(reader, &node, &params, range_fn, &mut results)?;
     Ok(results)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn btree_scan_node<R: Read + Seek, F>(
     reader: &mut R,
     node: &BTreeNode,
-    block_size: u32,
-    fixed_key_size: u32,
-    fixed_val_size: u32,
+    params: &BTreeParams,
     range_fn: &F,
     results: &mut Vec<(Vec<u8>, Vec<u8>)>,
-    omap_root: Option<u64>,
 ) -> Result<bool>
 // returns false if scanning should stop
 where
@@ -472,10 +469,10 @@ where
 {
     if node.node_header.is_leaf() {
         for i in 0..node.node_header.btn_nkeys as usize {
-            let key = node.key(i, fixed_key_size)?;
+            let key = node.key(i, params.fixed_key_size)?;
             match range_fn(key) {
                 Some(true) => {
-                    let val = node.value(i, fixed_val_size)?;
+                    let val = node.value(i, params.fixed_val_size)?;
                     results.push((key.to_vec(), val.to_vec()));
                 }
                 Some(false) => continue,
@@ -490,20 +487,12 @@ where
         // In APFS B-trees, btn_nkeys IS the number of children for internal nodes.
         for i in 0..node.node_header.btn_nkeys as usize {
             let child_oid = node.child_oid(i)?;
-            let child_block = resolve_child_oid(reader, child_oid, block_size, omap_root)?;
-            let child_data = object::read_block(reader, child_block, block_size)?;
+            let child_block =
+                resolve_child_oid(reader, child_oid, params.block_size, params.omap_root)?;
+            let child_data = object::read_block(reader, child_block, params.block_size)?;
             let child_node = BTreeNode::parse(&child_data)?;
 
-            if !btree_scan_node(
-                reader,
-                &child_node,
-                block_size,
-                fixed_key_size,
-                fixed_val_size,
-                range_fn,
-                results,
-                omap_root,
-            )? {
+            if !btree_scan_node(reader, &child_node, params, range_fn, results)? {
                 return Ok(false);
             }
         }

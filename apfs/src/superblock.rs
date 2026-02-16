@@ -3,7 +3,7 @@ use std::io::{Cursor, Read, Seek, SeekFrom};
 
 use crate::error::{ApfsError, Result};
 use crate::fletcher;
-use crate::object::{ObjectHeader, OBJECT_TYPE_NX_SUPERBLOCK};
+use crate::object::{OBJECT_TYPE_NX_SUPERBLOCK, ObjectHeader};
 
 /// NX_MAGIC = "NXSB" as little-endian u32
 pub const NX_MAGIC: u32 = 0x4253584E;
@@ -444,7 +444,7 @@ mod tests {
         let mut block = vec![0u8; 4096];
         // ObjectHeader: checksum [0..8], oid [8..16], xid [16..24], type [24..28], subtype [28..32]
         block[24..28].copy_from_slice(&0x01u32.to_le_bytes()); // type = NX_SUPERBLOCK
-                                                               // Wrong magic at offset 32
+        // Wrong magic at offset 32
         block[32..36].copy_from_slice(&0xDEADBEEFu32.to_le_bytes());
 
         let result = NxSuperblock::parse(&block);

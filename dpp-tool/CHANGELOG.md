@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.2] - 2026-02-16
+
+### Changed
+
+- Rust edition upgraded from 2021 to 2024
+- Updated all workspace dependencies to latest versions
+
+### Fixed
+
+- Clippy fixes for Rust 2024 edition
+
 ## [0.4.1] - 2026-02-16
 
 ### Added

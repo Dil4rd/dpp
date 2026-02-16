@@ -1,8 +1,8 @@
 use std::io::{Read, Seek, Write};
 
+use crate::XarArchive;
 use crate::error::{Result, XarError};
 use crate::toc::XarFileType;
-use crate::XarArchive;
 
 /// High-level reader for macOS .pkg (flat package) files.
 /// Wraps a XarArchive with PKG-specific knowledge.

@@ -270,10 +270,10 @@ fn find(
     let matches: Vec<_> = entries
         .iter()
         .filter(|e| {
-            if let Some(ref kind) = type_filter {
-                if e.entry.kind != *kind {
-                    return false;
-                }
+            if let Some(ref kind) = type_filter
+                && e.entry.kind != *kind
+            {
+                return false;
             }
             if let Some(ref pattern) = name_pattern {
                 let basename = e.path.rsplit('/').next().unwrap_or(&e.path);

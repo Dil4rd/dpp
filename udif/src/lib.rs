@@ -45,11 +45,11 @@ pub mod format;
 pub mod reader;
 pub mod writer;
 
-pub use checksum::{crc32, CHECKSUM_TYPE_CRC32, CHECKSUM_TYPE_NONE};
+pub use checksum::{CHECKSUM_TYPE_CRC32, CHECKSUM_TYPE_NONE, crc32};
 pub use error::{DppError, Result};
 pub use format::{BlockType, KolyHeader, MishHeader, PartitionEntry};
-pub use reader::{is_dmg, open, CompressionInfo, DmgReader, DmgReaderOptions, DmgStats};
-pub use writer::{create, create_from_data, create_from_file, CompressionMethod, DmgWriter};
+pub use reader::{CompressionInfo, DmgReader, DmgReaderOptions, DmgStats, is_dmg, open};
+pub use writer::{CompressionMethod, DmgWriter, create, create_from_data, create_from_file};
 
 /// Partition filesystem type detected from the partition name
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -349,7 +349,7 @@ mod tests {
     // =========================================================================
     #[test]
     fn test_koly_header_size_is_512() {
-        use crate::format::{KolyHeader, KOLY_MAGIC, KOLY_SIZE};
+        use crate::format::{KOLY_MAGIC, KOLY_SIZE, KolyHeader};
 
         assert_eq!(KOLY_SIZE, 512, "KOLY_SIZE constant must be 512");
 
@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_koly_magic_position() {
-        use crate::format::{KolyHeader, KOLY_MAGIC};
+        use crate::format::{KOLY_MAGIC, KolyHeader};
 
         // Create a minimal DMG-like structure
         let mut dmg_data = vec![0u8; 1024]; // Some data
@@ -442,7 +442,7 @@ mod tests {
     // =========================================================================
     #[test]
     fn test_mish_block_count_at_offset_200() {
-        use crate::format::{MishHeader, MISH_MAGIC};
+        use crate::format::{MISH_MAGIC, MishHeader};
         use byteorder::{BigEndian, WriteBytesExt};
 
         // Create a mish header manually with known values
@@ -490,7 +490,7 @@ mod tests {
 
     #[test]
     fn test_mish_header_size_is_204() {
-        use crate::format::{MishHeader, MISH_MAGIC};
+        use crate::format::{MISH_MAGIC, MishHeader};
         use byteorder::{BigEndian, WriteBytesExt};
 
         // Build minimal mish header
@@ -547,9 +547,9 @@ mod tests {
     // =========================================================================
     #[test]
     fn test_zlib_partial_sector() {
+        use flate2::Compression;
         use flate2::read::ZlibDecoder;
         use flate2::write::ZlibEncoder;
-        use flate2::Compression;
         use std::io::{Read, Write};
 
         // Create data that's not sector-aligned (100 bytes, not multiple of 512)

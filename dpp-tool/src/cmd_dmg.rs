@@ -1,9 +1,9 @@
 use std::io;
 use std::path::Path;
 
+use crate::DmgCommand;
 use crate::pipeline::open_pipeline;
 use crate::style::*;
-use crate::DmgCommand;
 
 pub(crate) fn run(
     cmd: DmgCommand,

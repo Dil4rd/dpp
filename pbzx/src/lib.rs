@@ -91,7 +91,7 @@ pub mod writer;
 pub use cpio::{CpioEntry, CpioReader};
 pub use error::{PbzxError, Result};
 pub use format::{ChunkHeader, CpioHeader, FileEntry, PbzxHeader};
-pub use reader::{is_pbzx, open, ChunkInfo, PbzxReader};
+pub use reader::{ChunkInfo, PbzxReader, is_pbzx, open};
 pub use writer::{CpioBuilder, PbzxWriter};
 
 use std::fs::File;

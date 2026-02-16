@@ -4,7 +4,10 @@ use std::time::Instant;
 
 use crate::style::*;
 
-pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(
+    dmg_path: &Path,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     let dmg_str = dmg_path.display();
 
     header(&format!("Benchmark: {dmg_str}"));
@@ -19,21 +22,31 @@ pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn
     kv("Partitions found", &partitions.len().to_string());
 
     // Find main partition size
-    let main_partition = partitions.iter()
+    let main_partition = partitions
+        .iter()
         .find(|p| p.name.contains("Apple_HFS") || p.name.contains("Apple_APFS"))
         .or_else(|| partitions.iter().max_by_key(|p| p.size));
 
     if let Some(mp) = main_partition {
-        kv("Main partition", &format!("{} ({})", mp.name, format_size(mp.size)));
+        kv(
+            "Main partition",
+            &format!("{} ({})", mp.name, format_size(mp.size)),
+        );
     }
 
     // Determine filesystem type label from partition metadata
-    let has_hfs = partitions.iter()
-        .any(|p| matches!(p.partition_type, udif::PartitionType::Hfs | udif::PartitionType::Hfsx));
+    let has_hfs = partitions.iter().any(|p| {
+        matches!(
+            p.partition_type,
+            udif::PartitionType::Hfs | udif::PartitionType::Hfsx
+        )
+    });
     let fs_label = if has_hfs { "HFS+" } else { "APFS" };
 
     // Stage 2: Filesystem extraction
-    section(&format!("Stage 2: {fs_label} Extraction (decompress + parse)"));
+    section(&format!(
+        "Stage 2: {fs_label} Extraction (decompress + parse)"
+    ));
     let t = Instant::now();
     let fs_result = pipeline.open_filesystem_with_mode(mode);
     let fs_time = t.elapsed();
@@ -60,8 +73,14 @@ pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn
             let t = Instant::now();
             let entries = fs.walk()?;
             let walk_time = t.elapsed();
-            let file_count = entries.iter().filter(|e| e.entry.kind == dpp::FsEntryKind::File).count();
-            let dir_count = entries.iter().filter(|e| e.entry.kind == dpp::FsEntryKind::Directory).count();
+            let file_count = entries
+                .iter()
+                .filter(|e| e.entry.kind == dpp::FsEntryKind::File)
+                .count();
+            let dir_count = entries
+                .iter()
+                .filter(|e| e.entry.kind == dpp::FsEntryKind::Directory)
+                .count();
             let total_size: u64 = entries.iter().map(|e| e.entry.size).sum();
             kv("Time", &format_duration(walk_time));
             kv("Files", &format_commas(file_count as u64));
@@ -69,7 +88,10 @@ pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn
             kv("Total content", &format_size(total_size));
 
             if !entries.is_empty() && walk_time.as_secs_f64() > 0.0 {
-                kv_highlight("Entries/sec", &format!("{:.0}", entries.len() as f64 / walk_time.as_secs_f64()));
+                kv_highlight(
+                    "Entries/sec",
+                    &format!("{:.0}", entries.len() as f64 / walk_time.as_secs_f64()),
+                );
             }
 
             // Stage 4: PKG discovery
@@ -86,7 +108,14 @@ pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn
                 let pkg_time = t.elapsed();
                 kv("Time", &format_duration(pkg_time));
                 kv("Package", pkg_path);
-                kv("Type", if pkg.is_product_package() { "product" } else { "component" });
+                kv(
+                    "Type",
+                    if pkg.is_product_package() {
+                        "product"
+                    } else {
+                        "component"
+                    },
+                );
                 kv("Components", &pkg.components().len().to_string());
                 kv("XAR entries", &pkg.xar().files().len().to_string());
 
@@ -126,7 +155,8 @@ pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn
                         kv("CPIO entries", &format_commas(pbzx_entries.len() as u64));
 
                         if !payload.is_empty() && pbzx_time.as_secs_f64() > 0.0 {
-                            let throughput = payload.len() as f64 / pbzx_time.as_secs_f64() / (1024.0 * 1024.0);
+                            let throughput =
+                                payload.len() as f64 / pbzx_time.as_secs_f64() / (1024.0 * 1024.0);
                             kv_highlight("PBZX throughput", &format!("{:.1} MB/s", throughput));
                         }
                     }
@@ -152,7 +182,13 @@ pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn
                 let pct = time.as_secs_f64() / total.as_secs_f64() * 100.0;
                 let bar_len = (pct / 100.0 * bar_total as f64) as usize;
                 let bar: String = (0..bar_len).map(|_| '#').collect();
-                let color = if pct > 50.0 { rd } else if pct > 20.0 { y } else { g };
+                let color = if pct > 50.0 {
+                    rd
+                } else if pct > 20.0 {
+                    y
+                } else {
+                    g
+                };
                 println!(
                     "  {:<25} {:>10}  {color}{:>5.1}%{r}  {color}{bar}{r}",
                     name,
@@ -161,11 +197,7 @@ pub(crate) fn run(dmg_path: &Path, mode: dpp::ExtractMode) -> Result<(), Box<dyn
                 );
             }
             println!("  {d}{}{r}", "-".repeat(50));
-            println!(
-                "  {b}{:<25}{r} {:>10}",
-                "Total",
-                format_duration(total),
-            );
+            println!("  {b}{:<25}{r} {:>10}", "Total", format_duration(total),);
             println!();
         }
         Err(dpp::DppError::NoFilesystemPartition) => {

@@ -1,7 +1,7 @@
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::Read;
 
-use crate::error::{XarError, Result};
+use crate::error::{Result, XarError};
 
 /// XAR magic number: "xar!" (0x78617221)
 pub const XAR_MAGIC: u32 = 0x78617221;

@@ -1,9 +1,9 @@
-pub mod error;
-pub mod volume;
 pub mod btree;
 pub mod catalog;
+pub mod error;
 pub mod extents;
 pub mod unicode;
+pub mod volume;
 
 pub use error::{HfsPlusError, Result};
 pub use volume::VolumeHeader;
@@ -77,18 +77,12 @@ impl<R: Read + Seek> HfsVolume<R> {
         let header = volume::VolumeHeader::parse(&mut reader)?;
 
         // Read catalog B-tree header
-        let catalog_btree_header = btree::read_btree_header(
-            &mut reader,
-            &header.catalog_file,
-            header.block_size,
-        )?;
+        let catalog_btree_header =
+            btree::read_btree_header(&mut reader, &header.catalog_file, header.block_size)?;
 
         // Read extents overflow B-tree header
-        let extents_btree_header = btree::read_btree_header(
-            &mut reader,
-            &header.extents_file,
-            header.block_size,
-        )?;
+        let extents_btree_header =
+            btree::read_btree_header(&mut reader, &header.extents_file, header.block_size)?;
 
         Ok(HfsVolume {
             reader,
@@ -160,7 +154,12 @@ impl<R: Read + Seek> HfsVolume<R> {
                     group_id: f.permissions.group_id,
                     mode: f.permissions.file_mode,
                 },
-                data_fork_extents: f.data_fork.extents.iter().filter(|e| e.block_count > 0).count() as u32,
+                data_fork_extents: f
+                    .data_fork
+                    .extents
+                    .iter()
+                    .filter(|e| e.block_count > 0)
+                    .count() as u32,
                 resource_fork_size: f.resource_fork.logical_size,
             }),
             catalog::CatalogRecord::Folder(f) => Ok(FileStat {
@@ -177,7 +176,9 @@ impl<R: Read + Seek> HfsVolume<R> {
                 data_fork_extents: 0,
                 resource_fork_size: 0,
             }),
-            _ => Err(HfsPlusError::CorruptedData("unexpected thread record".into())),
+            _ => Err(HfsPlusError::CorruptedData(
+                "unexpected thread record".into(),
+            )),
         }
     }
 
@@ -204,7 +205,9 @@ impl<R: Read + Seek> HfsVolume<R> {
         match record {
             catalog::CatalogRecord::Folder(f) => Ok(f.folder_id),
             catalog::CatalogRecord::File(f) => Ok(f.file_id),
-            _ => Err(HfsPlusError::CorruptedData("unexpected thread record".into())),
+            _ => Err(HfsPlusError::CorruptedData(
+                "unexpected thread record".into(),
+            )),
         }
     }
 
@@ -213,7 +216,9 @@ impl<R: Read + Seek> HfsVolume<R> {
         match record {
             catalog::CatalogRecord::File(f) => Ok(f),
             catalog::CatalogRecord::Folder(_) => Err(HfsPlusError::NotADirectory(path.to_string())),
-            _ => Err(HfsPlusError::CorruptedData("unexpected thread record".into())),
+            _ => Err(HfsPlusError::CorruptedData(
+                "unexpected thread record".into(),
+            )),
         }
     }
 

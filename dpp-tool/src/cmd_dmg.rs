@@ -1,11 +1,14 @@
 use std::io;
 use std::path::Path;
 
-use crate::style::*;
 use crate::pipeline::open_pipeline;
+use crate::style::*;
 use crate::DmgCommand;
 
-pub(crate) fn run(cmd: DmgCommand, _mode: dpp::ExtractMode) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(
+    cmd: DmgCommand,
+    _mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
         DmgCommand::Info { dmg } => info(&dmg),
         DmgCommand::Ls { dmg } => ls(&dmg),
@@ -27,17 +30,36 @@ fn info(dmg_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     kv("Sectors", &format_commas(stats.sector_count));
 
     section("Compression");
-    kv("Compressed", &format!("{} ({})", format_size(stats.total_compressed), format_size(stats.data_fork_length)));
+    kv(
+        "Compressed",
+        &format!(
+            "{} ({})",
+            format_size(stats.total_compressed),
+            format_size(stats.data_fork_length)
+        ),
+    );
     kv("Uncompressed", &format_size(stats.total_uncompressed));
     kv_highlight("Space savings", &format!("{:.1}%", stats.space_savings()));
 
     let mut block_types = Vec::new();
-    if comp_info.lzfse_blocks > 0 { block_types.push(format!("LZFSE: {}", comp_info.lzfse_blocks)); }
-    if comp_info.xz_blocks > 0 { block_types.push(format!("XZ: {}", comp_info.xz_blocks)); }
-    if comp_info.zlib_blocks > 0 { block_types.push(format!("Zlib: {}", comp_info.zlib_blocks)); }
-    if comp_info.bzip2_blocks > 0 { block_types.push(format!("Bzip2: {}", comp_info.bzip2_blocks)); }
-    if comp_info.raw_blocks > 0 { block_types.push(format!("Raw: {}", comp_info.raw_blocks)); }
-    if comp_info.zero_fill_blocks > 0 { block_types.push(format!("Zero: {}", comp_info.zero_fill_blocks)); }
+    if comp_info.lzfse_blocks > 0 {
+        block_types.push(format!("LZFSE: {}", comp_info.lzfse_blocks));
+    }
+    if comp_info.xz_blocks > 0 {
+        block_types.push(format!("XZ: {}", comp_info.xz_blocks));
+    }
+    if comp_info.zlib_blocks > 0 {
+        block_types.push(format!("Zlib: {}", comp_info.zlib_blocks));
+    }
+    if comp_info.bzip2_blocks > 0 {
+        block_types.push(format!("Bzip2: {}", comp_info.bzip2_blocks));
+    }
+    if comp_info.raw_blocks > 0 {
+        block_types.push(format!("Raw: {}", comp_info.raw_blocks));
+    }
+    if comp_info.zero_fill_blocks > 0 {
+        block_types.push(format!("Zero: {}", comp_info.zero_fill_blocks));
+    }
     if !block_types.is_empty() {
         kv("Block types", &block_types.join(", "));
     }
@@ -55,12 +77,18 @@ fn ls(dmg_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     println!();
     let (d, r) = (dim(), reset());
     let g = green();
-    println!("  {d}{:>4}  {:>12}  {:>12}  {:>12}  {:>7}  {}{r}", "ID", "Sectors", "Size", "Compressed", "Ratio", "Name");
+    println!(
+        "  {d}{:>4}  {:>12}  {:>12}  {:>12}  {:>7}  Name{r}",
+        "ID", "Sectors", "Size", "Compressed", "Ratio"
+    );
     println!("  {d}{}{r}", "-".repeat(72));
 
     for p in &partitions {
         let ratio = if p.size > 0 {
-            format!("{:.1}%", (1.0 - p.compressed_size as f64 / p.size as f64) * 100.0)
+            format!(
+                "{:.1}%",
+                (1.0 - p.compressed_size as f64 / p.size as f64) * 100.0
+            )
         } else {
             "N/A".to_string()
         };
@@ -81,10 +109,7 @@ fn ls(dmg_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!();
-    println!(
-        "  {d}{} partition(s){r}",
-        partitions.len()
-    );
+    println!("  {d}{} partition(s){r}", partitions.len());
     println!();
 
     Ok(())

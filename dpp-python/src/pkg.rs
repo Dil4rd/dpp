@@ -116,8 +116,8 @@ impl PyPkgReader {
     /// Extract the payload for a component, returning an Archive for reading files.
     fn payload(&mut self, component: &str) -> PyResult<PyArchive> {
         let pkg = self.pkg()?;
-        let data = dispatch_pkg!(pkg, payload, component)
-            .map_err(|e| to_pyerr(dpp::DppError::Xar(e)))?;
+        let data =
+            dispatch_pkg!(pkg, payload, component).map_err(|e| to_pyerr(dpp::DppError::Xar(e)))?;
         let archive = dpp::pbzx::Archive::from_reader(Cursor::new(data))
             .map_err(|e| to_pyerr(dpp::DppError::Pbzx(e)))?;
         Ok(PyArchive::from_archive(archive))
@@ -130,8 +130,8 @@ impl PyPkgReader {
         component: &str,
     ) -> PyResult<Bound<'py, PyBytes>> {
         let pkg = self.pkg()?;
-        let data = dispatch_pkg!(pkg, payload, component)
-            .map_err(|e| to_pyerr(dpp::DppError::Xar(e)))?;
+        let data =
+            dispatch_pkg!(pkg, payload, component).map_err(|e| to_pyerr(dpp::DppError::Xar(e)))?;
         Ok(PyBytes::new(py, &data))
     }
 
@@ -164,11 +164,10 @@ impl PyXarArchive {
     /// Open a XAR archive from a file path.
     #[staticmethod]
     fn open(path: &str) -> PyResult<Self> {
-        let file = std::fs::File::open(path)
-            .map_err(|e| to_pyerr(dpp::DppError::Io(e)))?;
+        let file = std::fs::File::open(path).map_err(|e| to_pyerr(dpp::DppError::Io(e)))?;
         let reader = BufReader::new(file);
-        let archive = dpp::xara::XarArchive::open(reader)
-            .map_err(|e| to_pyerr(dpp::DppError::Xar(e)))?;
+        let archive =
+            dpp::xara::XarArchive::open(reader).map_err(|e| to_pyerr(dpp::DppError::Xar(e)))?;
         Ok(PyXarArchive {
             inner: Some(archive),
         })

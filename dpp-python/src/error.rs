@@ -2,7 +2,12 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 
 // Define Python exception hierarchy
-pyo3::create_exception!(_dpp, DppError, PyException, "Base exception for all dpp errors.");
+pyo3::create_exception!(
+    _dpp,
+    DppError,
+    PyException,
+    "Base exception for all dpp errors."
+);
 pyo3::create_exception!(_dpp, IoError, DppError, "I/O error.");
 pyo3::create_exception!(
     _dpp,
@@ -16,12 +21,7 @@ pyo3::create_exception!(
     DppError,
     "File or partition not found."
 );
-pyo3::create_exception!(
-    _dpp,
-    DecompressionError,
-    DppError,
-    "Decompression failure."
-);
+pyo3::create_exception!(_dpp, DecompressionError, DppError, "Decompression failure.");
 pyo3::create_exception!(
     _dpp,
     UnsupportedError,
@@ -33,7 +33,10 @@ pyo3::create_exception!(
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("DppError", m.py().get_type::<DppError>())?;
     m.add("IoError", m.py().get_type::<IoError>())?;
-    m.add("InvalidFormatError", m.py().get_type::<InvalidFormatError>())?;
+    m.add(
+        "InvalidFormatError",
+        m.py().get_type::<InvalidFormatError>(),
+    )?;
     m.add("FileNotFoundError", m.py().get_type::<FileNotFoundError>())?;
     m.add(
         "DecompressionError",
@@ -52,10 +55,9 @@ pub fn to_pyerr(err: dpp::DppError) -> PyErr {
         E::Io(_) => IoError::new_err(err.to_string()),
 
         // File/partition not found
-        E::FileNotFound(_)
-        | E::NoHfsPartition
-        | E::NoApfsPartition
-        | E::NoFilesystemPartition => FileNotFoundError::new_err(err.to_string()),
+        E::FileNotFound(_) | E::NoHfsPartition | E::NoApfsPartition | E::NoFilesystemPartition => {
+            FileNotFoundError::new_err(err.to_string())
+        }
 
         // DMG sub-errors: dispatch by variant
         E::Dmg(dmg_err) => dmg_to_pyerr(dmg_err, &err),
@@ -99,10 +101,9 @@ fn hfs_to_pyerr(hfs_err: &dpp::hfsplus::HfsPlusError, top: &dpp::DppError) -> Py
     match hfs_err {
         H::Io(_) => IoError::new_err(top.to_string()),
         H::FileNotFound(_) => FileNotFoundError::new_err(top.to_string()),
-        H::InvalidSignature(_)
-        | H::InvalidBTree(_)
-        | H::NotADirectory(_)
-        | H::CorruptedData(_) => InvalidFormatError::new_err(top.to_string()),
+        H::InvalidSignature(_) | H::InvalidBTree(_) | H::NotADirectory(_) | H::CorruptedData(_) => {
+            InvalidFormatError::new_err(top.to_string())
+        }
         H::UnsupportedVersion(_) => UnsupportedError::new_err(top.to_string()),
     }
 }

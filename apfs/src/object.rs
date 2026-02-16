@@ -37,9 +37,10 @@ impl ObjectHeader {
     /// Parse an object header from the first 32 bytes of a block
     pub fn parse(data: &[u8]) -> Result<Self> {
         if data.len() < Self::SIZE {
-            return Err(ApfsError::CorruptedData(
-                format!("object header too short: {} bytes", data.len()),
-            ));
+            return Err(ApfsError::CorruptedData(format!(
+                "object header too short: {} bytes",
+                data.len()
+            )));
         }
 
         let mut cursor = Cursor::new(data);

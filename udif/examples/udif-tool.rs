@@ -100,12 +100,23 @@ fn cmd_info(args: &[String]) -> Result<()> {
     println!("  Version:          {}", stats.version);
     println!("  Sector count:     {}", stats.sector_count);
     println!("  Data fork length: {} bytes", stats.data_fork_length);
-    println!("  Segment:          {}/{}", koly.segment_number, koly.segment_count);
+    println!(
+        "  Segment:          {}/{}",
+        koly.segment_number, koly.segment_count
+    );
     println!();
 
     println!("Size:");
-    println!("  Uncompressed:     {} bytes ({:.2} MB)", stats.total_uncompressed, stats.total_uncompressed as f64 / 1024.0 / 1024.0);
-    println!("  Compressed:       {} bytes ({:.2} MB)", stats.total_compressed, stats.total_compressed as f64 / 1024.0 / 1024.0);
+    println!(
+        "  Uncompressed:     {} bytes ({:.2} MB)",
+        stats.total_uncompressed,
+        stats.total_uncompressed as f64 / 1024.0 / 1024.0
+    );
+    println!(
+        "  Compressed:       {} bytes ({:.2} MB)",
+        stats.total_compressed,
+        stats.total_compressed as f64 / 1024.0 / 1024.0
+    );
     println!("  Compression:      {:.1}%", stats.space_savings());
     println!();
 
@@ -150,12 +161,18 @@ fn cmd_list(args: &[String]) -> Result<()> {
 
     println!("Partitions in {}:", path);
     println!("{}", "=".repeat(80));
-    println!("{:>4}  {:>12}  {:>12}  {:>8}  {}", "ID", "Sectors", "Size", "Ratio", "Name");
+    println!(
+        "{:>4}  {:>12}  {:>12}  {:>8}  Name",
+        "ID", "Sectors", "Size", "Ratio"
+    );
     println!("{}", "-".repeat(80));
 
     for p in partitions {
         let ratio = if p.size > 0 {
-            format!("{:.1}%", (1.0 - p.compressed_size as f64 / p.size as f64) * 100.0)
+            format!(
+                "{:.1}%",
+                (1.0 - p.compressed_size as f64 / p.size as f64) * 100.0
+            )
         } else {
             "N/A".to_string()
         };
@@ -225,14 +242,16 @@ fn cmd_extract_all(args: &[String]) -> Result<()> {
 
 fn cmd_extract_partition(args: &[String]) -> Result<()> {
     if args.len() < 3 {
-        eprintln!("Usage: udif-tool extract-partition <dmg-file> <partition-id> <output-file> [--fast]");
+        eprintln!(
+            "Usage: udif-tool extract-partition <dmg-file> <partition-id> <output-file> [--fast]"
+        );
         process::exit(1);
     }
 
     let dmg_path = &args[0];
-    let partition_id: i32 = args[1].parse().map_err(|_| {
-        udif::DppError::InvalidPath("partition ID must be a number".to_string())
-    })?;
+    let partition_id: i32 = args[1]
+        .parse()
+        .map_err(|_| udif::DppError::InvalidPath("partition ID must be a number".to_string()))?;
     let output_path = &args[2];
     let fast_mode = args.iter().any(|a| a == "--fast" || a == "-f");
 
@@ -254,7 +273,9 @@ fn cmd_extract_partition(args: &[String]) -> Result<()> {
 
 fn cmd_create(args: &[String]) -> Result<()> {
     if args.len() < 2 {
-        eprintln!("Usage: udif-tool create <output.dmg> <input-file> [--compression <method>] [--fast]");
+        eprintln!(
+            "Usage: udif-tool create <output.dmg> <input-file> [--compression <method>] [--fast]"
+        );
         eprintln!("  Compression methods: raw, zlib (default), bzip2, lzfse");
         process::exit(1);
     }
@@ -299,7 +320,10 @@ fn cmd_create(args: &[String]) -> Result<()> {
     println!("Reading {}...", input_path);
     let data = fs::read(input_path)?;
 
-    println!("Creating {} with {:?} compression...", output_path, compression);
+    println!(
+        "Creating {} with {:?} compression...",
+        output_path, compression
+    );
     let partition_name = Path::new(input_path)
         .file_stem()
         .and_then(|s| s.to_str())

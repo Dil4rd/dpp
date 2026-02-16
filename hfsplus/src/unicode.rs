@@ -1,8 +1,8 @@
-/// HFS+ Unicode comparison utilities.
-///
-/// HFSX (case-sensitive) uses binary comparison of UTF-16BE values.
-/// HFS+ (case-insensitive) uses Apple's FastUnicodeCompare with a
-/// case-folding table defined in Apple TN1150.
+//! HFS+ Unicode comparison utilities.
+//!
+//! HFSX (case-sensitive) uses binary comparison of UTF-16BE values.
+//! HFS+ (case-insensitive) uses Apple's FastUnicodeCompare with a
+//! case-folding table defined in Apple TN1150.
 
 /// Compare two HFS+ Unicode names using binary comparison (HFSX / case-sensitive).
 pub fn compare_binary(a: &[u16], b: &[u16]) -> std::cmp::Ordering {
@@ -164,7 +164,7 @@ pub fn compare_case_insensitive(a: &[u16], b: &[u16]) -> std::cmp::Ordering {
     a.len().cmp(&b.len())
 }
 
-/// Convert a UTF-16BE byte slice to a Vec<u16> of code points
+/// Convert a UTF-16BE byte slice to a `Vec<u16>` of code points
 pub fn utf16be_to_u16(bytes: &[u8]) -> Vec<u16> {
     bytes
         .chunks_exact(2)
@@ -172,7 +172,7 @@ pub fn utf16be_to_u16(bytes: &[u8]) -> Vec<u16> {
         .collect()
 }
 
-/// Convert a Vec<u16> of UTF-16 code points to a Rust String
+/// Convert a `Vec<u16>` of UTF-16 code points to a Rust String
 pub fn utf16_to_string(code_points: &[u16]) -> String {
     String::from_utf16_lossy(code_points)
 }

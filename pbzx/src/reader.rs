@@ -156,7 +156,7 @@ impl<R: Read> PbzxReader<R> {
         Ok(total_written)
     }
 
-    /// Decompress to a Vec<u8>.
+    /// Decompress to a `Vec<u8>`.
     ///
     /// Note: This loads the entire decompressed content into memory.
     /// For large archives, prefer `decompress_to` with a file writer.

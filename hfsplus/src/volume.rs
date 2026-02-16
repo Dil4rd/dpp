@@ -24,23 +24,12 @@ pub struct ExtentDescriptor {
 }
 
 /// Fork data: describes a data or resource fork
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ForkData {
     pub logical_size: u64,
     pub clump_size: u32,
     pub total_blocks: u32,
     pub extents: [ExtentDescriptor; 8],
-}
-
-impl Default for ForkData {
-    fn default() -> Self {
-        ForkData {
-            logical_size: 0,
-            clump_size: 0,
-            total_blocks: 0,
-            extents: [ExtentDescriptor::default(); 8],
-        }
-    }
 }
 
 /// The HFS+ Volume Header (512 bytes at offset 1024)

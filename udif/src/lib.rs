@@ -48,7 +48,7 @@ pub mod writer;
 pub use checksum::{crc32, CHECKSUM_TYPE_CRC32, CHECKSUM_TYPE_NONE};
 pub use error::{DppError, Result};
 pub use format::{BlockType, KolyHeader, MishHeader, PartitionEntry};
-pub use reader::{open, is_dmg, CompressionInfo, DmgReader, DmgReaderOptions, DmgStats};
+pub use reader::{is_dmg, open, CompressionInfo, DmgReader, DmgReaderOptions, DmgStats};
 pub use writer::{create, create_from_data, create_from_file, CompressionMethod, DmgWriter};
 
 /// Partition filesystem type detected from the partition name
@@ -198,10 +198,7 @@ impl DmgArchive {
     }
 
     /// Stream the main HFS+/APFS partition to a writer (low memory usage)
-    pub fn extract_main_partition_to<W: std::io::Write>(
-        &mut self,
-        writer: &mut W,
-    ) -> Result<u64> {
+    pub fn extract_main_partition_to<W: std::io::Write>(&mut self, writer: &mut W) -> Result<u64> {
         self.reader.decompress_main_partition_to(writer)
     }
 
@@ -327,7 +324,10 @@ mod tests {
 
     #[test]
     fn test_block_type_conversion() {
-        assert_eq!(BlockType::try_from(0x00000000).unwrap(), BlockType::ZeroFill);
+        assert_eq!(
+            BlockType::try_from(0x00000000).unwrap(),
+            BlockType::ZeroFill
+        );
         assert_eq!(BlockType::try_from(0x80000005).unwrap(), BlockType::Zlib);
         assert_eq!(BlockType::try_from(0x80000006).unwrap(), BlockType::Bzip2);
         assert_eq!(BlockType::try_from(0x80000007).unwrap(), BlockType::Lzfse);
@@ -383,7 +383,11 @@ mod tests {
         let mut buf = Vec::new();
         koly.write(&mut buf).unwrap();
 
-        assert_eq!(buf.len(), 512, "Koly header serialization must be exactly 512 bytes");
+        assert_eq!(
+            buf.len(),
+            512,
+            "Koly header serialization must be exactly 512 bytes"
+        );
     }
 
     #[test]
@@ -445,27 +449,27 @@ mod tests {
         let mut mish_data = Vec::new();
 
         // Header (204 bytes)
-        mish_data.extend_from_slice(MISH_MAGIC);           // 0-3: magic
-        mish_data.write_u32::<BigEndian>(1).unwrap();      // 4-7: version
-        mish_data.write_u64::<BigEndian>(0).unwrap();      // 8-15: first_sector
-        mish_data.write_u64::<BigEndian>(10).unwrap();     // 16-23: sector_count
-        mish_data.write_u64::<BigEndian>(0).unwrap();      // 24-31: data_offset
-        mish_data.write_u32::<BigEndian>(0).unwrap();      // 32-35: buffers_needed
-        mish_data.write_u32::<BigEndian>(999).unwrap();    // 36-39: WRONG block count (should be ignored)
-        mish_data.extend_from_slice(&[0u8; 24]);           // 40-63: reserved
-        mish_data.write_u32::<BigEndian>(2).unwrap();      // 64-67: checksum_type
-        mish_data.write_u32::<BigEndian>(32).unwrap();     // 68-71: checksum_size
-        mish_data.extend_from_slice(&[0u8; 128]);          // 72-199: checksum
-        mish_data.write_u32::<BigEndian>(2).unwrap();      // 200-203: ACTUAL block count
+        mish_data.extend_from_slice(MISH_MAGIC); // 0-3: magic
+        mish_data.write_u32::<BigEndian>(1).unwrap(); // 4-7: version
+        mish_data.write_u64::<BigEndian>(0).unwrap(); // 8-15: first_sector
+        mish_data.write_u64::<BigEndian>(10).unwrap(); // 16-23: sector_count
+        mish_data.write_u64::<BigEndian>(0).unwrap(); // 24-31: data_offset
+        mish_data.write_u32::<BigEndian>(0).unwrap(); // 32-35: buffers_needed
+        mish_data.write_u32::<BigEndian>(999).unwrap(); // 36-39: WRONG block count (should be ignored)
+        mish_data.extend_from_slice(&[0u8; 24]); // 40-63: reserved
+        mish_data.write_u32::<BigEndian>(2).unwrap(); // 64-67: checksum_type
+        mish_data.write_u32::<BigEndian>(32).unwrap(); // 68-71: checksum_size
+        mish_data.extend_from_slice(&[0u8; 128]); // 72-199: checksum
+        mish_data.write_u32::<BigEndian>(2).unwrap(); // 200-203: ACTUAL block count
 
         // Add 2 block runs (40 bytes each)
         // Block 0: ZeroFill
         mish_data.write_u32::<BigEndian>(0x00000000).unwrap(); // type
-        mish_data.write_u32::<BigEndian>(0).unwrap();          // comment
-        mish_data.write_u64::<BigEndian>(0).unwrap();          // sector_number
-        mish_data.write_u64::<BigEndian>(10).unwrap();         // sector_count
-        mish_data.write_u64::<BigEndian>(0).unwrap();          // compressed_offset
-        mish_data.write_u64::<BigEndian>(0).unwrap();          // compressed_length
+        mish_data.write_u32::<BigEndian>(0).unwrap(); // comment
+        mish_data.write_u64::<BigEndian>(0).unwrap(); // sector_number
+        mish_data.write_u64::<BigEndian>(10).unwrap(); // sector_count
+        mish_data.write_u64::<BigEndian>(0).unwrap(); // compressed_offset
+        mish_data.write_u64::<BigEndian>(0).unwrap(); // compressed_length
 
         // Block 1: End marker
         mish_data.write_u32::<BigEndian>(0xFFFFFFFF).unwrap(); // type
@@ -543,8 +547,8 @@ mod tests {
     // =========================================================================
     #[test]
     fn test_zlib_partial_sector() {
-        use flate2::write::ZlibEncoder;
         use flate2::read::ZlibDecoder;
+        use flate2::write::ZlibEncoder;
         use flate2::Compression;
         use std::io::{Read, Write};
 
@@ -693,7 +697,10 @@ mod tests {
         fake_dmg[len - 4..].copy_from_slice(b"koly");
 
         let mut cursor = Cursor::new(&fake_dmg);
-        assert!(!is_dmg(&mut cursor), "Should not detect koly at wrong offset");
+        assert!(
+            !is_dmg(&mut cursor),
+            "Should not detect koly at wrong offset"
+        );
 
         // Create a file that has "koly" at -512 (should be valid)
         let mut real_dmg = vec![0u8; 600];
@@ -719,8 +726,7 @@ mod tests {
         ] {
             let mut dmg_buf = Vec::new();
             {
-                let mut writer = DmgWriter::new(Cursor::new(&mut dmg_buf))
-                    .compression(method);
+                let mut writer = DmgWriter::new(Cursor::new(&mut dmg_buf)).compression(method);
                 writer.add_partition("test", &original).unwrap();
                 writer.finish().unwrap();
             }
@@ -748,8 +754,8 @@ mod tests {
 
         let mut dmg_buf = Vec::new();
         {
-            let mut writer = DmgWriter::new(Cursor::new(&mut dmg_buf))
-                .compression(CompressionMethod::Lzfse);
+            let mut writer =
+                DmgWriter::new(Cursor::new(&mut dmg_buf)).compression(CompressionMethod::Lzfse);
             writer.add_partition("test", &original).unwrap();
             writer.finish().unwrap();
         }
@@ -763,9 +769,9 @@ mod tests {
 
     #[test]
     fn test_xz_roundtrip() {
-        use xz2::write::XzEncoder;
-        use xz2::read::XzDecoder;
         use std::io::Write;
+        use xz2::read::XzDecoder;
+        use xz2::write::XzEncoder;
 
         let original = b"XZ compression roundtrip test data. ".repeat(100);
 
@@ -828,7 +834,10 @@ mod tests {
         assert_eq!(&buf[1024..1026], &[0x48, 0x58], "Should be HFSX signature");
 
         assert_eq!(data.len(), buf.len());
-        assert_eq!(data, buf, "Buffered and streaming should produce identical output");
+        assert_eq!(
+            data, buf,
+            "Buffered and streaming should produce identical output"
+        );
     }
 
     /// Requires ../tests/googlechrome.dmg fixture (XZ-compressed DMG).
@@ -847,15 +856,19 @@ mod tests {
         // Decompress main partition and verify non-zero data
         let mut archive = DmgArchive::open(test_dmg).unwrap();
         let data = archive.extract_main_partition().unwrap();
-        assert!(!data.iter().all(|&b| b == 0), "Decompressed data should not be all zeros");
+        assert!(
+            !data.iter().all(|&b| b == 0),
+            "Decompressed data should not be all zeros"
+        );
 
         // Check for HFS+ signature (0x482B at offset 1024) or HFSX (0x4858)
         if data.len() > 1026 {
             let sig = &data[1024..1026];
             assert!(
-                sig == &[0x48, 0x2B] || sig == &[0x48, 0x58],
+                sig == [0x48, 0x2B] || sig == [0x48, 0x58],
                 "Should have HFS+/HFSX signature, got {:02X}{:02X}",
-                sig[0], sig[1]
+                sig[0],
+                sig[1]
             );
         }
     }
@@ -979,8 +992,8 @@ mod tests {
         }
 
         // Corrupt the data fork (first 100 bytes)
-        for i in 0..100 {
-            dmg_buf[i] ^= 0xFF;
+        for byte in dmg_buf.iter_mut().take(100) {
+            *byte ^= 0xFF;
         }
 
         // Try to read with checksum verification - should fail
@@ -1006,8 +1019,7 @@ mod tests {
         ] {
             let mut dmg_buf = Vec::new();
             {
-                let mut writer = DmgWriter::new(Cursor::new(&mut dmg_buf))
-                    .compression(method);
+                let mut writer = DmgWriter::new(Cursor::new(&mut dmg_buf)).compression(method);
                 writer.add_partition("test", &original).unwrap();
                 writer.finish().unwrap();
             }
@@ -1016,7 +1028,8 @@ mod tests {
             let mut reader = DmgReader::new(Cursor::new(&dmg_buf))
                 .unwrap_or_else(|e| panic!("Failed to open DMG with {:?}: {:?}", method, e));
 
-            let extracted = reader.decompress_partition(0)
+            let extracted = reader
+                .decompress_partition(0)
                 .unwrap_or_else(|e| panic!("Failed to decompress with {:?}: {:?}", method, e));
 
             assert!(

@@ -21,7 +21,11 @@ fn main() {
     // Get file size
     let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     println!("Input: {}", path);
-    println!("File size: {} bytes ({:.2} MB)\n", file_size, file_size as f64 / 1_000_000.0);
+    println!(
+        "File size: {} bytes ({:.2} MB)\n",
+        file_size,
+        file_size as f64 / 1_000_000.0
+    );
 
     // ═══════════════════════════════════════════════════════════════════════
     // BENCHMARK 1: PBZX Decompression
@@ -39,7 +43,11 @@ fn main() {
     let throughput = cpio_data.len() as f64 / decompress_time.as_secs_f64() / 1_000_000.0;
 
     println!("  Compressed:   {:>12} bytes", file_size);
-    println!("  Decompressed: {:>12} bytes ({:.2} GB)", cpio_data.len(), cpio_data.len() as f64 / 1_000_000_000.0);
+    println!(
+        "  Decompressed: {:>12} bytes ({:.2} GB)",
+        cpio_data.len(),
+        cpio_data.len() as f64 / 1_000_000_000.0
+    );
     println!("  Ratio:        {:>12.1}%", ratio * 100.0);
     println!("  Time:         {:>12.2?}", decompress_time);
     println!("  Throughput:   {:>12.1} MB/s (decompressed)\n", throughput);
@@ -62,19 +70,28 @@ fn main() {
     let custom_list = bench_custom_list(&cpio_data);
     let crate_list = bench_cpio_archive_list(&cpio_data);
 
-    println!("\n  {:<20} {:>12} {:>12} {:>12}", "Implementation", "Entries", "Time", "Throughput");
+    println!(
+        "\n  {:<20} {:>12} {:>12} {:>12}",
+        "Implementation", "Entries", "Time", "Throughput"
+    );
     println!("  {:-<56}", "");
 
     if let Ok((entries, time)) = &custom_list {
         let tp = cpio_data.len() as f64 / time.as_secs_f64() / 1_000_000_000.0;
-        println!("  {:<20} {:>12} {:>12.2?} {:>9.2} GB/s", "Custom (pbzx)", entries, time, tp);
+        println!(
+            "  {:<20} {:>12} {:>12.2?} {:>9.2} GB/s",
+            "Custom (pbzx)", entries, time, tp
+        );
     } else if let Err(e) = &custom_list {
         println!("  {:<20} ERROR: {}", "Custom (pbzx)", e);
     }
 
     if let Ok((entries, time)) = &crate_list {
         let tp = cpio_data.len() as f64 / time.as_secs_f64() / 1_000_000_000.0;
-        println!("  {:<20} {:>12} {:>12.2?} {:>9.2} GB/s", "cpio-archive", entries, time, tp);
+        println!(
+            "  {:<20} {:>12} {:>12.2?} {:>9.2} GB/s",
+            "cpio-archive", entries, time, tp
+        );
     } else if let Err(e) = &crate_list {
         println!("  {:<20} ERROR: {}", "cpio-archive", e);
     }
@@ -94,17 +111,26 @@ fn main() {
     let custom_build = bench_custom_cpio_build();
     let crate_build = bench_cpio_archive_build();
 
-    println!("\n  {:<20} {:>12} {:>12} {:>12}", "Implementation", "Size", "Time", "Throughput");
+    println!(
+        "\n  {:<20} {:>12} {:>12} {:>12}",
+        "Implementation", "Size", "Time", "Throughput"
+    );
     println!("  {:-<56}", "");
 
     if let Ok((size, time)) = &custom_build {
         let tp = *size as f64 / time.as_secs_f64() / 1_000_000.0;
-        println!("  {:<20} {:>9} B {:>12.2?} {:>9.1} MB/s", "Custom (pbzx)", size, time, tp);
+        println!(
+            "  {:<20} {:>9} B {:>12.2?} {:>9.1} MB/s",
+            "Custom (pbzx)", size, time, tp
+        );
     }
 
     if let Ok((size, time)) = &crate_build {
         let tp = *size as f64 / time.as_secs_f64() / 1_000_000.0;
-        println!("  {:<20} {:>9} B {:>12.2?} {:>9.1} MB/s", "cpio-archive", size, time, tp);
+        println!(
+            "  {:<20} {:>9} B {:>12.2?} {:>9.1} MB/s",
+            "cpio-archive", size, time, tp
+        );
     } else if let Err(e) = &crate_build {
         println!("  {:<20} ERROR: {}", "cpio-archive", e);
     }
@@ -114,7 +140,10 @@ fn main() {
         if speedup > 1.0 {
             println!("\n  → Custom is {:.1}x faster for building\n", speedup);
         } else {
-            println!("\n  → cpio-archive is {:.1}x faster for building\n", 1.0 / speedup);
+            println!(
+                "\n  → cpio-archive is {:.1}x faster for building\n",
+                1.0 / speedup
+            );
         }
     }
 
@@ -133,14 +162,20 @@ fn main() {
         &cpio_data[..]
     };
 
-    println!("  Sample size: {} bytes ({:.1} MB)\n", sample.len(), sample.len() as f64 / 1_000_000.0);
+    println!(
+        "  Sample size: {} bytes ({:.1} MB)\n",
+        sample.len(),
+        sample.len() as f64 / 1_000_000.0
+    );
 
     for level in [0, 3, 6, 9] {
         let (compressed_size, time) = bench_pbzx_compress(sample, level);
         let ratio = compressed_size as f64 / sample.len() as f64 * 100.0;
         let throughput = sample.len() as f64 / time.as_secs_f64() / 1_000_000.0;
-        println!("  Level {}: {:>8} bytes ({:>5.1}%) in {:>8.2?} ({:>6.1} MB/s)",
-                 level, compressed_size, ratio, time, throughput);
+        println!(
+            "  Level {}: {:>8} bytes ({:>5.1}%) in {:>8.2?} ({:>6.1} MB/s)",
+            level, compressed_size, ratio, time, throughput
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -154,23 +189,35 @@ fn main() {
     println!("  ─────────────────────────────────────────────────────────────────");
 
     // Decompression (only custom)
-    println!("  Decompression      {:>10.2?}         N/A              pbzx", decompress_time);
+    println!(
+        "  Decompression      {:>10.2?}         N/A              pbzx",
+        decompress_time
+    );
 
     // Listing
     if let (Ok((_, ct)), Ok((_, crt))) = (&custom_list, &crate_list) {
         let winner = if ct < crt { "pbzx" } else { "cpio-archive" };
-        println!("  List files         {:>10.2?}      {:>10.2?}      {}", ct, crt, winner);
+        println!(
+            "  List files         {:>10.2?}      {:>10.2?}      {}",
+            ct, crt, winner
+        );
     }
 
     // Building
     if let (Ok((_, ct)), Ok((_, crt))) = (&custom_build, &crate_build) {
         let winner = if ct < crt { "pbzx" } else { "cpio-archive" };
-        println!("  Build CPIO         {:>10.2?}      {:>10.2?}      {}", ct, crt, winner);
+        println!(
+            "  Build CPIO         {:>10.2?}      {:>10.2?}      {}",
+            ct, crt, winner
+        );
     }
 
     // Compression (only custom)
     let (_, compress_time) = bench_pbzx_compress(sample, 6);
-    println!("  Compression (L6)   {:>10.2?}         N/A              pbzx", compress_time);
+    println!(
+        "  Compression (L6)   {:>10.2?}         N/A              pbzx",
+        compress_time
+    );
 
     println!();
 }
@@ -189,8 +236,8 @@ fn bench_cpio_archive_list(data: &[u8]) -> Result<(usize, Duration), String> {
 
     let owned_data = data.to_vec();
     let cursor = Cursor::new(owned_data);
-    let mut reader = cpio_archive::reader(cursor)
-        .map_err(|e| format!("Failed to create reader: {}", e))?;
+    let mut reader =
+        cpio_archive::reader(cursor).map_err(|e| format!("Failed to create reader: {}", e))?;
 
     let mut count = 0usize;
 
@@ -210,7 +257,9 @@ fn bench_cpio_archive_list(data: &[u8]) -> Result<(usize, Duration), String> {
         let file_size = header.file_size() as usize;
         if file_size > 0 {
             let mut buf = vec![0u8; file_size];
-            reader.read_exact(&mut buf).map_err(|e| format!("Error: {}", e))?;
+            reader
+                .read_exact(&mut buf)
+                .map_err(|e| format!("Error: {}", e))?;
         }
     }
 
@@ -245,7 +294,8 @@ fn bench_cpio_archive_build() -> Result<(usize, Duration), String> {
     let content = vec![0x42u8; 1024]; // 1KB of data
 
     for i in 0..1000 {
-        builder.append_file_from_data(&format!("file_{:04}.dat", i), content.clone(), 0o644)
+        builder
+            .append_file_from_data(format!("file_{:04}.dat", i), content.clone(), 0o644)
             .map_err(|e| format!("Error: {}", e))?;
     }
 

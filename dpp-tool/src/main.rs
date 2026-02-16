@@ -3,22 +3,22 @@
 //! A cross-platform tool to explore DMG disk images end-to-end:
 //! DMG → HFS+/APFS → PKG → PBZX → files
 
-mod style;
-mod pipeline;
+mod cmd_apfs;
+mod cmd_bench;
 mod cmd_dmg;
 mod cmd_fs;
 mod cmd_hfs;
-mod cmd_apfs;
-mod cmd_pkg;
-mod cmd_payload;
 mod cmd_info;
-mod cmd_bench;
+mod cmd_payload;
+mod cmd_pkg;
+mod pipeline;
+mod style;
 
 use std::io;
 use std::path::PathBuf;
 use std::process;
 
-use clap::{Parser, Subcommand, Args, CommandFactory};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 
 // ── Top-level CLI ────────────────────────────────────────────────────────
@@ -406,30 +406,14 @@ fn main() {
     };
 
     let result = match cli.command {
-        Command::Info { dmg } => {
-            cmd_info::run(&dmg, mode)
-        }
-        Command::Bench { dmg } => {
-            cmd_bench::run(&dmg, mode)
-        }
-        Command::Dmg { command } => {
-            cmd_dmg::run(command, mode)
-        }
-        Command::Fs { command } => {
-            cmd_fs::run(command, mode)
-        }
-        Command::Hfs { command } => {
-            cmd_hfs::run(command, mode)
-        }
-        Command::Apfs { command } => {
-            cmd_apfs::run(command, mode)
-        }
-        Command::Pkg { command } => {
-            cmd_pkg::run(command, mode)
-        }
-        Command::Payload { command } => {
-            cmd_payload::run(command, mode)
-        }
+        Command::Info { dmg } => cmd_info::run(&dmg, mode),
+        Command::Bench { dmg } => cmd_bench::run(&dmg, mode),
+        Command::Dmg { command } => cmd_dmg::run(command, mode),
+        Command::Fs { command } => cmd_fs::run(command, mode),
+        Command::Hfs { command } => cmd_hfs::run(command, mode),
+        Command::Apfs { command } => cmd_apfs::run(command, mode),
+        Command::Pkg { command } => cmd_pkg::run(command, mode),
+        Command::Payload { command } => cmd_payload::run(command, mode),
         Command::Completions { shell } => {
             let mut cmd = Cli::command();
             generate(shell, &mut cmd, "dpp-tool", &mut io::stdout());

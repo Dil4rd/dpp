@@ -102,9 +102,9 @@ impl<W: Write> PbzxWriter<W> {
         let mut compressed = Vec::new();
         {
             let mut encoder = XzEncoder::new(&mut compressed, self.compression_level);
-            encoder.write_all(data).map_err(|e| {
-                PbzxError::Compression(format!("Failed to compress chunk: {}", e))
-            })?;
+            encoder
+                .write_all(data)
+                .map_err(|e| PbzxError::Compression(format!("Failed to compress chunk: {}", e)))?;
             encoder.finish().map_err(|e| {
                 PbzxError::Compression(format!("Failed to finish compression: {}", e))
             })?;
@@ -214,7 +214,12 @@ impl CpioBuilder {
 
     /// Add a regular file to the archive.
     pub fn add_file(&mut self, path: &str, content: &[u8], mode: u32) {
-        self.add_entry(path, content, 0o100000 | (mode & 0o7777), content.len() as u32);
+        self.add_entry(
+            path,
+            content,
+            0o100000 | (mode & 0o7777),
+            content.len() as u32,
+        );
     }
 
     /// Add a directory to the archive.
@@ -255,19 +260,19 @@ impl CpioBuilder {
              {:08X}\
              {:08X}\
              {:08X}",
-            inode,     // ino
-            mode,      // mode
-            0,         // uid
-            0,         // gid
-            1,         // nlink
-            0,         // mtime
-            filesize,  // filesize
-            0,         // devmajor
-            0,         // devminor
-            0,         // rdevmajor
-            0,         // rdevminor
-            namesize,  // namesize
-            0,         // check
+            inode,    // ino
+            mode,     // mode
+            0,        // uid
+            0,        // gid
+            1,        // nlink
+            0,        // mtime
+            filesize, // filesize
+            0,        // devmajor
+            0,        // devminor
+            0,        // rdevmajor
+            0,        // rdevminor
+            namesize, // namesize
+            0,        // check
         )
         .unwrap();
 
@@ -278,14 +283,14 @@ impl CpioBuilder {
         // Pad to 4-byte boundary
         let header_len = 110 + namesize;
         let padding = (4 - (header_len % 4)) % 4;
-        self.data.extend(std::iter::repeat(0).take(padding));
+        self.data.extend(std::iter::repeat_n(0, padding));
 
         // Write file data
         self.data.extend_from_slice(data);
 
         // Pad data to 4-byte boundary
         let data_padding = (4 - (data.len() % 4)) % 4;
-        self.data.extend(std::iter::repeat(0).take(data_padding));
+        self.data.extend(std::iter::repeat_n(0, data_padding));
     }
 
     /// Finish the archive and return the CPIO data.

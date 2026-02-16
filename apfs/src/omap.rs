@@ -59,7 +59,9 @@ pub fn omap_lookup<R: Read + Seek>(
         if key.len() < 16 {
             return std::cmp::Ordering::Less;
         }
-        let key_oid = u64::from_le_bytes([key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7]]);
+        let key_oid = u64::from_le_bytes([
+            key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+        ]);
         // Compare only by OID. For equal OIDs, we consider the key "equal" to let
         // btree_lookup find the first match, then we'll use scan for the latest xid.
         key_oid.cmp(&target_oid)
@@ -86,11 +88,13 @@ pub fn omap_lookup<R: Read + Seek>(
         if key.len() < 16 {
             return Some(false);
         }
-        let key_oid = u64::from_le_bytes([key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7]]);
+        let key_oid = u64::from_le_bytes([
+            key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+        ]);
         if key_oid < target_oid {
             Some(false) // skip, keep scanning
         } else if key_oid == target_oid {
-            Some(true)  // match
+            Some(true) // match
         } else {
             None // past our OID, stop
         }
@@ -107,9 +111,10 @@ pub fn omap_lookup<R: Read + Seek>(
     )?;
 
     if entries.is_empty() {
-        return Err(ApfsError::CorruptedData(
-            format!("OMAP lookup failed: OID {} not found", target_oid),
-        ));
+        return Err(ApfsError::CorruptedData(format!(
+            "OMAP lookup failed: OID {} not found",
+            target_oid
+        )));
     }
 
     // Pick the entry with the highest xid
@@ -118,7 +123,9 @@ pub fn omap_lookup<R: Read + Seek>(
 
     for (key, val) in &entries {
         if key.len() >= 16 {
-            let xid = u64::from_le_bytes([key[8], key[9], key[10], key[11], key[12], key[13], key[14], key[15]]);
+            let xid = u64::from_le_bytes([
+                key[8], key[9], key[10], key[11], key[12], key[13], key[14], key[15],
+            ]);
             if xid >= best_xid {
                 best_xid = xid;
                 best_paddr = parse_omap_val(val)?;
@@ -127,9 +134,10 @@ pub fn omap_lookup<R: Read + Seek>(
     }
 
     if best_paddr == 0 {
-        return Err(ApfsError::CorruptedData(
-            format!("OMAP lookup: OID {} resolved to paddr 0", target_oid),
-        ));
+        return Err(ApfsError::CorruptedData(format!(
+            "OMAP lookup: OID {} resolved to paddr 0",
+            target_oid
+        )));
     }
 
     Ok(best_paddr)
@@ -140,7 +148,9 @@ fn parse_omap_val(val: &[u8]) -> Result<u64> {
     if val.len() < 16 {
         return Err(ApfsError::InvalidBTree("omap value too short".into()));
     }
-    let paddr = u64::from_le_bytes([val[8], val[9], val[10], val[11], val[12], val[13], val[14], val[15]]);
+    let paddr = u64::from_le_bytes([
+        val[8], val[9], val[10], val[11], val[12], val[13], val[14], val[15],
+    ]);
     Ok(paddr)
 }
 
@@ -160,13 +170,17 @@ mod tests {
         let nxsb = superblock::read_nxsb(&mut reader).unwrap();
         let latest = superblock::find_latest_nxsb(&mut reader, &nxsb).unwrap();
 
-        let omap_root = read_omap_tree_root(&mut reader, latest.omap_oid, latest.block_size).unwrap();
+        let omap_root =
+            read_omap_tree_root(&mut reader, latest.omap_oid, latest.block_size).unwrap();
 
         let vol_oid = latest.fs_oids.iter().find(|&&o| o != 0).copied().unwrap();
 
         let vol_block = omap_lookup(&mut reader, omap_root, latest.block_size, vol_oid).unwrap();
-        assert!(vol_block > 0 && vol_block < latest.block_count,
-            "Physical block {} should be within container", vol_block);
+        assert!(
+            vol_block > 0 && vol_block < latest.block_count,
+            "Physical block {} should be within container",
+            vol_block
+        );
 
         let vol_data = object::read_block(&mut reader, vol_block, latest.block_size).unwrap();
         let vol_sb = superblock::ApfsSuperblock::parse(&vol_data).unwrap();

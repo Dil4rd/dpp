@@ -28,7 +28,9 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use crate::error::{PbzxError, Result};
-use crate::format::{CpioFormat, CpioHeader, FileEntry, CPIO_MAGIC_CRC, CPIO_MAGIC_NEWC, CPIO_MAGIC_ODC};
+use crate::format::{
+    CpioFormat, CpioHeader, FileEntry, CPIO_MAGIC_CRC, CPIO_MAGIC_NEWC, CPIO_MAGIC_ODC,
+};
 
 /// A reader for CPIO archives.
 pub struct CpioReader<R> {
@@ -345,10 +347,9 @@ impl<R: Read + Seek> CpioReader<R> {
                     CpioFormat::Odc => self.read_data_odc(header.filesize as u64)?,
                     _ => self.read_data_newc(header.filesize as u64)?,
                 };
-                Some(
-                    String::from_utf8(data)
-                        .map_err(|e| PbzxError::InvalidCpio(format!("Invalid symlink target: {}", e)))?,
-                )
+                Some(String::from_utf8(data).map_err(|e| {
+                    PbzxError::InvalidCpio(format!("Invalid symlink target: {}", e))
+                })?)
             } else {
                 match format {
                     CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
@@ -391,10 +392,7 @@ impl<R: Read + Seek> CpioReader<R> {
 
             if header.name == path {
                 if header.is_directory() {
-                    return Err(PbzxError::InvalidPath(format!(
-                        "'{}' is a directory",
-                        path
-                    )));
+                    return Err(PbzxError::InvalidPath(format!("'{}' is a directory", path)));
                 }
                 return match format {
                     CpioFormat::Odc => self.read_data_odc(header.filesize as u64),
@@ -583,7 +581,9 @@ pub struct CpioEntry {
 
 impl CpioEntry {
     /// Get the data as a string (useful for symlinks and text files).
-    pub fn data_as_string(&self) -> Option<std::result::Result<String, std::string::FromUtf8Error>> {
+    pub fn data_as_string(
+        &self,
+    ) -> Option<std::result::Result<String, std::string::FromUtf8Error>> {
         self.data.clone().map(String::from_utf8)
     }
 }

@@ -99,7 +99,7 @@ fn py_extract_pkg_payload(
     pkg_path: &str,
     component: &str,
 ) -> PyResult<payload::PyArchive> {
-    let archive =
-        dpp::pipeline::extract_pkg_payload(dmg_path, pkg_path, component).map_err(error::to_pyerr)?;
+    let archive = dpp::pipeline::extract_pkg_payload(dmg_path, pkg_path, component)
+        .map_err(error::to_pyerr)?;
     Ok(payload::PyArchive::from_archive(archive))
 }

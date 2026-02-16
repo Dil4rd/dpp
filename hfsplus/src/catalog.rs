@@ -100,9 +100,11 @@ fn parse_catalog_key(data: &[u8]) -> Result<(CatalogKey, usize)> {
     let name_start = 8;
     let name_end = name_start + name_length * 2;
     if name_end > data.len() {
-        return Err(HfsPlusError::InvalidBTree(
-            format!("catalog key name extends beyond data: name_end={}, data_len={}", name_end, data.len()),
-        ));
+        return Err(HfsPlusError::InvalidBTree(format!(
+            "catalog key name extends beyond data: name_end={}, data_len={}",
+            name_end,
+            data.len()
+        )));
     }
 
     let node_name = unicode::utf16be_to_u16(&data[name_start..name_end]);
@@ -110,7 +112,11 @@ fn parse_catalog_key(data: &[u8]) -> Result<(CatalogKey, usize)> {
     // Record data starts after key_length + 2 bytes for the key_length field itself
     let record_offset = 2 + key_length;
     // Ensure even alignment
-    let record_offset = if record_offset % 2 != 0 { record_offset + 1 } else { record_offset };
+    let record_offset = if !record_offset.is_multiple_of(2) {
+        record_offset + 1
+    } else {
+        record_offset
+    };
 
     Ok((
         CatalogKey {
@@ -158,7 +164,9 @@ fn parse_fork_data(cursor: &mut Cursor<&[u8]>) -> Result<ForkData> {
 /// Parse a catalog record from raw data (after the key)
 fn parse_catalog_record(data: &[u8]) -> Result<CatalogRecord> {
     if data.len() < 2 {
-        return Err(HfsPlusError::InvalidBTree("catalog record too short".into()));
+        return Err(HfsPlusError::InvalidBTree(
+            "catalog record too short".into(),
+        ));
     }
 
     let record_type = u16::from_be_bytes([data[0], data[1]]);
@@ -244,9 +252,10 @@ fn parse_catalog_record(data: &[u8]) -> Result<CatalogRecord> {
                 Ok(CatalogRecord::FileThread(record))
             }
         }
-        other => Err(HfsPlusError::InvalidBTree(
-            format!("unknown catalog record type: 0x{:04X}", other),
-        )),
+        other => Err(HfsPlusError::InvalidBTree(format!(
+            "unknown catalog record type: 0x{:04X}",
+            other
+        ))),
     }
 }
 
@@ -292,7 +301,9 @@ pub fn lookup_catalog<R: Read + Seek>(
             let record_data = node.record_data(record_idx)?;
             let (_, record_offset) = parse_catalog_key(record_data)?;
             if record_offset >= record_data.len() {
-                return Err(HfsPlusError::InvalidBTree("record data missing after key".into()));
+                return Err(HfsPlusError::InvalidBTree(
+                    "record data missing after key".into(),
+                ));
             }
             let record = parse_catalog_record(&record_data[record_offset..])?;
             Ok(Some(record))
@@ -455,9 +466,10 @@ fn find_leaf_for_parent<R: Read + Seek>(
                 current_node_num = child_node;
             }
             other => {
-                return Err(HfsPlusError::InvalidBTree(
-                    format!("unexpected node kind {} during leaf search", other),
-                ));
+                return Err(HfsPlusError::InvalidBTree(format!(
+                    "unexpected node kind {} during leaf search",
+                    other
+                )));
             }
         }
     }
@@ -502,9 +514,7 @@ pub fn resolve_path<R: Read + Seek>(
                     }
                     CatalogRecord::File(_) => {
                         if i < components.len() - 1 {
-                            return Err(HfsPlusError::NotADirectory(
-                                components[..=i].join("/"),
-                            ));
+                            return Err(HfsPlusError::NotADirectory(components[..=i].join("/")));
                         }
                         return Ok((record, component.to_string()));
                     }
@@ -516,9 +526,7 @@ pub fn resolve_path<R: Read + Seek>(
                 }
             }
             None => {
-                return Err(HfsPlusError::FileNotFound(
-                    components[..=i].join("/"),
-                ));
+                return Err(HfsPlusError::FileNotFound(components[..=i].join("/")));
             }
         }
     }
@@ -556,7 +564,8 @@ mod tests {
         let file = std::fs::File::open("../tests/kdk.raw").unwrap();
         let mut reader = BufReader::new(file);
         let vol = VolumeHeader::parse(&mut reader).unwrap();
-        let catalog_header = btree::read_btree_header(&mut reader, &vol.catalog_file, vol.block_size).unwrap();
+        let catalog_header =
+            btree::read_btree_header(&mut reader, &vol.catalog_file, vol.block_size).unwrap();
         (reader, vol, catalog_header)
     }
 

@@ -3,17 +3,16 @@ pub mod pipeline;
 
 pub use error::{DppError, Result};
 pub use pipeline::{
-    DmgPipeline, ExtractMode, HfsHandle, ApfsHandle,
-    FilesystemHandle, FsDirEntry, FsWalkEntry, FsEntryKind,
-    FsType, FsFileStat, FsVolumeInfo,
+    ApfsHandle, DmgPipeline, ExtractMode, FilesystemHandle, FsDirEntry, FsEntryKind, FsFileStat,
+    FsType, FsVolumeInfo, FsWalkEntry, HfsHandle,
 };
 
 // Re-export underlying crates
-pub use hfsplus;
 pub use apfs;
-pub use xara;
-pub use udif;
+pub use hfsplus;
 pub use pbzx;
+pub use udif;
+pub use xara;
 
 #[cfg(test)]
 mod tests {

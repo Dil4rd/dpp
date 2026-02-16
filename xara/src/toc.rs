@@ -3,7 +3,7 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::io::Read;
 
-use crate::error::{XarError, Result};
+use crate::error::{Result, XarError};
 use crate::header::XarHeader;
 
 /// File type in the archive
@@ -52,16 +52,14 @@ pub struct XarFile {
 
 /// Parse the TOC from a XAR archive.
 /// Returns (files, heap_offset).
-pub fn parse_toc<R: Read>(
-    reader: &mut R,
-    header: &XarHeader,
-) -> Result<(Vec<XarFile>, u64)> {
+pub fn parse_toc<R: Read>(reader: &mut R, header: &XarHeader) -> Result<(Vec<XarFile>, u64)> {
     let mut compressed = vec![0u8; header.toc_compressed_len as usize];
     reader.read_exact(&mut compressed)?;
 
     let mut decoder = ZlibDecoder::new(&compressed[..]);
     let mut xml_data = Vec::with_capacity(header.toc_uncompressed_len as usize);
-    decoder.read_to_end(&mut xml_data)
+    decoder
+        .read_to_end(&mut xml_data)
         .map_err(|e| XarError::DecompressionFailed(format!("TOC zlib: {}", e)))?;
 
     let files = parse_toc_xml(&xml_data)?;
@@ -115,9 +113,7 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         let mut id = 0u64;
                         for attr in e.attributes().flatten() {
                             if attr.key.as_ref() == b"id" {
-                                id = String::from_utf8_lossy(&attr.value)
-                                    .parse()
-                                    .unwrap_or(0);
+                                id = String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
                             }
                         }
 
@@ -169,9 +165,8 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         if f.in_data {
                             for attr in e.attributes().flatten() {
                                 if attr.key.as_ref() == b"style" {
-                                    f.data_encoding = Some(
-                                        String::from_utf8_lossy(&attr.value).to_string(),
-                                    );
+                                    f.data_encoding =
+                                        Some(String::from_utf8_lossy(&attr.value).to_string());
                                 }
                             }
                         }
@@ -190,9 +185,8 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         if f.in_data {
                             for attr in e.attributes().flatten() {
                                 if attr.key.as_ref() == b"style" {
-                                    f.data_encoding = Some(
-                                        String::from_utf8_lossy(&attr.value).to_string(),
-                                    );
+                                    f.data_encoding =
+                                        Some(String::from_utf8_lossy(&attr.value).to_string());
                                 }
                             }
                         }
@@ -242,9 +236,9 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                                 offset,
                                 length,
                                 size,
-                                encoding: builder.data_encoding.unwrap_or_else(|| {
-                                    "application/octet-stream".to_string()
-                                }),
+                                encoding: builder
+                                    .data_encoding
+                                    .unwrap_or_else(|| "application/octet-stream".to_string()),
                                 extracted_checksum: builder.extracted_checksum,
                                 archived_checksum: builder.archived_checksum,
                             })

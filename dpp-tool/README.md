@@ -16,6 +16,8 @@ Navigate the full stack from DMG container down to individual files — no macOS
 DMG (UDIF) → HFS+ or APFS filesystem → PKG installer (XAR) → Payload (PBZX/CPIO) → files
 ```
 
+<img src="../demo/demo.gif" alt="dpp-tool demo" width="800">
+
 </div>
 
 

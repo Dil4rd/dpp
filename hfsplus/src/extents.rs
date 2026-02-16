@@ -298,11 +298,11 @@ fn lookup_overflow_extents<R: Read + Seek>(
 mod tests {
     use super::*;
 
-    /// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
+    /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
     #[ignore]
     fn test_read_pkg_header_from_kdk() {
-        let file = std::fs::File::open("../tests/kdk.raw").unwrap();
+        let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
         let mut reader = std::io::BufReader::new(file);
         let vol = crate::volume::VolumeHeader::parse(&mut reader).unwrap();
         let catalog_header =

@@ -228,11 +228,11 @@ fn test_pipeline_filesystem_auto_detect() {
 // Existing fixture-based tests (require external files, run with --ignored)
 // ---------------------------------------------------------------------------
 
-/// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
+/// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
 #[test]
 #[ignore]
 fn test_hfsplus_to_xar_to_pbzx() {
-    let file = std::fs::File::open("../tests/kdk.raw").unwrap();
+    let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
     let reader = BufReader::new(file);
     let mut volume = hfsplus::HfsVolume::open(reader).unwrap();
 
@@ -278,12 +278,12 @@ fn test_hfsplus_to_xar_to_pbzx() {
     }
 }
 
-/// Requires ../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg fixture.
+/// Requires ../tests/kdk.dmg fixture.
 /// Run with `cargo test -- --ignored`.
 #[test]
 #[ignore]
 fn test_dmg_pipeline() {
-    let path = "../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg";
+    let path = "../tests/kdk.dmg";
 
     let mut pipeline = dpp::DmgPipeline::open(path).unwrap();
     let partitions = pipeline.partitions();
@@ -333,20 +333,20 @@ fn test_dmg_pipeline() {
     }
 }
 
-/// Requires ../tests/Payload fixture. Run with `cargo test -- --ignored`.
+/// Requires ../tests/payload.bin fixture. Run with `cargo test -- --ignored`.
 #[test]
 #[ignore]
 fn test_pbzx_standalone() {
-    let archive = pbzx::Archive::open("../tests/Payload").unwrap();
+    let archive = pbzx::Archive::open("../tests/payload.bin").unwrap();
     let entries = archive.list().unwrap();
     assert!(!entries.is_empty());
 }
 
-/// Requires ../tests/upscayl-2.15.0-mac.dmg fixture. Run with `cargo test -- --ignored`.
+/// Requires ../tests/upscayl.dmg fixture. Run with `cargo test -- --ignored`.
 #[test]
 #[ignore]
 fn test_apfs_dmg_no_crash() {
-    let path = "../tests/upscayl-2.15.0-mac.dmg";
+    let path = "../tests/upscayl.dmg";
 
     let mut pipeline = dpp::DmgPipeline::open(path).unwrap();
     let partitions = pipeline.partitions();
@@ -384,12 +384,12 @@ fn test_apfs_dmg_no_crash() {
     assert!(!entries.is_empty(), "Root directory should have entries");
 }
 
-/// Requires ../tests/upscayl-2.15.0-mac.dmg fixture. Run with `cargo test -- --ignored`.
+/// Requires ../tests/upscayl.dmg fixture. Run with `cargo test -- --ignored`.
 /// Full APFS DMG pipeline test: open DMG, extract APFS partition, list root, walk filesystem.
 #[test]
 #[ignore]
 fn test_apfs_dmg_pipeline() {
-    let path = "../tests/upscayl-2.15.0-mac.dmg";
+    let path = "../tests/upscayl.dmg";
 
     let mut pipeline = dpp::DmgPipeline::open(path).unwrap();
 

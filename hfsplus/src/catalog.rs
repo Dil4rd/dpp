@@ -560,8 +560,8 @@ mod tests {
     use super::*;
     use std::io::BufReader;
 
-    fn open_kdk() -> (BufReader<std::fs::File>, VolumeHeader, BTreeHeaderRecord) {
-        let file = std::fs::File::open("../tests/kdk.raw").unwrap();
+    fn open_hfsp() -> (BufReader<std::fs::File>, VolumeHeader, BTreeHeaderRecord) {
+        let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
         let mut reader = BufReader::new(file);
         let vol = VolumeHeader::parse(&mut reader).unwrap();
         let catalog_header =
@@ -569,21 +569,21 @@ mod tests {
         (reader, vol, catalog_header)
     }
 
-    /// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
+    /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
     #[ignore]
     fn test_list_root_directory() {
-        let (mut reader, vol, catalog_header) = open_kdk();
+        let (mut reader, vol, catalog_header) = open_hfsp();
 
         let entries = list_directory(&mut reader, &vol, &catalog_header, CNID_ROOT_FOLDER).unwrap();
         assert!(!entries.is_empty(), "Root directory should not be empty");
     }
 
-    /// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
+    /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
     #[ignore]
     fn test_resolve_root_path() {
-        let (mut reader, vol, catalog_header) = open_kdk();
+        let (mut reader, vol, catalog_header) = open_hfsp();
 
         let entries = list_directory(&mut reader, &vol, &catalog_header, CNID_ROOT_FOLDER).unwrap();
         let first = entries.first().expect("Root should have entries");

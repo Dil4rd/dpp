@@ -383,11 +383,11 @@ fn extract_index_child(record_data: &[u8]) -> Result<u32> {
 mod tests {
     use super::*;
 
-    /// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
+    /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
     #[ignore]
     fn test_read_btree_header_from_kdk() {
-        let file = std::fs::File::open("../tests/kdk.raw").unwrap();
+        let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
         let mut reader = std::io::BufReader::new(file);
         let vol = crate::volume::VolumeHeader::parse(&mut reader).unwrap();
 

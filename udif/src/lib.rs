@@ -796,12 +796,12 @@ mod tests {
     // Integration test with real DMG file (requires fixture)
     // =========================================================================
 
-    /// Requires ../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg fixture.
+    /// Requires ../tests/kdk.dmg fixture.
     /// Run with `cargo test -- --ignored`.
     #[test]
     #[ignore]
     fn test_real_dmg_if_available() {
-        let test_dmg = "../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg";
+        let test_dmg = "../tests/kdk.dmg";
 
         let archive = DmgArchive::open(test_dmg).unwrap();
         let stats = archive.stats();
@@ -817,12 +817,12 @@ mod tests {
         assert!(hfsx.is_some(), "Should have HFSX partition");
     }
 
-    /// Requires ../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg fixture.
+    /// Requires ../tests/kdk.dmg fixture.
     /// Run with `cargo test -- --ignored`.
     #[test]
     #[ignore]
     fn test_real_dmg_decompress() {
-        let test_dmg = "../tests/Kernel_Debug_Kit_26.3_build_25D5087f.dmg";
+        let test_dmg = "../tests/kdk.dmg";
 
         let mut archive = DmgArchive::open(test_dmg).unwrap();
         let data = archive.extract_main_partition().unwrap();

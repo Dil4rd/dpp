@@ -172,15 +172,15 @@ impl VolumeHeader {
 mod tests {
     use super::*;
 
-    /// Requires ../tests/kdk.raw fixture. Run with `cargo test -- --ignored`.
+    /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
     #[ignore]
     fn test_parse_kdk_volume_header() {
-        let file = std::fs::File::open("../tests/kdk.raw").unwrap();
+        let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
         let mut reader = std::io::BufReader::new(file);
         let header = VolumeHeader::parse(&mut reader).unwrap();
 
-        assert!(header.is_hfsx, "kdk.raw should be HFSX");
+        assert!(header.is_hfsx, "hfsp.raw should be HFSX");
         assert_eq!(header.signature, HFSX_SIGNATURE);
         assert_eq!(header.version, HFSX_VERSION);
         assert!(header.block_size > 0);

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Enable `parallel` feature by default for multi-threaded PBZX XZ chunk decompression and DMG block decompression
+- Updated dpp dependency to 0.3.5
+
 ## [0.1.4] - 2026-02-16
 
 ### Added

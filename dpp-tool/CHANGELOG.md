@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.3] - 2026-02-17
+
+### Fixed
+
+- Pipeline Summary in `bench` command now includes PKG and PBZX stages (previously only showed DMG open, extraction, and filesystem walk)
+
 ## [0.4.2] - 2026-02-16
 
 ### Changed

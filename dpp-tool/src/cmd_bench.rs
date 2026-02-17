@@ -1,6 +1,6 @@
 use std::io::Cursor;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::style::*;
 
@@ -96,6 +96,8 @@ pub(crate) fn run(
             }
 
             // Stage 4: PKG discovery
+            let mut pkg_time = None;
+            let mut pbzx_total_time = None;
             let pkg_files: Vec<_> = entries
                 .iter()
                 .filter(|e| e.entry.kind == dpp::FsEntryKind::File && e.path.ends_with(".pkg"))
@@ -106,8 +108,9 @@ pub(crate) fn run(
                 let pkg_path = &pkg_files[0].path;
                 let t = Instant::now();
                 let pkg = fs.open_pkg(pkg_path)?;
-                let pkg_time = t.elapsed();
-                kv("Time", &format_duration(pkg_time));
+                let pkg_time_local = t.elapsed();
+                pkg_time = Some(pkg_time_local);
+                kv("Time", &format_duration(pkg_time_local));
                 kv("Package", pkg_path);
                 kv(
                     "Type",
@@ -160,23 +163,30 @@ pub(crate) fn run(
                                 payload.len() as f64 / pbzx_time.as_secs_f64() / (1024.0 * 1024.0);
                             kv_highlight("PBZX throughput", &format!("{:.1} MB/s", throughput));
                         }
+
+                        pbzx_total_time = Some(payload_time + pbzx_time);
                     }
                 }
             }
 
             // Summary
             section("Pipeline Summary");
-            let total = dmg_time + fs_time + walk_time;
-            println!();
-            println!("  {d}Stage{r}                        {d}Time{r}          {d}%{r}");
-            println!("  {d}{}{r}", "-".repeat(50));
-
             let extraction_label = format!("{fs_label} extraction");
-            let stages = [
+            let mut stages: Vec<(&str, Duration)> = vec![
                 ("DMG open", dmg_time),
                 (extraction_label.as_str(), fs_time),
                 ("Filesystem walk", walk_time),
             ];
+            if let Some(t) = pkg_time {
+                stages.push(("PKG open", t));
+            }
+            if let Some(t) = pbzx_total_time {
+                stages.push(("PBZX payload", t));
+            }
+            let total: Duration = stages.iter().map(|(_, t)| *t).sum();
+            println!();
+            println!("  {d}Stage{r}                        {d}Time{r}          {d}%{r}");
+            println!("  {d}{}{r}", "-".repeat(50));
 
             let bar_total = 40;
             for (name, time) in &stages {

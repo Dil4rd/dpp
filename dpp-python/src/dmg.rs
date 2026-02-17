@@ -19,12 +19,6 @@ pub struct PyDmgArchive {
 }
 
 impl PyDmgArchive {
-    fn archive(&mut self) -> PyResult<&mut dpp::udif::DmgArchive> {
-        self.inner
-            .as_mut()
-            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("DmgArchive is closed"))
-    }
-
     fn archive_ref(&self) -> PyResult<&dpp::udif::DmgArchive> {
         self.inner
             .as_ref()
@@ -36,9 +30,11 @@ impl PyDmgArchive {
 impl PyDmgArchive {
     /// Open a DMG file.
     #[staticmethod]
-    fn open(path: &str) -> PyResult<Self> {
-        let archive =
-            dpp::udif::DmgArchive::open(path).map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
+    fn open(py: Python<'_>, path: &str) -> PyResult<Self> {
+        let path = path.to_string();
+        let archive = py
+            .detach(|| dpp::udif::DmgArchive::open(&path))
+            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
         Ok(PyDmgArchive {
             inner: Some(archive),
         })
@@ -90,10 +86,13 @@ impl PyDmgArchive {
         py: Python<'py>,
         id: i32,
     ) -> PyResult<Bound<'py, PyBytes>> {
-        let archive = self.archive()?;
-        let data = archive
-            .extract_partition(id)
-            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
+        let mut archive = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("DmgArchive is closed"))?;
+        let result = py.detach(|| archive.extract_partition(id));
+        self.inner = Some(archive);
+        let data = result.map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
         Ok(PyBytes::new(py, &data))
     }
 
@@ -103,36 +102,51 @@ impl PyDmgArchive {
         py: Python<'py>,
         name: &str,
     ) -> PyResult<Bound<'py, PyBytes>> {
-        let archive = self.archive()?;
-        let data = archive
-            .extract_partition_by_name(name)
-            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
+        let name = name.to_string();
+        let mut archive = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("DmgArchive is closed"))?;
+        let result = py.detach(|| archive.extract_partition_by_name(&name));
+        self.inner = Some(archive);
+        let data = result.map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
         Ok(PyBytes::new(py, &data))
     }
 
     /// Extract a partition to a file on disk.
-    fn extract_partition_to(&mut self, id: i32, path: &str) -> PyResult<()> {
-        let archive = self.archive()?;
-        archive
-            .extract_partition_to_file(id, path)
-            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))
+    fn extract_partition_to(&mut self, py: Python<'_>, id: i32, path: &str) -> PyResult<()> {
+        let path = path.to_string();
+        let mut archive = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("DmgArchive is closed"))?;
+        let result = py.detach(|| archive.extract_partition_to_file(id, &path));
+        self.inner = Some(archive);
+        result.map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))
     }
 
     /// Extract the main partition, returning its data as bytes.
     fn extract_main_partition<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-        let archive = self.archive()?;
-        let data = archive
-            .extract_main_partition()
-            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
+        let mut archive = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("DmgArchive is closed"))?;
+        let result = py.detach(|| archive.extract_main_partition());
+        self.inner = Some(archive);
+        let data = result.map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))?;
         Ok(PyBytes::new(py, &data))
     }
 
     /// Extract the main partition to a file on disk.
-    fn extract_main_partition_to(&mut self, path: &str) -> PyResult<()> {
-        let archive = self.archive()?;
-        archive
-            .extract_main_partition_to_file(path)
-            .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))
+    fn extract_main_partition_to(&mut self, py: Python<'_>, path: &str) -> PyResult<()> {
+        let path = path.to_string();
+        let mut archive = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("DmgArchive is closed"))?;
+        let result = py.detach(|| archive.extract_main_partition_to_file(&path));
+        self.inner = Some(archive);
+        result.map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))
     }
 
     fn __repr__(&self) -> String {
@@ -226,8 +240,9 @@ impl PyDmgBuilder {
     }
 
     /// Build the DMG and write it to the given path.
-    fn build(&self, path: &str) -> PyResult<()> {
+    fn build(&self, py: Python<'_>, path: &str) -> PyResult<()> {
         let compression = parse_compression(&self.compression)?;
+        let path = path.to_string();
         let mut builder = dpp::udif::DmgBuilder::new()
             .compression(compression)
             .compression_level(self.compression_level)
@@ -241,8 +256,7 @@ impl PyDmgBuilder {
             builder = builder.add_partition(name, data.clone());
         }
 
-        builder
-            .build(path)
+        py.detach(|| builder.build(&path))
             .map_err(|e| to_pyerr(dpp::DppError::Dmg(e)))
     }
 

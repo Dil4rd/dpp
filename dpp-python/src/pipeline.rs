@@ -31,8 +31,11 @@ impl PyDmgPipeline {
 #[pymethods]
 impl PyDmgPipeline {
     #[new]
-    pub fn new(path: &str) -> PyResult<Self> {
-        let pipeline = dpp::DmgPipeline::open(path).map_err(to_pyerr)?;
+    pub fn new(py: Python<'_>, path: &str) -> PyResult<Self> {
+        let path = path.to_string();
+        let pipeline = py
+            .detach(|| dpp::DmgPipeline::open(&path))
+            .map_err(to_pyerr)?;
         Ok(PyDmgPipeline {
             inner: Some(pipeline),
         })
@@ -69,12 +72,15 @@ impl PyDmgPipeline {
     /// Args:
     ///     mode: Extraction mode - "temp_file" (default) or "in_memory".
     #[pyo3(signature = (mode=None))]
-    fn filesystem(&mut self, mode: Option<&str>) -> PyResult<PyFilesystemHandle> {
+    fn filesystem(&mut self, py: Python<'_>, mode: Option<&str>) -> PyResult<PyFilesystemHandle> {
         let extract_mode = parse_extract_mode(mode)?;
-        let pipeline = self.pipeline()?;
-        let handle = pipeline
-            .open_filesystem_with_mode(extract_mode)
-            .map_err(to_pyerr)?;
+        let mut pipeline = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("DmgPipeline is closed"))?;
+        let result = py.detach(|| pipeline.open_filesystem_with_mode(extract_mode));
+        self.inner = Some(pipeline);
+        let handle = result.map_err(to_pyerr)?;
         Ok(PyFilesystemHandle {
             inner: Some(handle),
         })
@@ -164,8 +170,13 @@ impl PyFilesystemHandle {
 
     /// Read a file into bytes.
     fn read_file<'py>(&mut self, py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyBytes>> {
-        let handle = self.handle()?;
-        let data = handle.read_file(path).map_err(to_pyerr)?;
+        let path = path.to_string();
+        let mut handle = self.inner.take().ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("FilesystemHandle is closed")
+        })?;
+        let result = py.detach(|| handle.read_file(&path));
+        self.inner = Some(handle);
+        let data = result.map_err(to_pyerr)?;
         Ok(PyBytes::new(py, &data))
     }
 
@@ -177,9 +188,13 @@ impl PyFilesystemHandle {
     }
 
     /// Walk all entries in the filesystem.
-    fn walk(&mut self) -> PyResult<Vec<PyWalkEntry>> {
-        let handle = self.handle()?;
-        let entries = handle.walk().map_err(to_pyerr)?;
+    fn walk(&mut self, py: Python<'_>) -> PyResult<Vec<PyWalkEntry>> {
+        let mut handle = self.inner.take().ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("FilesystemHandle is closed")
+        })?;
+        let result = py.detach(|| handle.walk());
+        self.inner = Some(handle);
+        let entries = result.map_err(to_pyerr)?;
         Ok(entries.iter().map(PyWalkEntry::from).collect())
     }
 
@@ -195,13 +210,25 @@ impl PyFilesystemHandle {
     ///     pkg_path: Path to the .pkg file within the filesystem.
     ///     streaming: If True, stream to temp file (lower memory). Default False.
     #[pyo3(signature = (pkg_path, streaming=false))]
-    fn open_pkg(&mut self, pkg_path: &str, streaming: bool) -> PyResult<PyPkgReader> {
-        let handle = self.handle()?;
+    fn open_pkg(
+        &mut self,
+        py: Python<'_>,
+        pkg_path: &str,
+        streaming: bool,
+    ) -> PyResult<PyPkgReader> {
+        let pkg_path = pkg_path.to_string();
+        let mut handle = self.inner.take().ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("FilesystemHandle is closed")
+        })?;
         if streaming {
-            let pkg = handle.open_pkg_streaming(pkg_path).map_err(to_pyerr)?;
+            let result = py.detach(|| handle.open_pkg_streaming(&pkg_path));
+            self.inner = Some(handle);
+            let pkg = result.map_err(to_pyerr)?;
             Ok(PyPkgReader::from_file_reader(pkg))
         } else {
-            let pkg = handle.open_pkg(pkg_path).map_err(to_pyerr)?;
+            let result = py.detach(|| handle.open_pkg(&pkg_path));
+            self.inner = Some(handle);
+            let pkg = result.map_err(to_pyerr)?;
             Ok(PyPkgReader::from_memory_reader(pkg))
         }
     }

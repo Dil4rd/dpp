@@ -9,7 +9,7 @@ keywords = ["dmg", "apple", "macos", "pkg", "filesystem"]
 categories = ["compression", "encoding", "parsing"]
 
 [dependencies]
-udif = { version = "0.3.2", path = "../udif" }
+udif = { version = "0.3.3", path = "../udif" }
 pbzx = { version = "0.2.2", path = "../pbzx" }
 hfsplus = { version = "0.2.2", path = "../hfsplus" }
 apfs = { version = "0.2.2", path = "../apfs" }

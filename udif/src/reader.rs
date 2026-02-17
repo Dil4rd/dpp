@@ -6,6 +6,9 @@ use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 use crate::checksum::{has_checksum, verify_crc32};
 use crate::error::{DppError, Result};
 use crate::format::{BlockType, KolyHeader, MishHeader, PartitionEntry};
@@ -533,6 +536,40 @@ impl<R: Read + Seek> DmgReader<R> {
         Ok(output)
     }
 
+    /// Decompress a specific partition to raw disk data.
+    ///
+    /// Automatically uses parallel decompression when the `parallel` feature
+    /// is enabled.
+    pub fn decompress_partition_auto(&mut self, partition_id: i32) -> Result<Vec<u8>> {
+        #[cfg(feature = "parallel")]
+        {
+            self.decompress_partition_parallel(partition_id)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            self.decompress_partition(partition_id)
+        }
+    }
+
+    /// Decompress the main HFS+ partition using auto-selected strategy.
+    pub fn decompress_main_partition_auto(&mut self) -> Result<Vec<u8>> {
+        let id = self.main_partition_id()?;
+        self.decompress_partition_auto(id)
+    }
+
+    /// Stream the main HFS+/APFS partition to a writer, using auto-selected strategy.
+    pub fn decompress_main_partition_to_auto<W: Write>(&mut self, writer: &mut W) -> Result<u64> {
+        #[cfg(feature = "parallel")]
+        {
+            let id = self.main_partition_id()?;
+            self.decompress_partition_to_parallel(id, writer)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            self.decompress_main_partition_to(writer)
+        }
+    }
+
     /// Get info about block compression types used
     pub fn compression_info(&self) -> CompressionInfo {
         let mut info = CompressionInfo::default();
@@ -567,6 +604,173 @@ impl DmgReader<BufReader<File>> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         Self::with_options(reader, options)
+    }
+}
+
+/// A block read from disk, ready for parallel decompression.
+#[cfg(feature = "parallel")]
+struct ReadBlock {
+    /// Block compression type
+    block_type: BlockType,
+    /// Compressed data read from disk
+    data: Vec<u8>,
+    /// Output offset in the decompressed buffer
+    out_offset: usize,
+    /// Expected decompressed size
+    out_size: usize,
+}
+
+/// Decompress a single block into the provided output slice.
+#[cfg(feature = "parallel")]
+fn decompress_block(block: &ReadBlock, output: &mut [u8]) -> Result<()> {
+    match block.block_type {
+        BlockType::Raw | BlockType::Ignore => {
+            let copy_len = block.data.len().min(output.len());
+            output[..copy_len].copy_from_slice(&block.data[..copy_len]);
+        }
+        BlockType::Zlib => {
+            let mut decoder = flate2::read::ZlibDecoder::new(&block.data[..]);
+            read_full(&mut decoder, output)?;
+        }
+        BlockType::Bzip2 => {
+            let mut decoder = bzip2::read::BzDecoder::new(&block.data[..]);
+            read_full(&mut decoder, output)?;
+        }
+        BlockType::Lzfse => {
+            let expected_size = output.len();
+            let mut temp_buf = vec![0u8; expected_size * 2];
+            let decoded_size = lzfse::decode_buffer(&block.data, &mut temp_buf)
+                .map_err(|e| DppError::Decompression(format!("LZFSE: {:?}", e)))?;
+            let copy_size = decoded_size.min(expected_size);
+            output[..copy_size].copy_from_slice(&temp_buf[..copy_size]);
+        }
+        BlockType::Xz => {
+            let mut decoder = xz2::read::XzDecoder::new(&block.data[..]);
+            read_full(&mut decoder, output)?;
+        }
+        _ => {
+            // ZeroFill, Comment, End — should not appear in ReadBlock list
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "parallel")]
+impl<R: Read + Seek> DmgReader<R> {
+    /// Decompress a specific partition using parallel block decompression.
+    ///
+    /// Phase 1: Sequentially reads all compressed blocks from disk.
+    /// Phase 2: Decompresses blocks in parallel using rayon, writing directly
+    /// into non-overlapping slices of the output buffer.
+    pub fn decompress_partition_parallel(&mut self, partition_id: i32) -> Result<Vec<u8>> {
+        let partition = self
+            .partitions
+            .iter()
+            .find(|p| p.id == partition_id)
+            .ok_or_else(|| DppError::FileNotFound(format!("partition {}", partition_id)))?
+            .clone();
+
+        let total_size = (partition.block_map.sector_count * SECTOR_SIZE) as usize;
+
+        // Phase 1: Sequential I/O — read all compressed blocks
+        let mut blocks = Vec::new();
+        for block_run in &partition.block_map.block_runs {
+            let out_offset = (block_run.sector_number * SECTOR_SIZE) as usize;
+            let out_size = (block_run.sector_count * SECTOR_SIZE) as usize;
+
+            match block_run.block_type {
+                BlockType::ZeroFill | BlockType::Comment | BlockType::End => {
+                    // No data to read; output buffer is pre-zeroed
+                }
+                BlockType::Adc => {
+                    return Err(DppError::Unsupported("ADC compression".into()));
+                }
+                BlockType::Raw | BlockType::Ignore => {
+                    if block_run.compressed_length > 0 {
+                        self.reader.seek(SeekFrom::Start(
+                            self.koly.data_fork_offset + block_run.compressed_offset,
+                        ))?;
+                        let mut data = vec![0u8; block_run.compressed_length as usize];
+                        self.reader.read_exact(&mut data)?;
+                        blocks.push(ReadBlock {
+                            block_type: block_run.block_type,
+                            data,
+                            out_offset,
+                            out_size,
+                        });
+                    }
+                }
+                _ => {
+                    // Compressed block (Zlib, Bzip2, Lzfse, Xz)
+                    self.reader.seek(SeekFrom::Start(
+                        self.koly.data_fork_offset + block_run.compressed_offset,
+                    ))?;
+                    let mut data = vec![0u8; block_run.compressed_length as usize];
+                    self.reader.read_exact(&mut data)?;
+                    blocks.push(ReadBlock {
+                        block_type: block_run.block_type,
+                        data,
+                        out_offset,
+                        out_size,
+                    });
+                }
+            }
+        }
+
+        // Phase 2: Parallel decompression with direct zero-copy writes
+        // Pre-allocate the output buffer (zeroed for ZeroFill blocks)
+        let mut output = vec![0u8; total_size];
+
+        // Sort blocks by out_offset to carve non-overlapping slices
+        blocks.sort_by_key(|b| b.out_offset);
+
+        // Build (block, &mut slice) pairs using split_at_mut
+        let mut slices: Vec<(&ReadBlock, &mut [u8])> = Vec::with_capacity(blocks.len());
+        let mut remaining = output.as_mut_slice();
+        let mut current_pos = 0usize;
+
+        for block in &blocks {
+            // Skip past any gap before this block
+            if block.out_offset > current_pos {
+                let gap = block.out_offset - current_pos;
+                remaining = &mut remaining[gap..];
+                current_pos += gap;
+            }
+
+            // Carve out this block's slice
+            let (block_slice, rest) = remaining.split_at_mut(block.out_size);
+            slices.push((block, block_slice));
+            remaining = rest;
+            current_pos += block.out_size;
+        }
+
+        // Decompress all blocks in parallel
+        let results: Vec<Result<()>> = slices
+            .into_par_iter()
+            .map(|(block, slice)| decompress_block(block, slice))
+            .collect();
+
+        // Propagate first error
+        for result in results {
+            result?;
+        }
+
+        Ok(output)
+    }
+
+    /// Decompress a partition using parallel decompression and stream to a writer.
+    ///
+    /// Decompresses all blocks in parallel, then writes the complete result.
+    /// Returns the total number of bytes written.
+    pub fn decompress_partition_to_parallel<W: Write>(
+        &mut self,
+        partition_id: i32,
+        writer: &mut W,
+    ) -> Result<u64> {
+        let output = self.decompress_partition_parallel(partition_id)?;
+        let len = output.len() as u64;
+        writer.write_all(&output)?;
+        Ok(len)
     }
 }
 

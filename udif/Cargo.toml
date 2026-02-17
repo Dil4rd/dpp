@@ -1,6 +1,6 @@
 [package]
 name = "udif"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 description = "cross-platform Apple disk image (aka DMG, UDIF) library"
 license = "MIT"
@@ -15,6 +15,7 @@ flate2 = "1.0"
 bzip2 = "0.5"
 lzfse = "0.2"
 xz2 = "0.1"
+rayon = { version = "1.10", optional = true }
 plist = "1"
 base64 = "0.22"
 xml-rs = "0.8"
@@ -28,6 +29,7 @@ default = ["extract", "list", "create"]
 extract = []
 list = []
 create = []
+parallel = ["rayon"]
 
 [[example]]
 name = "udif-tool"

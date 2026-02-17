@@ -66,8 +66,8 @@ fn _dpp(m: &Bound<'_, PyModule>) -> PyResult<()> {
 ///     A DmgPipeline instance.
 #[pyfunction]
 #[pyo3(name = "open")]
-fn py_open(path: &str) -> PyResult<pipeline::PyDmgPipeline> {
-    pipeline::PyDmgPipeline::new(path)
+fn py_open(py: Python<'_>, path: &str) -> PyResult<pipeline::PyDmgPipeline> {
+    pipeline::PyDmgPipeline::new(py, path)
 }
 
 /// Find all .pkg files inside a DMG.

@@ -114,12 +114,19 @@ impl PyPkgReader {
     }
 
     /// Extract the payload for a component, returning an Archive for reading files.
-    fn payload(&mut self, component: &str) -> PyResult<PyArchive> {
-        let pkg = self.pkg()?;
-        let data =
-            dispatch_pkg!(pkg, payload, component).map_err(|e| to_pyerr(dpp::DppError::Xar(e)))?;
-        let archive = dpp::pbzx::Archive::from_reader(Cursor::new(data))
-            .map_err(|e| to_pyerr(dpp::DppError::Pbzx(e)))?;
+    fn payload(&mut self, py: Python<'_>, component: &str) -> PyResult<PyArchive> {
+        let component = component.to_string();
+        let mut pkg_inner = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("PkgReader is closed"))?;
+        let result = py.detach(|| {
+            let data =
+                dispatch_pkg!(&mut pkg_inner, payload, &component).map_err(dpp::DppError::Xar)?;
+            dpp::pbzx::Archive::from_reader(Cursor::new(data)).map_err(dpp::DppError::Pbzx)
+        });
+        self.inner = Some(pkg_inner);
+        let archive = result.map_err(to_pyerr)?;
         Ok(PyArchive::from_archive(archive))
     }
 

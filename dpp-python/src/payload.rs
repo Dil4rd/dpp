@@ -39,9 +39,11 @@ impl PyArchive {
 impl PyArchive {
     /// Open a PBZX file from disk.
     #[staticmethod]
-    fn open(path: &str) -> PyResult<Self> {
-        let archive =
-            dpp::pbzx::Archive::open(path).map_err(|e| to_pyerr(dpp::DppError::Pbzx(e)))?;
+    fn open(py: Python<'_>, path: &str) -> PyResult<Self> {
+        let path = path.to_string();
+        let archive = py
+            .detach(|| dpp::pbzx::Archive::open(&path))
+            .map_err(|e| to_pyerr(dpp::DppError::Pbzx(e)))?;
         Ok(PyArchive {
             inner: Some(archive),
         })
@@ -91,10 +93,11 @@ impl PyArchive {
     }
 
     /// Extract all files to a directory on disk.
-    fn extract_all(&self, dest: &str) -> PyResult<Vec<String>> {
+    fn extract_all(&self, py: Python<'_>, dest: &str) -> PyResult<Vec<String>> {
         let archive = self.archive()?;
-        let paths = archive
-            .extract_all(dest)
+        let dest = dest.to_string();
+        let paths = py
+            .detach(|| archive.extract_all(&dest))
             .map_err(|e| to_pyerr(dpp::DppError::Pbzx(e)))?;
         Ok(paths.iter().map(|p| p.display().to_string()).collect())
     }

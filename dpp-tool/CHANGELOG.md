@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.4.3] - 2026-02-17
 
+### Added
+
+- `parallel` feature (enabled by default) for multi-threaded UDIF and PBZX decompression via rayon
+
 ### Fixed
 
 - Pipeline Summary in `bench` command now includes PKG and PBZX stages (previously only showed DMG open, extraction, and filesystem walk)

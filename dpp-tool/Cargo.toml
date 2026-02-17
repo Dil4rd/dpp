@@ -1,6 +1,6 @@
 [package]
 name = "dpp-tool"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 description = "CLI to explore Apple DMG disk images: DMG → HFS+/APFS → PKG → PBZX → files"
 license = "MIT"
@@ -19,3 +19,7 @@ xara = { version = "0.2.2", path = "../xara" }
 pbzx = { version = "0.2.2", path = "../pbzx" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
+
+[features]
+default = ["parallel"]
+parallel = ["dpp/parallel"]

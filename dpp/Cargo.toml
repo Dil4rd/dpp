@@ -1,6 +1,6 @@
 [package]
 name = "dpp"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2024"
 description = "DMG + HFS+/APFS + PKG + PBZX pipeline - walk through Apple disk images to extract packages"
 license = "MIT"
@@ -22,4 +22,4 @@ flate2 = "1.0"
 hfsplus = { path = "../hfsplus", features = ["testutil"] }
 
 [features]
-parallel = ["pbzx/parallel"]
+parallel = ["pbzx/parallel", "udif/parallel"]

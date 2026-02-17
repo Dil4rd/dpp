@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.5] - 2026-02-17
+
+### Changed
+
+- `parallel` feature now enables both `pbzx/parallel` (XZ chunk decompression) and `udif/parallel` (DMG block decompression) for full parallel extraction
+- Updated udif dependency to 0.3.3
+
 ## [0.3.4] - 2026-02-16
 
 ### Added

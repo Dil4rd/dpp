@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-02-16
+
+### Added
+
+- `parallel` feature flag for rayon-based parallel block decompression of DMG partitions
+- `decompress_partition_parallel()` and `decompress_partition_to_parallel()` methods on `DmgReader`
+- Auto-selecting `_auto` methods that use parallel decompression when the feature is enabled
+- `DmgArchive` high-level API now automatically uses parallel decompression when available
+
 ## [0.3.2] - 2026-02-16
 
 ### Changed

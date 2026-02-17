@@ -164,23 +164,32 @@ impl DmgArchive {
         })
     }
 
-    /// Extract a partition by ID
+    /// Extract a partition by ID.
+    ///
+    /// When the `parallel` feature is enabled, blocks are decompressed in
+    /// parallel using rayon for significantly faster extraction.
     pub fn extract_partition(&mut self, id: i32) -> Result<Vec<u8>> {
-        self.reader.decompress_partition(id)
+        self.reader.decompress_partition_auto(id)
     }
 
-    /// Extract a partition by name
+    /// Extract a partition by name.
+    ///
+    /// When the `parallel` feature is enabled, blocks are decompressed in
+    /// parallel using rayon for significantly faster extraction.
     pub fn extract_partition_by_name(&mut self, name: &str) -> Result<Vec<u8>> {
         let partition = self
             .reader
             .partition(name)
             .ok_or_else(|| DppError::FileNotFound(name.to_string()))?;
-        self.reader.decompress_partition(partition.id)
+        self.reader.decompress_partition_auto(partition.id)
     }
 
-    /// Extract the main HFS+/APFS partition
+    /// Extract the main HFS+/APFS partition.
+    ///
+    /// When the `parallel` feature is enabled, blocks are decompressed in
+    /// parallel using rayon for significantly faster extraction.
     pub fn extract_main_partition(&mut self) -> Result<Vec<u8>> {
-        self.reader.decompress_main_partition()
+        self.reader.decompress_main_partition_auto()
     }
 
     /// Extract all partitions as a raw disk image
@@ -199,7 +208,7 @@ impl DmgArchive {
 
     /// Stream the main HFS+/APFS partition to a writer (low memory usage)
     pub fn extract_main_partition_to<W: std::io::Write>(&mut self, writer: &mut W) -> Result<u64> {
-        self.reader.decompress_main_partition_to(writer)
+        self.reader.decompress_main_partition_to_auto(writer)
     }
 
     /// Get the ID of the main HFS+/APFS partition
@@ -215,15 +224,15 @@ impl DmgArchive {
 
     /// Extract a partition to a file
     pub fn extract_partition_to_file<P: AsRef<Path>>(&mut self, id: i32, path: P) -> Result<()> {
-        let mut file = File::create(path)?;
-        self.reader.decompress_partition_to(id, &mut file)?;
+        let data = self.reader.decompress_partition_auto(id)?;
+        std::fs::write(path, &data)?;
         Ok(())
     }
 
     /// Extract main partition to a file
     pub fn extract_main_partition_to_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        let mut file = File::create(path)?;
-        self.reader.decompress_main_partition_to(&mut file)?;
+        let data = self.reader.decompress_main_partition_auto()?;
+        std::fs::write(path, &data)?;
         Ok(())
     }
 
@@ -1044,5 +1053,123 @@ mod tests {
                 method
             );
         }
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "parallel")]
+mod parallel_tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_parallel_matches_sequential() {
+        let original = b"Test data for parallel decompression. ".repeat(100);
+
+        for method in [
+            CompressionMethod::Raw,
+            CompressionMethod::Zlib,
+            CompressionMethod::Bzip2,
+            CompressionMethod::Lzfse,
+        ] {
+            let mut dmg_buf = Vec::new();
+            {
+                let mut writer = DmgWriter::new(Cursor::new(&mut dmg_buf)).compression(method);
+                writer.add_partition("test", &original).unwrap();
+                writer.finish().unwrap();
+            }
+
+            // Sequential decompress
+            let mut reader1 = DmgReader::new(Cursor::new(&dmg_buf)).unwrap();
+            let sequential = reader1.decompress_partition(0).unwrap();
+
+            // Parallel decompress
+            let mut reader2 = DmgReader::new(Cursor::new(&dmg_buf)).unwrap();
+            let parallel = reader2.decompress_partition_parallel(0).unwrap();
+
+            assert_eq!(sequential, parallel, "Parallel mismatch for {:?}", method);
+        }
+    }
+
+    #[test]
+    fn test_parallel_to_writer() {
+        let original = b"Test data for parallel writer. ".repeat(100);
+
+        let mut dmg_buf = Vec::new();
+        {
+            let mut writer =
+                DmgWriter::new(Cursor::new(&mut dmg_buf)).compression(CompressionMethod::Zlib);
+            writer.add_partition("test", &original).unwrap();
+            writer.finish().unwrap();
+        }
+
+        // Sequential decompress
+        let mut reader1 = DmgReader::new(Cursor::new(&dmg_buf)).unwrap();
+        let sequential = reader1.decompress_partition(0).unwrap();
+
+        // Parallel via decompress_partition_to_parallel
+        let mut reader2 = DmgReader::new(Cursor::new(&dmg_buf)).unwrap();
+        let mut output = Vec::new();
+        reader2
+            .decompress_partition_to_parallel(0, &mut output)
+            .unwrap();
+
+        assert_eq!(sequential, output);
+    }
+
+    #[test]
+    fn test_parallel_empty_partition() {
+        let original: Vec<u8> = vec![];
+
+        let mut dmg_buf = Vec::new();
+        {
+            let mut writer = DmgWriter::new(Cursor::new(&mut dmg_buf));
+            writer.add_partition("empty", &original).unwrap();
+            writer.finish().unwrap();
+        }
+
+        let mut reader = DmgReader::new(Cursor::new(&dmg_buf)).unwrap();
+        let result = reader.decompress_partition_parallel(0).unwrap();
+        assert!(result.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_parallel_zeros() {
+        let original = vec![0u8; 2048]; // 4 sectors of zeros
+
+        let mut dmg_buf = Vec::new();
+        {
+            let mut writer = DmgWriter::new(Cursor::new(&mut dmg_buf));
+            writer.add_partition("zeros", &original).unwrap();
+            writer.finish().unwrap();
+        }
+
+        let mut reader = DmgReader::new(Cursor::new(&dmg_buf)).unwrap();
+        let result = reader.decompress_partition_parallel(0).unwrap();
+
+        assert_eq!(result.len(), original.len());
+        assert!(result.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_auto_selects_parallel() {
+        let original = b"Auto-select test data. ".repeat(50);
+
+        let mut dmg_buf = Vec::new();
+        {
+            let mut writer =
+                DmgWriter::new(Cursor::new(&mut dmg_buf)).compression(CompressionMethod::Zlib);
+            writer.add_partition("test", &original).unwrap();
+            writer.finish().unwrap();
+        }
+
+        // decompress_partition_auto should use parallel when feature is enabled
+        let mut reader1 = DmgReader::new(Cursor::new(&dmg_buf)).unwrap();
+        let auto_result = reader1.decompress_partition_auto(0).unwrap();
+
+        let mut reader2 = DmgReader::new(Cursor::new(&dmg_buf)).unwrap();
+        let parallel_result = reader2.decompress_partition_parallel(0).unwrap();
+
+        assert_eq!(auto_result, parallel_result);
     }
 }

@@ -1,13 +1,33 @@
 # Demo Recording
 
-## Prerequisites
+## Using VHS (recommended)
+
+### Prerequisites
+
+- [vhs](https://github.com/charmbracelet/vhs) for terminal recording
+- `tests/kdk.dmg` test fixture (976 MB Kernel Debug Kit)
+- `dpp-tool` built with: `cargo build --release`
+
+### Record
+
+```bash
+vhs demo/demo.tape
+# or with docker
+docker run --rm -v $PWD:/vhs ghcr.io/charmbracelet/vhs demo/demo.tape
+```
+
+Output is written to `demo/demo.gif`.
+
+## Using asciinema (legacy)
+
+### Prerequisites
 
 - [asciinema](https://asciinema.org/) for terminal recording
 - [agg](https://github.com/asciinema/agg) for GIF conversion
 - `tests/kdk.dmg` test fixture (976 MB Kernel Debug Kit)
-- `dpp-tool` built with: `cargo build --release --features parallel`
+- `dpp-tool` built with: `cargo build --release`
 
-## Record
+### Record
 
 ```bash
 TERM=xterm-256color asciinema rec \
@@ -19,13 +39,13 @@ TERM=xterm-256color asciinema rec \
     demo/demo.cast
 ```
 
-## Preview
+### Preview
 
 ```bash
 asciinema play demo/demo.cast
 ```
 
-## Convert to GIF
+### Convert to GIF
 
 Pick a monospace font installed on your system (`fc-list :spacing=mono family`):
 

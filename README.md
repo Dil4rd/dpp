@@ -22,7 +22,7 @@ DMG (UDIF) → HFS+ or APFS filesystem → PKG installer (XAR) → Payload (PBZX
 - **Memory efficient** — streams through temp files by default (~4KB resident memory)
 - **Pure Rust** — zero `unsafe` in filesystem crates, minimal dependencies
 - **Modular** — use the full pipeline or individual crates standalone
-- **Parallel decompression** — opt-in multi-threaded PBZX extraction via `parallel` feature
+- **Parallel decompression** — multi-threaded PBZX and UDIF extraction (enabled by default in `dpp-tool`)
 
 ## Quick Start
 
@@ -209,13 +209,13 @@ Each crate is published independently and can be used on its own:
 ## Building
 
 ```bash
-cargo build --release
+cargo build --release    # parallel decompression enabled by default for dpp-tool
 ```
 
-Build with multi-threaded PBZX decompression:
+To build without parallel decompression:
 
 ```bash
-cargo build --release --features parallel
+cargo build --release --no-default-features
 ```
 
 Run tests (some tests require fixture files and skip gracefully if missing):

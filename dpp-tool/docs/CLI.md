@@ -5,7 +5,7 @@ The `dpp-tool` crate provides a fancy command-line interface for exploring the f
 ## Building
 
 ```bash
-cargo build -p dpp-tool --release
+cargo build -p dpp-tool --release    # parallel decompression enabled by default
 ```
 
 ## Command Structure

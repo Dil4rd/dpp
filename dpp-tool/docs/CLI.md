@@ -234,9 +234,11 @@ $ cargo run -p dpp-tool --release -- bench Kernel_Debug_Kit.dmg
 
   Stage                         Time           %
   --------------------------------------------------
-  DMG open                       234.5ms    2.7%  ##
-  HFS+ extraction                  8.23s   96.4%  ######################################
-  Filesystem walk                 45.3ms    0.5%  #
+  DMG open                       234.5ms    0.8%  #
+  HFS+ extraction                  8.23s   26.4%  ###########
+  Filesystem walk                 45.3ms    0.1%  #
+  PKG open                       120.0ms    0.4%  #
+  PBZX payload                    22.56s   72.3%  #############################
   --------------------------------------------------
-  Total                            8.51s
+  Total                           31.19s
 ```

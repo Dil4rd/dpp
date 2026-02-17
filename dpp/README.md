@@ -215,7 +215,7 @@ pkg.payload_to("component", &mut out)?;
 
 | | |
 |---|---|
-| [CLI Tool](docs/CLI.md) | `dpp-tool` usage for exploring DMGs interactively |
+| [CLI Tool](../dpp-tool/docs/CLI.md) | `dpp-tool` usage for exploring DMGs interactively |
 | [Architecture](docs/ARCHITECTURE.md) | Pipeline design and type-erasure patterns |
 
 ## Example Output

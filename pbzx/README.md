@@ -162,8 +162,8 @@ See [full benchmarks](docs/BENCHMARKS.md) for details.
 
 ## Alternatives
 
-| Tool | Language | Read | Write | CPIO | Streaming | Platform |
-|------|----------|:----:|:-----:|:----:|:---------:|----------|
+| Tool | Language | Read PBZX | Write PBZX | CPIO | Streaming | Platform |
+|------|----------|:---------:|:----------:|:----:|:---------:|----------|
 | **pbzx** | Rust | ✓ | ✓ | ✓ | ✓ | All |
 | [pbzx (C)](https://github.com/NiklasRosenstein/pbzx) | C | ✓ | ❌ | ❌ | ✓ | Unix |
 | [groob/mackit](https://github.com/groob/mackit) | Go | ✓ | ❌ | ❌ | ✓ | All |

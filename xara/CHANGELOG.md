@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `extract` feature flag (default-on) for filesystem extraction
 - `XarArchive::extract_all(dest)` extracts all entries to a directory
-- `XarArchive::extract_path(base_path, dest)` extracts entries under a path prefix
+- `XarArchive::extract_path(base_path, dest)` extracts entries under a path prefix — the base prefix is stripped from output paths
 - `ExtractStats` struct with `files`, `dirs`, `symlinks_skipped`, and `bytes` fields
 - `XarError::InvalidPath` variant for path traversal detection
 - Symlinks are skipped during extraction (counted in `ExtractStats::symlinks_skipped`)

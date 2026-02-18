@@ -235,7 +235,7 @@ with dpp.ApfsVolume.open("apfs_partition.img") as vol:
 | `walk()` | Walk all entries, returns `list[WalkEntry]` |
 | `exists(path)` | Check if path exists |
 | `extract_all(dest)` | Extract all files to directory, returns `ExtractStats` |
-| `extract_path(base_path, dest)` | Extract files under base path, returns `ExtractStats` |
+| `extract_path(base_path, dest)` | Extract files under base path (prefix stripped), returns `ExtractStats` |
 | `open_pkg(path, streaming=False)` | Open a .pkg file, returns `PkgReader` |
 
 ### DMG Classes
@@ -283,7 +283,7 @@ with dpp.ApfsVolume.open("apfs_partition.img") as vol:
 | `find(path)` | Find file by path |
 | `read_file(index)` | Read file by index, returns `bytes` |
 | `extract_all(dest)` | Extract all files to directory, returns `ExtractStats` |
-| `extract_path(base_path, dest)` | Extract files under base path, returns `ExtractStats` |
+| `extract_path(base_path, dest)` | Extract files under base path (prefix stripped), returns `ExtractStats` |
 
 ### Payload Classes
 
@@ -294,7 +294,7 @@ with dpp.ApfsVolume.open("apfs_partition.img") as vol:
 | `list()` | List entries, returns `list[FileEntry]` |
 | `extract_file(path)` | Extract file, returns `bytes` |
 | `extract_all(dest)` | Extract all to directory, returns `ExtractStats` |
-| `extract_path(base_path, dest)` | Extract files under base path, returns `ExtractStats` |
+| `extract_path(base_path, dest)` | Extract files under base path (prefix stripped), returns `ExtractStats` |
 | `decompressed_size` | Size of decompressed CPIO data |
 | `cpio_data()` | Raw CPIO bytes |
 

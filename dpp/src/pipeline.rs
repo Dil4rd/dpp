@@ -17,6 +17,21 @@ pub struct ExtractStats {
     pub bytes: u64,
 }
 
+/// Strip a normalized base prefix from a path, returning only the remainder.
+///
+/// Returns `""` when `path` is the base itself, and the relative tail when
+/// `path` starts with `base/`.
+#[cfg(feature = "extract")]
+fn strip_base_prefix<'a>(path: &'a str, base: &str) -> &'a str {
+    if base.is_empty() {
+        path
+    } else if path.len() <= base.len() {
+        ""
+    } else {
+        &path[base.len() + 1..]
+    }
+}
+
 /// Sanitize a filesystem path: reject `..` components and absolute prefixes.
 #[cfg(feature = "extract")]
 fn sanitize_path(path: &str) -> Result<std::path::PathBuf> {
@@ -723,7 +738,9 @@ impl FilesystemHandle {
     /// Extract files under `base_path` to a directory.
     ///
     /// Only entries whose path starts with `base_path` are extracted.
-    /// Pass `"/"` to extract everything.
+    /// The `base_path` prefix is stripped from output paths so only the
+    /// relative remainder appears under `dest`.
+    /// Pass `"/"` to extract everything (no stripping).
     /// Symlinks are skipped (counted in [`ExtractStats::symlinks_skipped`]).
     #[cfg(feature = "extract")]
     pub fn extract_path<P: AsRef<Path>>(
@@ -768,6 +785,21 @@ impl FilesystemHandle {
         for entry in &matching {
             let rel = entry.path.strip_prefix('/').unwrap_or(&entry.path);
             if rel.is_empty() {
+                continue;
+            }
+
+            // Strip base prefix so only the relative remainder is extracted
+            let rel = if is_root {
+                rel
+            } else {
+                strip_base_prefix(rel, &normalized_base)
+            };
+
+            // The base dir itself maps to dest (already created above)
+            if rel.is_empty() {
+                if entry.entry.kind == FsEntryKind::Directory {
+                    stats.dirs += 1;
+                }
                 continue;
             }
 

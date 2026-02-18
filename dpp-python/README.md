@@ -234,6 +234,8 @@ with dpp.ApfsVolume.open("apfs_partition.img") as vol:
 | `stat(path)` | File metadata, returns `FileStat` |
 | `walk()` | Walk all entries, returns `list[WalkEntry]` |
 | `exists(path)` | Check if path exists |
+| `extract_all(dest)` | Extract all files to directory, returns `ExtractStats` |
+| `extract_path(base_path, dest)` | Extract files under base path, returns `ExtractStats` |
 | `open_pkg(path, streaming=False)` | Open a .pkg file, returns `PkgReader` |
 
 ### DMG Classes
@@ -280,6 +282,8 @@ with dpp.ApfsVolume.open("apfs_partition.img") as vol:
 | `files` | List of `XarFile` |
 | `find(path)` | Find file by path |
 | `read_file(index)` | Read file by index, returns `bytes` |
+| `extract_all(dest)` | Extract all files to directory, returns `ExtractStats` |
+| `extract_path(base_path, dest)` | Extract files under base path, returns `ExtractStats` |
 
 ### Payload Classes
 
@@ -289,7 +293,8 @@ with dpp.ApfsVolume.open("apfs_partition.img") as vol:
 |----------------|-------------|
 | `list()` | List entries, returns `list[FileEntry]` |
 | `extract_file(path)` | Extract file, returns `bytes` |
-| `extract_all(dest)` | Extract all to directory (returns `ExtractStats` since pbzx 0.3.0) |
+| `extract_all(dest)` | Extract all to directory, returns `ExtractStats` |
+| `extract_path(base_path, dest)` | Extract files under base path, returns `ExtractStats` |
 | `decompressed_size` | Size of decompressed CPIO data |
 | `cpio_data()` | Raw CPIO bytes |
 
@@ -339,6 +344,7 @@ All data types are immutable (frozen) Python objects with `__repr__`.
 | `XarFile` | `id`, `name`, `path`, `file_type`, `size`, `compressed_size` |
 | `ChunkInfo` | `index`, `offset`, `compressed_size`, `uncompressed_size`, `is_compressed`, `compression_ratio` |
 | `ArchiveStats` | `chunk_count`, `compressed_size`, `uncompressed_size`, `file_count`, `directory_count`, `total_file_size`, `compression_ratio`, `space_savings` |
+| `ExtractStats` | `files`, `dirs`, `symlinks_skipped`, `bytes` |
 
 ### Exceptions
 

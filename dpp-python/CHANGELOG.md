@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-02-18
+
+### Added
+
+- New `ExtractStats` data type returned from extraction methods (fields: `files`, `dirs`, `symlinks_skipped`, `bytes`)
+- `Archive.extract_path(base_path, dest)` — extract files under a specific path
+- `XarArchive.extract_all(dest)` and `XarArchive.extract_path(base_path, dest)` — extraction methods for XAR archives
+- `FilesystemHandle.extract_all(dest)` and `FilesystemHandle.extract_path(base_path, dest)` — extraction methods for HFS+/APFS filesystems
+- Error handling for `InvalidPath` and `NoEntriesFound` error variants
+
+### Changed
+
+- **Breaking:** `Archive.extract_all(dest)` now returns `ExtractStats` instead of `list[str]`
+
 ## [0.1.5] - 2026-02-17
 
 ### Changed

@@ -55,9 +55,14 @@ pub fn to_pyerr(err: dpp::DppError) -> PyErr {
         E::Io(_) => IoError::new_err(err.to_string()),
 
         // File/partition not found
-        E::FileNotFound(_) | E::NoHfsPartition | E::NoApfsPartition | E::NoFilesystemPartition => {
-            FileNotFoundError::new_err(err.to_string())
-        }
+        E::FileNotFound(_)
+        | E::NoHfsPartition
+        | E::NoApfsPartition
+        | E::NoFilesystemPartition
+        | E::NoEntriesFound(_) => FileNotFoundError::new_err(err.to_string()),
+
+        // Invalid path
+        E::InvalidPath(_) => InvalidFormatError::new_err(err.to_string()),
 
         // DMG sub-errors: dispatch by variant
         E::Dmg(dmg_err) => dmg_to_pyerr(dmg_err, &err),
@@ -127,7 +132,7 @@ fn xar_to_pyerr(xar_err: &dpp::xara::XarError, top: &dpp::DppError) -> PyErr {
     match xar_err {
         X::Io(_) => IoError::new_err(top.to_string()),
         X::FileNotFound(_) => FileNotFoundError::new_err(top.to_string()),
-        X::InvalidMagic(_) | X::InvalidToc(_) | X::XmlParse(_) => {
+        X::InvalidMagic(_) | X::InvalidToc(_) | X::XmlParse(_) | X::InvalidPath(_) => {
             InvalidFormatError::new_err(top.to_string())
         }
         X::DecompressionFailed(_) => DecompressionError::new_err(top.to_string()),

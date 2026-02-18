@@ -51,6 +51,7 @@ from dpp._dpp import (
     XarFile,
     ChunkInfo,
     ArchiveStats,
+    ExtractStats,
     # Exceptions
     DppError,
     IoError,
@@ -93,6 +94,7 @@ __all__ = [
     "XarFile",
     "ChunkInfo",
     "ArchiveStats",
+    "ExtractStats",
     # Exceptions
     "DppError",
     "IoError",

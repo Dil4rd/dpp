@@ -230,6 +230,38 @@ impl PyXarArchive {
         Ok(PyBytes::new(py, &data))
     }
 
+    /// Extract all files to a directory on disk.
+    fn extract_all(&mut self, py: Python<'_>, dest: &str) -> PyResult<PyExtractStats> {
+        let dest = dest.to_string();
+        let mut archive = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("XarArchive is closed"))?;
+        let result = py.detach(|| archive.extract_all(&dest));
+        self.inner = Some(archive);
+        let stats = result.map_err(|e| to_pyerr(dpp::DppError::Xar(e)))?;
+        Ok(PyExtractStats::from(stats))
+    }
+
+    /// Extract files under a base path to a directory on disk.
+    fn extract_path(
+        &mut self,
+        py: Python<'_>,
+        base_path: &str,
+        dest: &str,
+    ) -> PyResult<PyExtractStats> {
+        let base_path = base_path.to_string();
+        let dest = dest.to_string();
+        let mut archive = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("XarArchive is closed"))?;
+        let result = py.detach(|| archive.extract_path(&base_path, &dest));
+        self.inner = Some(archive);
+        let stats = result.map_err(|e| to_pyerr(dpp::DppError::Xar(e)))?;
+        Ok(PyExtractStats::from(stats))
+    }
+
     fn __repr__(&self) -> String {
         match &self.inner {
             Some(archive) => format!("XarArchive(files={})", archive.files().len()),

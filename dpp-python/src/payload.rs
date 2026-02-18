@@ -93,13 +93,35 @@ impl PyArchive {
     }
 
     /// Extract all files to a directory on disk.
-    fn extract_all(&self, py: Python<'_>, dest: &str) -> PyResult<Vec<String>> {
-        let archive = self.archive()?;
+    fn extract_all(&mut self, py: Python<'_>, dest: &str) -> PyResult<PyExtractStats> {
         let dest = dest.to_string();
-        let paths = py
-            .detach(|| archive.extract_all(&dest))
-            .map_err(|e| to_pyerr(dpp::DppError::Pbzx(e)))?;
-        Ok(paths.iter().map(|p| p.display().to_string()).collect())
+        let archive = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Archive is closed"))?;
+        let result = py.detach(|| archive.extract_all(&dest));
+        self.inner = Some(archive);
+        let stats = result.map_err(|e| to_pyerr(dpp::DppError::Pbzx(e)))?;
+        Ok(PyExtractStats::from(stats))
+    }
+
+    /// Extract files under a base path to a directory on disk.
+    fn extract_path(
+        &mut self,
+        py: Python<'_>,
+        base_path: &str,
+        dest: &str,
+    ) -> PyResult<PyExtractStats> {
+        let base_path = base_path.to_string();
+        let dest = dest.to_string();
+        let archive = self
+            .inner
+            .take()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Archive is closed"))?;
+        let result = py.detach(|| archive.extract_path(&base_path, &dest));
+        self.inner = Some(archive);
+        let stats = result.map_err(|e| to_pyerr(dpp::DppError::Pbzx(e)))?;
+        Ok(PyExtractStats::from(stats))
     }
 
     /// Size of the decompressed CPIO data.

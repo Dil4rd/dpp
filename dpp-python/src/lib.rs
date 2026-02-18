@@ -53,6 +53,7 @@ fn _dpp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<types::PyXarFile>()?;
     m.add_class::<types::PyChunkInfo>()?;
     m.add_class::<types::PyArchiveStats>()?;
+    m.add_class::<types::PyExtractStats>()?;
 
     Ok(())
 }

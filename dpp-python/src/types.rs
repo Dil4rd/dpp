@@ -473,6 +473,65 @@ impl From<&dpp::pbzx::ChunkInfo> for PyChunkInfo {
     }
 }
 
+// ── Extract Stats ────────────────────────────────────────────────────────
+
+/// Statistics returned after extraction.
+#[pyclass(frozen, skip_from_py_object, name = "ExtractStats")]
+#[derive(Clone)]
+pub struct PyExtractStats {
+    #[pyo3(get)]
+    pub files: u64,
+    #[pyo3(get)]
+    pub dirs: u64,
+    #[pyo3(get)]
+    pub symlinks_skipped: u64,
+    #[pyo3(get)]
+    pub bytes: u64,
+}
+
+#[pymethods]
+impl PyExtractStats {
+    fn __repr__(&self) -> String {
+        format!(
+            "ExtractStats(files={}, dirs={}, symlinks_skipped={}, bytes={})",
+            self.files, self.dirs, self.symlinks_skipped, self.bytes
+        )
+    }
+}
+
+impl From<dpp::ExtractStats> for PyExtractStats {
+    fn from(s: dpp::ExtractStats) -> Self {
+        PyExtractStats {
+            files: s.files,
+            dirs: s.dirs,
+            symlinks_skipped: s.symlinks_skipped,
+            bytes: s.bytes,
+        }
+    }
+}
+
+impl From<dpp::pbzx::ExtractStats> for PyExtractStats {
+    fn from(s: dpp::pbzx::ExtractStats) -> Self {
+        PyExtractStats {
+            files: s.files,
+            dirs: s.dirs,
+            symlinks_skipped: s.symlinks_skipped,
+            bytes: s.bytes,
+        }
+    }
+}
+
+impl From<dpp::xara::ExtractStats> for PyExtractStats {
+    fn from(s: dpp::xara::ExtractStats) -> Self {
+        PyExtractStats {
+            files: s.files,
+            dirs: s.dirs,
+            symlinks_skipped: s.symlinks_skipped,
+            bytes: s.bytes,
+        }
+    }
+}
+
 // ── Archive Stats (PBZX) ────────────────────────────────────────────────
 
 #[pyclass(frozen, skip_from_py_object, name = "ArchiveStats")]

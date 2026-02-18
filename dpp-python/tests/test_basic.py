@@ -44,6 +44,7 @@ def test_data_types_importable():
     assert hasattr(dpp, "XarFile")
     assert hasattr(dpp, "ChunkInfo")
     assert hasattr(dpp, "ArchiveStats")
+    assert hasattr(dpp, "ExtractStats")
 
 
 def test_exceptions_importable():
@@ -123,6 +124,43 @@ def test_cpio_builder_double_finish():
     cpio.finish()
     with pytest.raises(RuntimeError):
         cpio.finish()
+
+
+# ── Archive extraction tests ──────────────────────────────────────────
+
+
+def _make_test_archive():
+    """Build a small CPIO archive for testing extraction."""
+    cpio = dpp.CpioBuilder()
+    cpio.add_directory(".", mode=0o755)
+    cpio.add_directory("./usr", mode=0o755)
+    cpio.add_directory("./usr/bin", mode=0o755)
+    cpio.add_file("./usr/bin/hello", b"#!/bin/sh\necho hello\n", mode=0o755)
+    cpio.add_file("./usr/bin/world", b"#!/bin/sh\necho world\n", mode=0o755)
+    cpio.add_directory("./etc", mode=0o755)
+    cpio.add_file("./etc/config", b"key=value\n", mode=0o644)
+    data = cpio.finish()
+    return dpp.Archive.from_cpio(data)
+
+
+def test_archive_extract_all_returns_stats(tmp_path):
+    """extract_all should return ExtractStats with correct counts."""
+    archive = _make_test_archive()
+    stats = archive.extract_all(str(tmp_path))
+    assert isinstance(stats, dpp.ExtractStats)
+    assert stats.files > 0
+    assert stats.bytes > 0
+    assert stats.dirs > 0
+    assert "ExtractStats" in repr(stats)
+
+
+def test_archive_extract_path(tmp_path):
+    """extract_path should extract only files under the given base path."""
+    archive = _make_test_archive()
+    stats = archive.extract_path("./usr/bin", str(tmp_path))
+    assert isinstance(stats, dpp.ExtractStats)
+    assert stats.files >= 1
+    assert stats.bytes > 0
 
 
 # ── DmgBuilder tests ───────────────────────────────────────────────────

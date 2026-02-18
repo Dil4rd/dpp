@@ -31,6 +31,12 @@ pub enum DppError {
 
     #[error("no filesystem partition found in DMG")]
     NoFilesystemPartition,
+
+    #[error("invalid path: {0}")]
+    InvalidPath(String),
+
+    #[error("no entries found under: {0}")]
+    NoEntriesFound(String),
 }
 
 pub type Result<T> = std::result::Result<T, DppError>;

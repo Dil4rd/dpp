@@ -43,7 +43,8 @@
 //! let data = archive.extract_file("path/to/file.txt").unwrap();
 //!
 //! // Extract all files to a directory
-//! archive.extract_all("output_dir").unwrap();
+//! let stats = archive.extract_all("output_dir").unwrap();
+//! println!("Extracted {} files", stats.files);
 //! ```
 //!
 //! ### Creating a PBZX archive
@@ -88,7 +89,7 @@ pub mod reader;
 pub mod writer;
 
 // Re-exports for convenience
-pub use cpio::{CpioEntry, CpioReader};
+pub use cpio::{CpioEntry, CpioReader, ExtractStats};
 pub use error::{PbzxError, Result};
 pub use format::{ChunkHeader, CpioHeader, FileEntry, PbzxHeader};
 pub use reader::{ChunkInfo, PbzxReader, is_pbzx, open};
@@ -117,7 +118,8 @@ use std::path::Path;
 /// }
 ///
 /// // Extract everything
-/// archive.extract_all("output").unwrap();
+/// let stats = archive.extract_all("output").unwrap();
+/// println!("Extracted {} files ({} bytes)", stats.files, stats.bytes);
 /// ```
 pub struct Archive {
     cpio_data: Vec<u8>,
@@ -180,11 +182,26 @@ impl Archive {
     }
 
     /// Extract all files to a directory.
+    ///
+    /// Returns statistics about what was extracted. Symlinks are skipped
+    /// (counted in [`ExtractStats::symlinks_skipped`]).
     #[cfg(feature = "extract")]
-    pub fn extract_all<P: AsRef<Path>>(&self, dest: P) -> Result<Vec<std::path::PathBuf>> {
+    pub fn extract_all<P: AsRef<Path>>(&self, dest: P) -> Result<ExtractStats> {
         let cursor = Cursor::new(&self.cpio_data);
         let mut cpio = CpioReader::new(cursor);
         cpio.extract_all(dest)
+    }
+
+    /// Extract files under `base_path` to a directory.
+    ///
+    /// Only entries whose normalized path equals `base_path` or starts with
+    /// `base_path/` are extracted. Pass `"/"` to extract everything.
+    /// Symlinks are skipped (counted in [`ExtractStats::symlinks_skipped`]).
+    #[cfg(feature = "extract")]
+    pub fn extract_path<P: AsRef<Path>>(&self, base_path: &str, dest: P) -> Result<ExtractStats> {
+        let cursor = Cursor::new(&self.cpio_data);
+        let mut cpio = CpioReader::new(cursor);
+        cpio.extract_path(base_path, dest)
     }
 
     /// Get all entries with their data.

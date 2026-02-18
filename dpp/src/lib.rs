@@ -2,6 +2,8 @@ pub mod error;
 pub mod pipeline;
 
 pub use error::{DppError, Result};
+#[cfg(feature = "extract")]
+pub use pipeline::ExtractStats;
 pub use pipeline::{
     ApfsHandle, DmgPipeline, ExtractMode, FilesystemHandle, FsDirEntry, FsEntryKind, FsFileStat,
     FsType, FsVolumeInfo, FsWalkEntry, HfsHandle,

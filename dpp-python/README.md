@@ -289,7 +289,7 @@ with dpp.ApfsVolume.open("apfs_partition.img") as vol:
 |----------------|-------------|
 | `list()` | List entries, returns `list[FileEntry]` |
 | `extract_file(path)` | Extract file, returns `bytes` |
-| `extract_all(dest)` | Extract all to directory |
+| `extract_all(dest)` | Extract all to directory (returns `ExtractStats` since pbzx 0.3.0) |
 | `decompressed_size` | Size of decompressed CPIO data |
 | `cpio_data()` | Raw CPIO bytes |
 

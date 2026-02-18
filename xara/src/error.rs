@@ -22,6 +22,9 @@ pub enum XarError {
 
     #[error("decompression failed: {0}")]
     DecompressionFailed(String),
+
+    #[error("invalid path: {0}")]
+    InvalidPath(String),
 }
 
 pub type Result<T> = std::result::Result<T, XarError>;

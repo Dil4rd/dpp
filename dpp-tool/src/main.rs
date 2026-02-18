@@ -11,6 +11,7 @@ mod cmd_hfs;
 mod cmd_info;
 mod cmd_payload;
 mod cmd_pkg;
+mod extract;
 mod pipeline;
 mod style;
 
@@ -195,6 +196,16 @@ enum FsCommand {
         #[command(flatten)]
         args: FindArgs,
     },
+    /// Extract files to a local directory
+    Extract {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to extract (default: /)
+        path: Option<String>,
+        /// Output directory
+        #[arg(short, long, default_value = ".")]
+        output: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -241,6 +252,16 @@ enum HfsCommand {
         dmg: PathBuf,
         #[command(flatten)]
         args: FindArgs,
+    },
+    /// Extract files to a local directory
+    Extract {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to extract (default: /)
+        path: Option<String>,
+        /// Output directory
+        #[arg(short, long, default_value = ".")]
+        output: PathBuf,
     },
 }
 
@@ -289,6 +310,16 @@ enum ApfsCommand {
         #[command(flatten)]
         args: FindArgs,
     },
+    /// Extract files to a local directory
+    Extract {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to extract (default: /)
+        path: Option<String>,
+        /// Output directory
+        #[arg(short, long, default_value = ".")]
+        output: PathBuf,
+    },
 }
 
 // ── PKG subcommands ──────────────────────────────────────────────────────
@@ -326,6 +357,18 @@ enum PkgCommand {
         pkg_path: String,
         /// File within the XAR to extract
         file: String,
+    },
+    /// Extract XAR archive contents to a local directory
+    Extract {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+        /// Path within the archive to extract (default: all)
+        path: Option<String>,
+        /// Output directory
+        #[arg(short, long, default_value = ".")]
+        output: PathBuf,
     },
 }
 
@@ -388,6 +431,20 @@ enum PayloadCommand {
         component: String,
         /// File within the payload to extract
         file: String,
+    },
+    /// Extract payload contents to a local directory
+    Extract {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path to the .pkg file
+        pkg_path: String,
+        /// Component identifier
+        component: String,
+        /// Path within the payload to extract (default: all)
+        path: Option<String>,
+        /// Output directory
+        #[arg(short, long, default_value = ".")]
+        output: PathBuf,
     },
 }
 

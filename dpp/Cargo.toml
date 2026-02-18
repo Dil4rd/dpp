@@ -22,4 +22,6 @@ flate2 = "1.0"
 hfsplus = { path = "../hfsplus", features = ["testutil"] }
 
 [features]
+default = ["extract"]
+extract = []
 parallel = ["pbzx/parallel", "udif/parallel"]

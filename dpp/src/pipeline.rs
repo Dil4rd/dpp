@@ -3,6 +3,47 @@ use std::path::Path;
 
 use crate::error::Result;
 
+/// Statistics returned after extraction.
+#[cfg(feature = "extract")]
+#[derive(Debug, Clone, Default)]
+pub struct ExtractStats {
+    /// Number of regular files extracted
+    pub files: u64,
+    /// Number of directories created
+    pub dirs: u64,
+    /// Number of symlinks skipped (symlinks are never created during extraction)
+    pub symlinks_skipped: u64,
+    /// Total bytes written to disk
+    pub bytes: u64,
+}
+
+/// Sanitize a filesystem path: reject `..` components and absolute prefixes.
+#[cfg(feature = "extract")]
+fn sanitize_path(path: &str) -> Result<std::path::PathBuf> {
+    let p = Path::new(path);
+    let mut clean = std::path::PathBuf::new();
+    for component in p.components() {
+        match component {
+            std::path::Component::Normal(c) => clean.push(c),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                return Err(crate::error::DppError::InvalidPath(format!(
+                    "path traversal detected: {}",
+                    path
+                )));
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {}
+        }
+    }
+    if clean.as_os_str().is_empty() {
+        return Err(crate::error::DppError::InvalidPath(format!(
+            "empty path after sanitization: {}",
+            path
+        )));
+    }
+    Ok(clean)
+}
+
 /// Extraction mode for partition data
 #[derive(Debug, Clone, Copy, Default)]
 pub enum ExtractMode {
@@ -669,6 +710,92 @@ impl FilesystemHandle {
             _ => None,
         }
     }
+
+    /// Extract all files to a directory.
+    ///
+    /// Returns statistics about what was extracted. Symlinks are skipped
+    /// (counted in [`ExtractStats::symlinks_skipped`]).
+    #[cfg(feature = "extract")]
+    pub fn extract_all<P: AsRef<Path>>(&mut self, dest: P) -> Result<ExtractStats> {
+        self.extract_path("/", dest)
+    }
+
+    /// Extract files under `base_path` to a directory.
+    ///
+    /// Only entries whose path starts with `base_path` are extracted.
+    /// Pass `"/"` to extract everything.
+    /// Symlinks are skipped (counted in [`ExtractStats::symlinks_skipped`]).
+    #[cfg(feature = "extract")]
+    pub fn extract_path<P: AsRef<Path>>(
+        &mut self,
+        base_path: &str,
+        dest: P,
+    ) -> Result<ExtractStats> {
+        let dest = dest.as_ref();
+
+        let is_root = base_path == "/";
+        let normalized_base = if is_root {
+            String::new()
+        } else {
+            let b = base_path.strip_prefix('/').unwrap_or(base_path);
+            b.trim_end_matches('/').to_string()
+        };
+
+        let entries = self.walk()?;
+
+        // Filter entries to those under base_path
+        let matching: Vec<_> = entries
+            .into_iter()
+            .filter(|e| {
+                if is_root {
+                    return true;
+                }
+                let ep = e.path.strip_prefix('/').unwrap_or(&e.path);
+                ep == normalized_base || ep.starts_with(&format!("{normalized_base}/"))
+            })
+            .collect();
+
+        if matching.is_empty() {
+            return Err(crate::error::DppError::NoEntriesFound(
+                base_path.to_string(),
+            ));
+        }
+
+        std::fs::create_dir_all(dest)?;
+
+        let mut stats = ExtractStats::default();
+
+        for entry in &matching {
+            let rel = entry.path.strip_prefix('/').unwrap_or(&entry.path);
+            if rel.is_empty() {
+                continue;
+            }
+
+            let clean = sanitize_path(rel)?;
+            let dest_path = dest.join(&clean);
+
+            match entry.entry.kind {
+                FsEntryKind::Directory => {
+                    std::fs::create_dir_all(&dest_path)?;
+                    stats.dirs += 1;
+                }
+                FsEntryKind::File => {
+                    if let Some(parent) = dest_path.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    let mut file = std::fs::File::create(&dest_path)?;
+                    let n = self.read_file_to(&entry.path, &mut file)?;
+                    stats.bytes += n;
+                    stats.files += 1;
+                }
+                FsEntryKind::Symlink => {
+                    stats.symlinks_skipped += 1;
+                }
+            }
+        }
+
+        Ok(stats)
+    }
 }
 
 /// Convenience: walk a DMG and list all .pkg files found
@@ -698,4 +825,33 @@ pub fn extract_pkg_payload(
     let payload_data = pkg.payload(component)?;
     let archive = pbzx::Archive::from_reader(Cursor::new(payload_data))?;
     Ok(archive)
+}
+
+#[cfg(all(test, feature = "extract"))]
+mod extract_tests {
+    use super::sanitize_path;
+
+    #[test]
+    fn test_sanitize_path_normal() {
+        let p = sanitize_path("usr/lib/foo.dylib").unwrap();
+        assert_eq!(p, std::path::PathBuf::from("usr/lib/foo.dylib"));
+    }
+
+    #[test]
+    fn test_sanitize_path_strips_root() {
+        let p = sanitize_path("/usr/lib/foo.dylib").unwrap();
+        assert_eq!(p, std::path::PathBuf::from("usr/lib/foo.dylib"));
+    }
+
+    #[test]
+    fn test_sanitize_path_rejects_traversal() {
+        assert!(sanitize_path("../etc/passwd").is_err());
+        assert!(sanitize_path("usr/../../etc/passwd").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_path_rejects_empty() {
+        assert!(sanitize_path("").is_err());
+        assert!(sanitize_path("/").is_err());
+    }
 }

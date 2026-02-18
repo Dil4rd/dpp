@@ -2,6 +2,7 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 
+use crate::extract;
 use crate::pipeline::{open_apfs, open_pipeline};
 use crate::style::*;
 use crate::{ApfsCommand, FindArgs};
@@ -17,6 +18,9 @@ pub(crate) fn run(
         ApfsCommand::Cat { dmg, path } => cat(&dmg, &path, mode),
         ApfsCommand::Stat { dmg, path } => stat(&dmg, &path, mode),
         ApfsCommand::Find { dmg, args } => find(&dmg, args, mode),
+        ApfsCommand::Extract { dmg, path, output } => {
+            extract_cmd(&dmg, path.as_deref(), &output, mode)
+        }
     }
 }
 
@@ -216,6 +220,26 @@ fn stat(
         &format!("{} {d}(APFS nanosecond timestamp){r}", stat.modify_time),
     );
     println!();
+
+    Ok(())
+}
+
+fn extract_cmd(
+    dmg_path: &Path,
+    path: Option<&str>,
+    output: &Path,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let base_path = path.unwrap_or("/");
+    let dmg_str = dmg_path.display();
+    header(&format!("Extract APFS: {dmg_str}:{base_path}"));
+
+    let mut pipeline = open_pipeline(dmg_path)?;
+    let apfs = open_apfs(&mut pipeline, mode)?;
+    let mut fs = dpp::FilesystemHandle::Apfs(apfs);
+
+    let stats = extract::extract_filesystem(&mut fs, base_path, output)?;
+    extract::print_extract_summary(&stats, output);
 
     Ok(())
 }

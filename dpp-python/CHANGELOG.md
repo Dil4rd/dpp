@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - New `ExtractStats` data type returned from extraction methods (fields: `files`, `dirs`, `symlinks_skipped`, `bytes`)
-- `Archive.extract_path(base_path, dest)` — extract files under a specific path
+- `Archive.extract_path(base_path, dest)` — extract files under a specific path, with the base prefix stripped from output paths
 - `XarArchive.extract_all(dest)` and `XarArchive.extract_path(base_path, dest)` — extraction methods for XAR archives
 - `FilesystemHandle.extract_all(dest)` and `FilesystemHandle.extract_path(base_path, dest)` — extraction methods for HFS+/APFS filesystems
 - Error handling for `InvalidPath` and `NoEntriesFound` error variants

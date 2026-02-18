@@ -20,6 +20,20 @@ pub struct ExtractStats {
     pub bytes: u64,
 }
 
+/// Strip a normalized base prefix from a path, returning only the remainder.
+///
+/// Returns `""` when `path` is the base itself, and the relative tail when
+/// `path` starts with `prefix/`.
+fn strip_base_prefix<'a>(path: &'a str, prefix: &str) -> &'a str {
+    if prefix.is_empty() {
+        path
+    } else if path.len() <= prefix.len() {
+        ""
+    } else {
+        &path[prefix.len() + 1..]
+    }
+}
+
 /// Sanitize a path: reject `..` components and absolute prefixes.
 fn sanitize_path(path: &str) -> Result<PathBuf> {
     let p = Path::new(path);
@@ -95,7 +109,22 @@ pub(crate) fn extract_inner<R: Read + Seek>(
     let mut stats = ExtractStats::default();
 
     for file in &filtered {
-        let clean = sanitize_path(&file.path)?;
+        // Strip base prefix so only the relative remainder is extracted
+        let rel = if extract_all {
+            file.path.as_str()
+        } else {
+            strip_base_prefix(&file.path, prefix)
+        };
+
+        // The base dir itself maps to dest (already created above)
+        if rel.is_empty() {
+            if file.file_type == XarFileType::Directory {
+                stats.dirs += 1;
+            }
+            continue;
+        }
+
+        let clean = sanitize_path(rel)?;
         let dest_path = dest.join(&clean);
 
         match file.file_type {

@@ -76,7 +76,9 @@ impl<R: Read + Seek> XarArchive<R> {
     /// Extract files under `base_path` to a directory.
     ///
     /// Only entries whose path equals `base_path` or starts with
-    /// `base_path/` are extracted. Pass `"/"` to extract everything.
+    /// `base_path/` are extracted. The `base_path` prefix is stripped from
+    /// output paths so only the relative remainder appears under `dest`.
+    /// Pass `"/"` to extract everything (no stripping).
     /// Symlinks are skipped (counted in [`ExtractStats::symlinks_skipped`]).
     #[cfg(feature = "extract")]
     pub fn extract_path<P: AsRef<std::path::Path>>(
@@ -289,8 +291,10 @@ mod tests {
         let stats = archive.extract_path("pkg", tmp.path()).unwrap();
 
         assert_eq!(stats.files, 1);
-        assert_eq!(stats.dirs, 1);
-        assert!(tmp.path().join("pkg/Payload").exists());
+        assert_eq!(stats.dirs, 1); // pkg dir itself (base)
+        // Base prefix is stripped: pkg/Payload → Payload
+        assert!(tmp.path().join("Payload").exists());
+        assert!(!tmp.path().join("pkg").exists());
         // Distribution should NOT be extracted
         assert!(!tmp.path().join("Distribution").exists());
     }

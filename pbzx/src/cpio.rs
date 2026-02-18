@@ -444,7 +444,9 @@ impl<R: Read + Seek> CpioReader<R> {
     /// Extract files under `base_path` to a directory.
     ///
     /// Only entries whose normalized path equals `base_path` or starts with
-    /// `base_path/` are extracted. Pass `"/"` to extract everything.
+    /// `base_path/` are extracted. The `base_path` prefix is stripped from
+    /// output paths so only the relative remainder appears under `dest`.
+    /// Pass `"/"` to extract everything (no stripping).
     /// Symlinks are skipped (counted in `symlinks_skipped`).
     pub fn extract_path<P: AsRef<Path>>(
         &mut self,
@@ -490,8 +492,23 @@ impl<R: Read + Seek> CpioReader<R> {
                 continue;
             }
 
+            // Strip base_path prefix so only the relative remainder is extracted
+            let rel_path = strip_base_prefix(&entry_path, base);
+
+            // The base dir itself maps to dest (already created above)
+            if rel_path.is_empty() {
+                match format {
+                    CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
+                    _ => self.skip_data_newc(header.filesize as u64)?,
+                }
+                if header.is_directory() {
+                    stats.dirs += 1;
+                }
+                continue;
+            }
+
             // Sanitize path to prevent directory traversal
-            let clean_path = sanitize_path(&entry_path)?;
+            let clean_path = sanitize_path(rel_path)?;
             let full_path = dest.join(&clean_path);
 
             if let Some(parent) = full_path.parent() {
@@ -629,6 +646,20 @@ impl CpioEntry {
     }
 }
 
+/// Strip a normalized base prefix from a path, returning only the remainder.
+///
+/// Returns `""` when `path` is the base itself (or base is empty and path is empty),
+/// and the relative tail when `path` starts with `base/`.
+fn strip_base_prefix<'a>(path: &'a str, base: &str) -> &'a str {
+    if base.is_empty() {
+        path
+    } else if path.len() <= base.len() {
+        ""
+    } else {
+        &path[base.len() + 1..]
+    }
+}
+
 /// Sanitize a path to prevent directory traversal attacks.
 fn sanitize_path(path: &str) -> Result<PathBuf> {
     let path = path.trim_start_matches('/');
@@ -694,14 +725,14 @@ mod tests {
 
         let tmp = tempfile::tempdir().unwrap();
 
-        // Extract only usr/bin
+        // Extract only usr/bin — base prefix is stripped from output
         let mut reader = CpioReader::new(std::io::Cursor::new(&cpio_data));
         let stats = reader.extract_path("usr/bin", tmp.path()).unwrap();
         assert_eq!(stats.files, 1);
-        assert_eq!(stats.dirs, 1); // usr/bin dir
-        assert!(tmp.path().join("usr/bin/hello").exists());
-        assert!(!tmp.path().join("etc/config.txt").exists());
-        assert!(!tmp.path().join("usr/lib/libfoo.so").exists());
+        assert_eq!(stats.dirs, 1); // usr/bin dir itself (base)
+        assert!(tmp.path().join("hello").exists());
+        assert!(!tmp.path().join("usr").exists());
+        assert!(!tmp.path().join("etc").exists());
     }
 
     #[test]

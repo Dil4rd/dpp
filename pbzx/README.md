@@ -74,6 +74,10 @@ let data = archive.extract_file("path/to/file.txt")?;
 // Extract all files
 let stats = archive.extract_all("output_dir")?;
 println!("Extracted {} files", stats.files);
+
+// Extract only files under a path (prefix is stripped from output)
+// e.g. "usr/bin/tool" → "output_dir/tool"
+let stats = archive.extract_path("usr/bin", "output_dir")?;
 ```
 
 ### Parallel Decompression
@@ -81,7 +85,7 @@ println!("Extracted {} files", stats.files);
 Enable the `parallel` feature for multi-threaded XZ decompression:
 
 ```toml
-pbzx = { version = "0.1", features = ["parallel"] }
+pbzx = { version = "0.3", features = ["parallel"] }
 ```
 
 All `Archive::open()` and `Archive::from_reader()` calls automatically use parallel decompression when the feature is enabled. You can also call `decompress_parallel()` directly on `PbzxReader`.

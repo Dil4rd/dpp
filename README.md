@@ -83,14 +83,14 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-dpp = "0.3"
+dpp = "0.4"
 ```
 
 For faster PBZX payload extraction with multi-threaded decompression:
 
 ```toml
 [dependencies]
-dpp = { version = "0.3", features = ["parallel"] }
+dpp = { version = "0.4", features = ["parallel"] }
 ```
 
 Open a DMG and list the root directory (auto-detects HFS+ or APFS):

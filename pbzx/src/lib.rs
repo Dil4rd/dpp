@@ -195,7 +195,9 @@ impl Archive {
     /// Extract files under `base_path` to a directory.
     ///
     /// Only entries whose normalized path equals `base_path` or starts with
-    /// `base_path/` are extracted. Pass `"/"` to extract everything.
+    /// `base_path/` are extracted. The `base_path` prefix is stripped from
+    /// output paths so only the relative remainder appears under `dest`.
+    /// Pass `"/"` to extract everything (no stripping).
     /// Symlinks are skipped (counted in [`ExtractStats::symlinks_skipped`]).
     #[cfg(feature = "extract")]
     pub fn extract_path<P: AsRef<Path>>(&self, base_path: &str, dest: P) -> Result<ExtractStats> {

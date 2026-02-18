@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - `ExtractStats` struct with `files`, `dirs`, `symlinks_skipped`, and `bytes` fields
-- `CpioReader::extract_path(base_path, dest)` for path-filtered extraction
+- `CpioReader::extract_path(base_path, dest)` for path-filtered extraction — the base prefix is stripped so only the relative remainder appears under `dest`
 - `Archive::extract_path(base_path, dest)` high-level path-filtered extraction
 
 ## [0.2.2] - 2026-02-16

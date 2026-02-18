@@ -106,6 +106,7 @@ impl PyArchive {
     }
 
     /// Extract files under a base path to a directory on disk.
+    /// The base prefix is stripped from output paths.
     fn extract_path(
         &mut self,
         py: Python<'_>,

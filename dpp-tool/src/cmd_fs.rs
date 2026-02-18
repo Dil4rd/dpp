@@ -2,6 +2,7 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 
+use crate::extract;
 use crate::pipeline::{open_filesystem, open_pipeline};
 use crate::style::*;
 use crate::{FindArgs, FsCommand};
@@ -17,6 +18,9 @@ pub(crate) fn run(
         FsCommand::Cat { dmg, path } => cat(&dmg, &path, mode),
         FsCommand::Stat { dmg, path } => stat(&dmg, &path, mode),
         FsCommand::Find { dmg, args } => find(&dmg, args, mode),
+        FsCommand::Extract { dmg, path, output } => {
+            extract_cmd(&dmg, path.as_deref(), &output, mode)
+        }
     }
 }
 
@@ -326,6 +330,25 @@ fn find(
         println!("  {d}{} match(es){r}", matches.len());
     }
     println!();
+
+    Ok(())
+}
+
+fn extract_cmd(
+    dmg_path: &Path,
+    path: Option<&str>,
+    output: &Path,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let base_path = path.unwrap_or("/");
+    let dmg_str = dmg_path.display();
+    header(&format!("Extract: {dmg_str}:{base_path}"));
+
+    let mut pipeline = open_pipeline(dmg_path)?;
+    let mut fs = open_filesystem(&mut pipeline, mode)?;
+
+    let stats = extract::extract_filesystem(&mut fs, base_path, output)?;
+    extract::print_extract_summary(&stats, output);
 
     Ok(())
 }

@@ -115,9 +115,12 @@ fn cmd_list(path: &str) -> pbzx::Result<()> {
 
 fn cmd_extract(archive_path: &str, dest: &str) -> pbzx::Result<()> {
     let archive = pbzx::Archive::open(archive_path)?;
-    let extracted = archive.extract_all(dest)?;
+    let stats = archive.extract_all(dest)?;
 
-    println!("Extracted {} files to {}", extracted.len(), dest);
+    println!("Extracted {} files to {}", stats.files, dest);
+    if stats.symlinks_skipped > 0 {
+        println!("  ({} symlinks skipped)", stats.symlinks_skipped);
+    }
     Ok(())
 }
 

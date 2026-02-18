@@ -2,6 +2,7 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 
+use crate::extract;
 use crate::pipeline::{open_hfs, open_pipeline};
 use crate::style::*;
 use crate::{FindArgs, HfsCommand};
@@ -17,6 +18,9 @@ pub(crate) fn run(
         HfsCommand::Cat { dmg, path } => cat(&dmg, &path, mode),
         HfsCommand::Stat { dmg, path } => stat(&dmg, &path, mode),
         HfsCommand::Find { dmg, args } => find(&dmg, args, mode),
+        HfsCommand::Extract { dmg, path, output } => {
+            extract_cmd(&dmg, path.as_deref(), &output, mode)
+        }
     }
 }
 
@@ -235,6 +239,26 @@ fn stat(
         &format!("{} {d}(HFS+ timestamp){r}", stat.modify_date),
     );
     println!();
+
+    Ok(())
+}
+
+fn extract_cmd(
+    dmg_path: &Path,
+    path: Option<&str>,
+    output: &Path,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let base_path = path.unwrap_or("/");
+    let dmg_str = dmg_path.display();
+    header(&format!("Extract HFS+: {dmg_str}:{base_path}"));
+
+    let mut pipeline = open_pipeline(dmg_path)?;
+    let hfs = open_hfs(&mut pipeline, mode)?;
+    let mut fs = dpp::FilesystemHandle::Hfs(Box::new(hfs));
+
+    let stats = extract::extract_filesystem(&mut fs, base_path, output)?;
+    extract::print_extract_summary(&stats, output);
 
     Ok(())
 }

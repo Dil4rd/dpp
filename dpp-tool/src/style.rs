@@ -235,3 +235,7 @@ pub(crate) fn spinner_msg(msg: &str) {
 pub(crate) fn spinner_done(extra: &str) {
     eprintln!(" {}done{}{}{extra}{}", green(), reset(), dim(), reset());
 }
+
+pub(crate) fn warn_msg(msg: &str) {
+    eprintln!("  {}{}warning:{} {msg}", bold(), yellow(), reset());
+}

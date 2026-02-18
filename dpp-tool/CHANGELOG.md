@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-02-18
+
+### Changed
+
+- Symlinks are now skipped during extraction (with a warning) instead of being created; extraction logic moved to library crates (`dpp`, `xara`, `pbzx`)
+
+## [0.5.0] - 2026-02-17
+
+### Added
+
+- `extract` subcommand for `fs`, `hfs`, `apfs`, `pkg`, and `payload` layers — extract files and directories to a local directory
+  - `dpp-tool fs extract <dmg> [path] -o <dir>` — auto-detect HFS+/APFS and extract
+  - `dpp-tool hfs extract <dmg> [path] -o <dir>` — extract from HFS+ volume
+  - `dpp-tool apfs extract <dmg> [path] -o <dir>` — extract from APFS volume
+  - `dpp-tool pkg extract <dmg> <pkg_path> [path] -o <dir>` — extract XAR archive contents (optionally scoped to a subtree)
+  - `dpp-tool payload extract <dmg> <pkg_path> <component> [path] -o <dir>` — extract CPIO payload contents (optionally scoped to a subtree)
+- Path sanitization in all extract commands to prevent directory traversal attacks
+
 ## [0.4.3] - 2026-02-17
 
 ### Added

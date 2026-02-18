@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-02-18
+
+### Changed
+
+- **Breaking:** `CpioReader::extract_all` and `Archive::extract_all` now return `ExtractStats` instead of `Vec<PathBuf>`
+- Symlinks are now skipped during extraction instead of being created; the count is reported in `ExtractStats::symlinks_skipped`
+
+### Added
+
+- `ExtractStats` struct with `files`, `dirs`, `symlinks_skipped`, and `bytes` fields
+- `CpioReader::extract_path(base_path, dest)` for path-filtered extraction
+- `Archive::extract_path(base_path, dest)` high-level path-filtered extraction
+
 ## [0.2.2] - 2026-02-16
 
 ### Changed

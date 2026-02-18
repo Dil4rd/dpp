@@ -32,6 +32,30 @@ use crate::format::{
     CPIO_MAGIC_CRC, CPIO_MAGIC_NEWC, CPIO_MAGIC_ODC, CpioFormat, CpioHeader, FileEntry,
 };
 
+/// Statistics returned after extraction.
+#[derive(Debug, Clone, Default)]
+pub struct ExtractStats {
+    /// Number of regular files extracted
+    pub files: u64,
+    /// Number of directories created
+    pub dirs: u64,
+    /// Number of symlinks skipped (symlinks are never created during extraction)
+    pub symlinks_skipped: u64,
+    /// Total bytes written to disk
+    pub bytes: u64,
+}
+
+/// Normalize a CPIO path: strip leading "./" or "/" and represent root as "".
+fn normalize_cpio_path(path: &str) -> String {
+    let p = path.strip_prefix("./").unwrap_or(path);
+    let p = p.strip_prefix('/').unwrap_or(p);
+    if p == "." || p.is_empty() {
+        String::new()
+    } else {
+        p.to_string()
+    }
+}
+
 /// A reader for CPIO archives.
 pub struct CpioReader<R> {
     reader: R,
@@ -410,7 +434,26 @@ impl<R: Read + Seek> CpioReader<R> {
     }
 
     /// Extract all files to a directory.
-    pub fn extract_all<P: AsRef<Path>>(&mut self, dest: P) -> Result<Vec<PathBuf>> {
+    ///
+    /// Returns statistics about what was extracted. Symlinks are skipped
+    /// (counted in `symlinks_skipped`).
+    pub fn extract_all<P: AsRef<Path>>(&mut self, dest: P) -> Result<ExtractStats> {
+        self.extract_path("/", dest)
+    }
+
+    /// Extract files under `base_path` to a directory.
+    ///
+    /// Only entries whose normalized path equals `base_path` or starts with
+    /// `base_path/` are extracted. Pass `"/"` to extract everything.
+    /// Symlinks are skipped (counted in `symlinks_skipped`).
+    pub fn extract_path<P: AsRef<Path>>(
+        &mut self,
+        base_path: &str,
+        dest: P,
+    ) -> Result<ExtractStats> {
+        let base = normalize_cpio_path(base_path);
+        let base = base.trim_end_matches('/');
+
         let dest = dest.as_ref();
         std::fs::create_dir_all(dest)?;
 
@@ -420,21 +463,37 @@ impl<R: Read + Seek> CpioReader<R> {
         // Detect format
         let format = match self.peek_format()? {
             Some(f) => f,
-            None => return Ok(Vec::new()),
+            None => return Ok(ExtractStats::default()),
         };
 
-        let mut extracted = Vec::new();
+        let mut stats = ExtractStats::default();
 
         while let Some(header) = self.read_header()? {
             if header.is_trailer() {
                 break;
             }
 
+            let entry_path = normalize_cpio_path(&header.name);
+
+            // Check if this entry matches the base_path filter
+            let matches = if base.is_empty() {
+                !entry_path.is_empty()
+            } else {
+                entry_path == base || entry_path.starts_with(&format!("{base}/"))
+            };
+
+            if !matches {
+                match format {
+                    CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
+                    _ => self.skip_data_newc(header.filesize as u64)?,
+                }
+                continue;
+            }
+
             // Sanitize path to prevent directory traversal
-            let clean_path = sanitize_path(&header.name)?;
+            let clean_path = sanitize_path(&entry_path)?;
             let full_path = dest.join(&clean_path);
 
-            // Create parent directories as needed
             if let Some(parent) = full_path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
@@ -445,30 +504,14 @@ impl<R: Read + Seek> CpioReader<R> {
                     CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
                     _ => self.skip_data_newc(header.filesize as u64)?,
                 }
+                stats.dirs += 1;
             } else if header.is_symlink() {
-                let target = if header.filesize > 0 {
-                    let data = match format {
-                        CpioFormat::Odc => self.read_data_odc(header.filesize as u64)?,
-                        _ => self.read_data_newc(header.filesize as u64)?,
-                    };
-                    String::from_utf8(data)
-                        .map_err(|e| PbzxError::InvalidCpio(format!("Invalid symlink: {}", e)))?
-                } else {
-                    String::new()
-                };
-
-                #[cfg(unix)]
-                {
-                    // Remove existing file/symlink if it exists
-                    let _ = std::fs::remove_file(&full_path);
-                    std::os::unix::fs::symlink(&target, &full_path)?;
+                // Skip symlinks — just consume the data
+                match format {
+                    CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
+                    _ => self.skip_data_newc(header.filesize as u64)?,
                 }
-                #[cfg(not(unix))]
-                {
-                    // On non-Unix, create a text file with the target
-                    let mut file = std::fs::File::create(&full_path)?;
-                    file.write_all(target.as_bytes())?;
-                }
+                stats.symlinks_skipped += 1;
             } else if header.is_file() {
                 let data = match format {
                     CpioFormat::Odc => self.read_data_odc(header.filesize as u64)?,
@@ -476,8 +519,9 @@ impl<R: Read + Seek> CpioReader<R> {
                 };
                 let mut file = std::fs::File::create(&full_path)?;
                 file.write_all(&data)?;
+                stats.bytes += data.len() as u64;
+                stats.files += 1;
 
-                // Set permissions on Unix
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
@@ -490,13 +534,10 @@ impl<R: Read + Seek> CpioReader<R> {
                     CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
                     _ => self.skip_data_newc(header.filesize as u64)?,
                 }
-                continue;
             }
-
-            extracted.push(full_path);
         }
 
-        Ok(extracted)
+        Ok(stats)
     }
 }
 
@@ -624,5 +665,88 @@ mod tests {
         assert!(sanitize_path("/absolute/path").is_ok());
         assert!(sanitize_path("../traversal").is_err());
         assert!(sanitize_path("path/../traversal").is_err());
+    }
+
+    #[test]
+    fn test_normalize_cpio_path() {
+        assert_eq!(normalize_cpio_path("./usr/bin/foo"), "usr/bin/foo");
+        assert_eq!(normalize_cpio_path("/usr/bin/foo"), "usr/bin/foo");
+        assert_eq!(normalize_cpio_path("usr/bin/foo"), "usr/bin/foo");
+        assert_eq!(normalize_cpio_path("."), "");
+        assert_eq!(normalize_cpio_path("./"), "");
+        assert_eq!(normalize_cpio_path("/"), "");
+        assert_eq!(normalize_cpio_path(""), "");
+    }
+
+    #[test]
+    fn test_extract_path_with_filter() {
+        use crate::writer::CpioBuilder;
+
+        let mut builder = CpioBuilder::new();
+        builder.add_directory("usr", 0o755);
+        builder.add_directory("usr/bin", 0o755);
+        builder.add_file("usr/bin/hello", b"hello world", 0o755);
+        builder.add_directory("usr/lib", 0o755);
+        builder.add_file("usr/lib/libfoo.so", b"lib content", 0o644);
+        builder.add_directory("etc", 0o755);
+        builder.add_file("etc/config.txt", b"config", 0o644);
+        let cpio_data = builder.finish();
+
+        let tmp = tempfile::tempdir().unwrap();
+
+        // Extract only usr/bin
+        let mut reader = CpioReader::new(std::io::Cursor::new(&cpio_data));
+        let stats = reader.extract_path("usr/bin", tmp.path()).unwrap();
+        assert_eq!(stats.files, 1);
+        assert_eq!(stats.dirs, 1); // usr/bin dir
+        assert!(tmp.path().join("usr/bin/hello").exists());
+        assert!(!tmp.path().join("etc/config.txt").exists());
+        assert!(!tmp.path().join("usr/lib/libfoo.so").exists());
+    }
+
+    #[test]
+    fn test_extract_all_returns_stats() {
+        use crate::writer::CpioBuilder;
+
+        let mut builder = CpioBuilder::new();
+        builder.add_directory("dir", 0o755);
+        builder.add_file("dir/file.txt", b"content", 0o644);
+        let cpio_data = builder.finish();
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut reader = CpioReader::new(std::io::Cursor::new(&cpio_data));
+        let stats = reader.extract_all(tmp.path()).unwrap();
+
+        assert_eq!(stats.files, 1);
+        assert_eq!(stats.dirs, 1);
+        assert_eq!(stats.bytes, 7); // "content".len()
+        assert_eq!(stats.symlinks_skipped, 0);
+    }
+
+    #[test]
+    fn test_extract_path_skips_symlinks() {
+        use crate::writer::CpioBuilder;
+
+        let mut builder = CpioBuilder::new();
+        builder.add_directory("usr", 0o755);
+        builder.add_file("usr/real.txt", b"real file", 0o644);
+        builder.add_symlink("usr/link.txt", "real.txt", 0o777);
+        let cpio_data = builder.finish();
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut reader = CpioReader::new(std::io::Cursor::new(&cpio_data));
+        let stats = reader.extract_all(tmp.path()).unwrap();
+
+        assert_eq!(stats.files, 1);
+        assert_eq!(stats.symlinks_skipped, 1);
+        assert!(tmp.path().join("usr/real.txt").exists());
+        // Symlink is NOT created
+        assert!(!tmp.path().join("usr/link.txt").exists());
+    }
+
+    #[test]
+    fn test_extract_path_rejects_traversal() {
+        assert!(sanitize_path("../etc/passwd").is_err());
+        assert!(sanitize_path("usr/../../etc/passwd").is_err());
     }
 }

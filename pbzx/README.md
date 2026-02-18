@@ -72,7 +72,8 @@ for entry in archive.list()? {
 let data = archive.extract_file("path/to/file.txt")?;
 
 // Extract all files
-archive.extract_all("output_dir")?;
+let stats = archive.extract_all("output_dir")?;
+println!("Extracted {} files", stats.files);
 ```
 
 ### Parallel Decompression

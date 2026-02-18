@@ -42,6 +42,13 @@ pub(crate) fn run(
             component,
             file,
         } => cat(&dmg, &pkg_path, &component, &file, mode),
+        PayloadCommand::Extract {
+            dmg,
+            pkg_path,
+            component,
+            path,
+            output,
+        } => extract(&dmg, &pkg_path, &component, path.as_deref(), &output, mode),
     }
 }
 
@@ -422,6 +429,57 @@ fn cat(
 
     let mut stdout = io::stdout().lock();
     stdout.write_all(&data)?;
+
+    Ok(())
+}
+
+// ── extract ─────────────────────────────────────────────────────────────
+
+fn extract(
+    dmg_path: &Path,
+    pkg_path: &str,
+    component: &str,
+    filter_path: Option<&str>,
+    output: &Path,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let archive = open_archive(dmg_path, pkg_path, component, mode)?;
+
+    let display_path = filter_path.unwrap_or("/");
+    header(&format!("Extract Payload: {component}:{display_path}"));
+
+    let base = filter_path.unwrap_or("/");
+
+    spinner_msg("Extracting files");
+    let t = Instant::now();
+    let stats = archive.extract_path(base, output)?;
+    spinner_done(&format!(" ({})", format_duration(t.elapsed())));
+
+    if stats.symlinks_skipped > 0 {
+        warn_msg(&format!(
+            "{} symlink(s) skipped during extraction",
+            stats.symlinks_skipped
+        ));
+    }
+
+    let (d, r) = (dim(), reset());
+    println!();
+    section("Extraction Summary");
+    kv("Output", &output.display().to_string());
+    kv("Directories", &format_commas(stats.dirs));
+    kv_highlight("Files", &format_commas(stats.files));
+    if stats.symlinks_skipped > 0 {
+        kv("Symlinks skipped", &format_commas(stats.symlinks_skipped));
+    }
+    kv(
+        "Total size",
+        &format!(
+            "{} {d}({} bytes){r}",
+            format_size(stats.bytes),
+            format_commas(stats.bytes)
+        ),
+    );
+    println!();
 
     Ok(())
 }

@@ -206,17 +206,6 @@ $ dpp-tool pkg ls Kernel_Debug_Kit.dmg /Library/Developer/KDKs/KDK.pkg
 - Bill of Materials (BOM) parsing
 - Integration with the apple-platform-rs ecosystem
 
-## Next Steps
-
-- [ ] **Write support** — create XAR archives from files
-- [ ] **Bzip2 heap** — decompress bzip2-encoded file data
-- [ ] **LZMA heap** — decompress LZMA-encoded file data
-- [ ] **Signature verification** — validate RSA/X.509 signatures
-- [ ] **BOM parsing** — read Bill of Materials for component packages
-- [ ] **Scripts extraction** — extract pre/postinstall scripts from components
-- [ ] **Checksum validation** — verify extracted/archived checksums from TOC
-- [ ] **Bundle packages** — support legacy directory-based `.pkg` format
-
 ## License
 
 MIT

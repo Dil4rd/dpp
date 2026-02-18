@@ -180,16 +180,6 @@ See [full benchmarks](docs/BENCHMARKS.md) for details.
 - Battle-tested C implementation for shell pipelines
 - Integration with existing C/C++ toolchains
 
-## Next Steps
-
-- [x] **Parallel XZ decompression** — decompress chunks across multiple threads (opt-in `parallel` feature)
-- [ ] **CPIO crc writing** — emit SVR4 CRC format (`070702`)
-- [ ] **Streaming CPIO parsing** — parse entries without full decompression
-- [ ] **Apple Archive (AAR)** — support newer macOS 11+ payload format
-- [ ] **Progress callbacks** — report decompression progress for UI integration
-- [ ] **Configurable XZ compression level** — expose level parameter in PbzxWriter
-- [ ] **Hard link deduplication** — detect and coalesce identical CPIO entries
-
 ## License
 
 MIT

@@ -425,14 +425,6 @@ DmgStats(partitions=1, uncompressed=4096, compressed=30, ratio=0.01)
 - Structured API instead of shell pipelines
 - Both read and write capabilities
 
-## Next Steps
-
-- [ ] **Type stubs** — `.pyi` stub files for full IDE autocompletion
-- [ ] **Async support** — async wrappers for I/O-heavy operations
-- [ ] **Iterator protocol** — lazy iteration for `walk()` and `list()`
-- [ ] **Progress callbacks** — report extraction progress
-- [ ] **Wheels** — pre-built wheels for common platforms
-
 ## License
 
 MIT

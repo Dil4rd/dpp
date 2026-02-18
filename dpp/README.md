@@ -296,13 +296,6 @@ There is no equivalent single-crate solution in Rust. The closest approach is to
 - Memory-efficient streaming for large disk images
 - Programmatic access to macOS installer contents
 
-## Next Steps
-
-- [ ] **Encrypted DMG** — support FileVault-encrypted disk images
-- [ ] **Parallel extraction** — decompress multiple partitions concurrently
-- [ ] **Progress callbacks** — report extraction progress for UI integration
-- [ ] **Selective extraction** — extract specific files without full pipeline
-
 ## License
 
 MIT

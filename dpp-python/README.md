@@ -130,6 +130,26 @@ with dpp.open("installer.dmg") as dmg:
                 for f in payload.list():
                     print(f.path, f.size)
                 data = payload.extract_file("./usr/bin/tool")
+
+                # Extract all files to disk
+                stats = payload.extract_all("/tmp/out")
+                print(f"{stats.files} files, {stats.bytes} bytes")
+
+                # Extract only files under a path (prefix is stripped)
+                stats = payload.extract_path("./usr/bin", "/tmp/bins")
+```
+
+### Extract to Disk
+
+```python
+with dpp.open("installer.dmg") as dmg:
+    # Extract entire filesystem
+    with dmg.filesystem() as fs:
+        stats = fs.extract_all("/tmp/volume")
+
+        # Extract a subtree (prefix stripped from output)
+        stats = fs.extract_path("/System/Library/Extensions", "/tmp/kexts")
+        print(f"{stats.files} files, {stats.dirs} dirs")
 ```
 
 ### One-Call Extraction

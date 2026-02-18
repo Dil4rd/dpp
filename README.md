@@ -57,6 +57,10 @@ dpp-tool payload ls Kernel_Debug_Kit.dmg /KernelDebugKit.pkg com.apple.pkg.KDK /
 
 # Extract a file to stdout
 dpp-tool payload cat Kernel_Debug_Kit.dmg /KernelDebugKit.pkg com.apple.pkg.KDK /usr/bin/some_tool > tool
+
+# Extract files to a local directory (base path is stripped from output)
+dpp-tool fs extract Kernel_Debug_Kit.dmg /System/Library/Extensions -o ./extensions
+dpp-tool payload extract Kernel_Debug_Kit.dmg /KernelDebugKit.pkg com.apple.pkg.KDK ./usr/bin -o ./out
 ```
 
 ### Python
@@ -154,6 +158,7 @@ Global options: `--temp-file` (default, low memory), `--in-memory` (faster for s
 | `dpp-tool fs cat <dmg> <path>` | Extract file to stdout |
 | `dpp-tool fs stat <dmg> <path>` | File metadata |
 | `dpp-tool fs find <dmg> [opts]` | Find files by name/type |
+| `dpp-tool fs extract <dmg> [path] -o <dir>` | Extract files to directory |
 | **hfs** | |
 | `dpp-tool hfs info <dmg>` | HFS+ volume header |
 | `dpp-tool hfs ls <dmg> <path>` | List directory |
@@ -161,6 +166,7 @@ Global options: `--temp-file` (default, low memory), `--in-memory` (faster for s
 | `dpp-tool hfs cat <dmg> <path>` | Extract file to stdout |
 | `dpp-tool hfs stat <dmg> <path>` | File metadata |
 | `dpp-tool hfs find <dmg> [opts]` | Find files by name/type |
+| `dpp-tool hfs extract <dmg> [path] -o <dir>` | Extract files to directory |
 | **apfs** | |
 | `dpp-tool apfs info <dmg>` | APFS volume info |
 | `dpp-tool apfs ls <dmg> <path>` | List directory |
@@ -168,17 +174,20 @@ Global options: `--temp-file` (default, low memory), `--in-memory` (faster for s
 | `dpp-tool apfs cat <dmg> <path>` | Extract file to stdout |
 | `dpp-tool apfs stat <dmg> <path>` | File metadata |
 | `dpp-tool apfs find <dmg> [opts]` | Find files by name/type |
+| `dpp-tool apfs extract <dmg> [path] -o <dir>` | Extract files to directory |
 | **pkg** | |
 | `dpp-tool pkg info <dmg> <pkg>` | Package statistics |
 | `dpp-tool pkg ls <dmg> <pkg>` | List XAR contents |
 | `dpp-tool pkg find <dmg> <pkg> [opts]` | Find XAR entries |
 | `dpp-tool pkg cat <dmg> <pkg> <file>` | Extract XAR entry |
+| `dpp-tool pkg extract <dmg> <pkg> [path] -o <dir>` | Extract XAR contents to directory |
 | **payload** | |
 | `dpp-tool payload info <dmg> <pkg> <comp>` | Payload stats |
 | `dpp-tool payload ls <dmg> <pkg> <comp> [path]` | List payload files |
 | `dpp-tool payload tree <dmg> <pkg> <comp>` | Browse payload tree |
 | `dpp-tool payload find <dmg> <pkg> <comp> [opts]` | Find payload files |
 | `dpp-tool payload cat <dmg> <pkg> <comp> <file>` | Extract payload file |
+| `dpp-tool payload extract <dmg> <pkg> <comp> [path] -o <dir>` | Extract payload to directory |
 
 ## Architecture
 

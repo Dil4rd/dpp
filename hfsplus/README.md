@@ -182,16 +182,6 @@ $ dpp-tool hfs info Kernel_Debug_Kit.dmg
 - HFS+ compression support (zlib, lzvn, lzfse)
 - Extended attributes and hard link support
 
-## Next Steps
-
-- [ ] **Write support** — create and modify HFS+ volumes
-- [ ] **HFS+ compression** — decompress transparent compression (zlib, lzvn, lzfse)
-- [ ] **Extended attributes** — read xattr data from the attributes B-tree
-- [ ] **Hard links** — resolve directory and file hard links
-- [ ] **Journal parsing** — read the HFS+ journal for recovery scenarios
-- [ ] **APFS support** — read Apple File System containers (separate crate likely)
-- [ ] **Allocation bitmap** — validate filesystem consistency
-
 ## License
 
 MIT

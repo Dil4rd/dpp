@@ -160,15 +160,6 @@ Container (NXSB)
 - **Single volume** — reads only the first volume in a multi-volume container
 - **No extended attributes** — xattr values not exposed through the public API
 
-## Next Steps
-
-- [ ] Pipeline integration with `dpp` for DMG → APFS workflows
-- [ ] Encryption support (FileVault, per-file)
-- [ ] Compressed extent decompression (lzvn, lzfse, zlib)
-- [ ] Snapshot browsing
-- [ ] Multi-volume support
-- [ ] Extended attribute access
-
 ## License
 
 MIT

@@ -10,5 +10,5 @@ name = "dpp"
 crate-type = ["cdylib"]
 
 [dependencies]
-dpp = { version = "0.4.0", path = "../dpp", features = ["parallel"] }
+dpp = { version = "0.4.1", path = "../dpp", features = ["parallel"] }
 pyo3 = { version = "0.28.1", features = ["extension-module"] }

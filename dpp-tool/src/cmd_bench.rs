@@ -191,7 +191,7 @@ pub(crate) fn run(
             let bar_total = 40;
             for (name, time) in &stages {
                 let pct = time.as_secs_f64() / total.as_secs_f64() * 100.0;
-                let bar_len = (pct / 100.0 * bar_total as f64) as usize;
+                let bar_len = ((pct / 100.0 * bar_total as f64) as usize).min(bar_total);
                 let bar: String = (0..bar_len).map(|_| '#').collect();
                 let color = if pct > 50.0 {
                     rd

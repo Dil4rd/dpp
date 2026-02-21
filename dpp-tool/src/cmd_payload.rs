@@ -83,10 +83,7 @@ fn parent_of(p: &str) -> &str {
 
 /// Get the file name portion of a normalized path.
 fn basename_of(p: &str) -> &str {
-    match p.rfind('/') {
-        Some(i) => &p[i + 1..],
-        None => p,
-    }
+    p.rsplit_once('/').map(|(_, name)| name).unwrap_or(p)
 }
 
 /// Open the PBZX payload for a component and return the parsed Archive.

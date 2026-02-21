@@ -97,7 +97,7 @@ pub(crate) fn format_commas(n: u64) -> String {
         result.push(b);
     }
     result.reverse();
-    String::from_utf8(result).unwrap()
+    String::from_utf8(result).expect("digits and commas are valid ASCII")
 }
 
 pub(crate) fn mode_string(mode: u16) -> String {

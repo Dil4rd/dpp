@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] - 2026-02-21
+
+### Fixed
+
+- Use safe arithmetic, idiomatic string splitting, and justified expects
+
 ## [0.5.1] - 2026-02-18
 
 ### Changed

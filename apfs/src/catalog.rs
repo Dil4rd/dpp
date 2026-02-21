@@ -113,17 +113,15 @@ impl InodeVal {
     /// followed by x_field_t[xf_num_exts] { x_type: u8, x_flags: u8, x_size: u16 }
     /// followed by the actual field data values (each padded to 8-byte alignment).
     fn parse_dstream_size(xfield_data: &[u8]) -> Option<u64> {
-        if xfield_data.len() < 4 {
-            return None;
-        }
-        let xf_num_exts = u16::from_le_bytes([xfield_data[0], xfield_data[1]]) as usize;
+        let header = xfield_data.get(0..4)?;
+        let xf_num_exts = u16::from_le_bytes([header[0], header[1]]) as usize;
         if xf_num_exts == 0 {
             return None;
         }
 
         // x_field_t entries start at offset 4
         let entries_start = 4;
-        let entries_end = entries_start + xf_num_exts * 4;
+        let entries_end = xf_num_exts.checked_mul(4)?.checked_add(entries_start)?;
         if entries_end > xfield_data.len() {
             return None;
         }
@@ -132,31 +130,21 @@ impl InodeVal {
         let mut data_offset = entries_end;
 
         for i in 0..xf_num_exts {
-            let entry_off = entries_start + i * 4;
-            let x_type = xfield_data[entry_off];
-            let x_size =
-                u16::from_le_bytes([xfield_data[entry_off + 2], xfield_data[entry_off + 3]])
-                    as usize;
+            let entry_off = i.checked_mul(4)?.checked_add(entries_start)?;
+            let entry = xfield_data.get(entry_off..entry_off.checked_add(4)?)?;
+            let x_type = entry[0];
+            let x_size = u16::from_le_bytes([entry[2], entry[3]]) as usize;
 
-            if x_type == INO_EXT_TYPE_DSTREAM && x_size >= 8 && data_offset + 8 <= xfield_data.len()
-            {
-                // j_dstream_t.size is the first u64
-                let size = u64::from_le_bytes([
-                    xfield_data[data_offset],
-                    xfield_data[data_offset + 1],
-                    xfield_data[data_offset + 2],
-                    xfield_data[data_offset + 3],
-                    xfield_data[data_offset + 4],
-                    xfield_data[data_offset + 5],
-                    xfield_data[data_offset + 6],
-                    xfield_data[data_offset + 7],
-                ]);
+            if x_type == INO_EXT_TYPE_DSTREAM && x_size >= 8 {
+                let dstream_end = data_offset.checked_add(8)?;
+                let dstream = xfield_data.get(data_offset..dstream_end)?;
+                let size = u64::from_le_bytes(dstream.try_into().ok()?);
                 return Some(size);
             }
 
             // Advance past this field's data, padded to 8-byte boundary
-            let padded_size = (x_size + 7) & !7;
-            data_offset += padded_size;
+            let padded_size = x_size.checked_add(7)? & !7;
+            data_offset = data_offset.checked_add(padded_size)?;
         }
 
         None

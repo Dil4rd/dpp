@@ -151,13 +151,20 @@ pub fn read_node<R: Read + Seek>(
     let mut record_offsets = Vec::with_capacity(num_offsets);
 
     for i in 0..num_offsets {
-        let offset_pos = node_size as usize - (i + 1) * 2;
-        if offset_pos + 1 >= data.len() {
-            return Err(HfsPlusError::InvalidBTree(
-                "offset table out of bounds".into(),
-            ));
-        }
-        let offset = u16::from_be_bytes([data[offset_pos], data[offset_pos + 1]]);
+        let slot = (i + 1)
+            .checked_mul(2)
+            .ok_or_else(|| HfsPlusError::CorruptedData("offset table index overflow".into()))?;
+        let offset_pos = (node_size as usize)
+            .checked_sub(slot)
+            .ok_or_else(|| HfsPlusError::CorruptedData("offset table out of bounds".into()))?;
+        let pair = data
+            .get(
+                offset_pos..offset_pos.checked_add(2).ok_or_else(|| {
+                    HfsPlusError::CorruptedData("offset table out of bounds".into())
+                })?,
+            )
+            .ok_or_else(|| HfsPlusError::InvalidBTree("offset table out of bounds".into()))?;
+        let offset = u16::from_be_bytes([pair[0], pair[1]]);
         record_offsets.push(offset);
     }
 
@@ -177,8 +184,12 @@ impl BTreeNode {
                 index, self.descriptor.num_records
             )));
         }
-        let start = self.record_offsets[index] as usize;
-        let end = self.record_offsets[index + 1] as usize;
+        let start = *self.record_offsets.get(index).ok_or_else(|| {
+            HfsPlusError::InvalidBTree(format!("record offset index {} out of bounds", index))
+        })? as usize;
+        let end = *self.record_offsets.get(index + 1).ok_or_else(|| {
+            HfsPlusError::InvalidBTree(format!("record offset index {} out of bounds", index + 1))
+        })? as usize;
         if start > end || end > self.data.len() {
             return Err(HfsPlusError::InvalidBTree(format!(
                 "invalid record offsets: start={}, end={}, len={}",
@@ -187,7 +198,14 @@ impl BTreeNode {
                 self.data.len()
             )));
         }
-        Ok(&self.data[start..end])
+        self.data.get(start..end).ok_or_else(|| {
+            HfsPlusError::InvalidBTree(format!(
+                "record data out of bounds: start={}, end={}, len={}",
+                start,
+                end,
+                self.data.len()
+            ))
+        })
     }
 }
 

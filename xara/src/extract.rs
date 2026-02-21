@@ -27,10 +27,10 @@ pub struct ExtractStats {
 fn strip_base_prefix<'a>(path: &'a str, prefix: &str) -> &'a str {
     if prefix.is_empty() {
         path
-    } else if path.len() <= prefix.len() {
-        ""
     } else {
-        &path[prefix.len() + 1..]
+        path.strip_prefix(prefix)
+            .and_then(|s| s.strip_prefix('/'))
+            .unwrap_or("")
     }
 }
 

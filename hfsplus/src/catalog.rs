@@ -89,28 +89,34 @@ pub struct CatalogKey {
 /// Parse a catalog key from raw record data.
 /// Returns (key, remaining_data_offset) where remaining_data_offset points to the record data after the key.
 fn parse_catalog_key(data: &[u8]) -> Result<(CatalogKey, usize)> {
-    if data.len() < 6 {
-        return Err(HfsPlusError::InvalidBTree("catalog key too short".into()));
-    }
+    let header = data
+        .get(0..8)
+        .ok_or_else(|| HfsPlusError::InvalidBTree("catalog key too short".into()))?;
 
-    let key_length = u16::from_be_bytes([data[0], data[1]]) as usize;
-    let parent_id = u32::from_be_bytes([data[2], data[3], data[4], data[5]]);
-    let name_length = u16::from_be_bytes([data[6], data[7]]) as usize;
+    let key_length = u16::from_be_bytes([header[0], header[1]]) as usize;
+    let parent_id = u32::from_be_bytes([header[2], header[3], header[4], header[5]]);
+    let name_length = u16::from_be_bytes([header[6], header[7]]) as usize;
 
-    let name_start = 8;
-    let name_end = name_start + name_length * 2;
-    if name_end > data.len() {
-        return Err(HfsPlusError::InvalidBTree(format!(
+    let name_start: usize = 8;
+    let name_end = name_length
+        .checked_mul(2)
+        .and_then(|n| name_start.checked_add(n))
+        .ok_or_else(|| HfsPlusError::InvalidBTree("catalog key name length overflow".into()))?;
+
+    let name_data = data.get(name_start..name_end).ok_or_else(|| {
+        HfsPlusError::InvalidBTree(format!(
             "catalog key name extends beyond data: name_end={}, data_len={}",
             name_end,
             data.len()
-        )));
-    }
+        ))
+    })?;
 
-    let node_name = unicode::utf16be_to_u16(&data[name_start..name_end]);
+    let node_name = unicode::utf16be_to_u16(name_data);
 
     // Record data starts after key_length + 2 bytes for the key_length field itself
-    let record_offset = 2 + key_length;
+    let record_offset = key_length
+        .checked_add(2)
+        .ok_or_else(|| HfsPlusError::InvalidBTree("catalog key length overflow".into()))?;
     // Ensure even alignment
     let record_offset = if !record_offset.is_multiple_of(2) {
         record_offset + 1

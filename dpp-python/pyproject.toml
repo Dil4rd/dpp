@@ -8,7 +8,8 @@ dynamic = ["version"]
 requires-python = ">=3.9"
 description = "Python bindings for parsing Apple DMG disk images, HFS+/APFS filesystems, PKG installers, and PBZX/CPIO payloads"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

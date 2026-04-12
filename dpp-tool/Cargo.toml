@@ -1,6 +1,6 @@
 [package]
 name = "dpp-tool"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2024"
 description = "CLI to explore Apple DMG disk images: DMG → HFS+/APFS → PKG → PBZX → files"
 license = "MIT"
@@ -11,12 +11,12 @@ name = "dpp-tool"
 path = "src/main.rs"
 
 [dependencies]
-dpp = { version = "0.4.1", path = "../dpp" }
-udif = { version = "0.3.3", path = "../udif" }
-hfsplus = { version = "0.2.3", path = "../hfsplus" }
-apfs = { version = "0.2.3", path = "../apfs" }
-xara = { version = "0.3.1", path = "../xara" }
-pbzx = { version = "0.3.0", path = "../pbzx" }
+dpp = { version = "0.4.2", path = "../dpp" }
+udif = { version = "0.3.4", path = "../udif" }
+hfsplus = { version = "0.2.4", path = "../hfsplus" }
+apfs = { version = "0.2.4", path = "../apfs" }
+xara = { version = "0.3.2", path = "../xara" }
+pbzx = { version = "0.3.1", path = "../pbzx" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 

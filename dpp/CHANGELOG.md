@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.2] - 2026-04-12
+
+### Changed
+
+- Include `LICENSE` file in the published crate
+- Bumped udif to 0.3.4, pbzx to 0.3.1, hfsplus to 0.2.4, apfs to 0.2.4, xara to 0.3.2
+
 ## [0.4.1] - 2026-02-21
 
 ### Fixed

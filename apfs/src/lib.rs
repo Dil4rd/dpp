@@ -183,15 +183,45 @@ impl<R: Read + Seek> ApfsVolume<R> {
         Ok(buf)
     }
 
+    /// Symlink targets on APFS are stored in a "com.apple.fs.symlink"
+    /// extended attribute (NUL-terminated), not as file data. Returns the
+    /// target bytes for symlink inodes, or None when no xattr is present.
+    fn symlink_target(&mut self, oid: u64) -> Result<Option<Vec<u8>>> {
+        let Some(xattr) = catalog::lookup_xattr(
+            &mut self.reader,
+            self.catalog_root_block,
+            self.vol_omap_root_block,
+            self.block_size,
+            oid,
+            catalog::SYMLINK_XATTR_NAME,
+        )?
+        else {
+            return Ok(None);
+        };
+        let data = catalog::parse_xattr_value(&xattr);
+        let end = data.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
+        Ok(Some(data[..end].to_vec()))
+    }
+
     /// Stream a file to a writer
     pub fn read_file_to<W: Write>(&mut self, path: &str, writer: &mut W) -> Result<u64> {
-        let (_oid, inode) = catalog::resolve_path(
+        let (oid, inode) = catalog::resolve_path(
             &mut self.reader,
             self.catalog_root_block,
             self.vol_omap_root_block,
             self.block_size,
             path,
         )?;
+
+        // Symlink inodes carry no extents; read the target from the xattr.
+        if inode.kind() == catalog::INODE_SYMLINK_TYPE {
+            if let Some(target) = self.symlink_target(oid)? {
+                writer.write_all(&target)?;
+                return Ok(target.len() as u64);
+            }
+            // Fall back to the extent read for images that store the
+            // target as file data.
+        }
 
         // File extents are keyed by private_id, not the inode OID
         let file_extents = catalog::lookup_extents(
@@ -248,6 +278,14 @@ impl<R: Read + Seek> ApfsVolume<R> {
             path,
         )?;
 
+        // Symlink inodes report size 0; use the xattr target length instead.
+        let size = if inode.kind() == catalog::INODE_SYMLINK_TYPE {
+            self.symlink_target(oid)?
+                .map_or(inode.size(), |t| t.len() as u64)
+        } else {
+            inode.size()
+        };
+
         Ok(FileStat {
             oid,
             kind: match inode.kind() {
@@ -255,7 +293,7 @@ impl<R: Read + Seek> ApfsVolume<R> {
                 catalog::INODE_SYMLINK_TYPE => EntryKind::Symlink,
                 _ => EntryKind::File,
             },
-            size: inode.size(),
+            size,
             create_time: inode.create_time,
             modify_time: inode.modify_time,
             uid: inode.uid,

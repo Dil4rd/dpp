@@ -28,6 +28,9 @@ pub const INODE_DIR_TYPE: u16 = 0o040000; // S_IFDIR
 pub const INODE_FILE_TYPE: u16 = 0o100000; // S_IFREG
 pub const INODE_SYMLINK_TYPE: u16 = 0o120000; // S_IFLNK
 
+/// Name of the extended attribute that stores symlink targets on APFS.
+pub const SYMLINK_XATTR_NAME: &str = "com.apple.fs.symlink";
+
 // Extended field types (INO_EXT_TYPE_*)
 const INO_EXT_TYPE_DSTREAM: u8 = 8;
 
@@ -458,6 +461,57 @@ pub fn lookup_extents<R: Read + Seek>(
     Ok(extents)
 }
 
+/// Look up an extended attribute value for an inode.
+///
+/// Xattr catalog keys are `[obj_id_and_type u64][name_len u16][name\0]`, so
+/// the lookup compares the OID/type first, then the NUL-terminated name.
+pub fn lookup_xattr<R: Read + Seek>(
+    reader: &mut R,
+    catalog_root: u64,
+    omap_root: u64,
+    block_size: u32,
+    oid: u64,
+    name: &str,
+) -> Result<Option<Vec<u8>>> {
+    // Build the search key: obj_id_and_type | name_len (incl. NUL) | name | NUL
+    let mut search_key = Vec::with_capacity(8 + 2 + name.len() + 1);
+    let obj_id_and_type = (oid & 0x0FFFFFFFFFFFFFFF) | ((J_TYPE_XATTR as u64) << 60);
+    search_key.extend_from_slice(&obj_id_and_type.to_le_bytes());
+    search_key.extend_from_slice(&((name.len() + 1) as u16).to_le_bytes());
+    search_key.extend_from_slice(name.as_bytes());
+    search_key.push(0);
+
+    // Catalog keys are sorted as raw bytes; compare the common prefix, then length.
+    let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
+        let prefix = key.len().min(search_key.len());
+        match key[..prefix].cmp(&search_key[..prefix]) {
+            std::cmp::Ordering::Equal => key.len().cmp(&search_key.len()),
+            ord => ord,
+        }
+    };
+
+    btree::btree_lookup(
+        reader,
+        catalog_root,
+        block_size,
+        0,
+        0,
+        &compare_fn,
+        Some(omap_root),
+    )
+}
+
+/// Parse an xattr record value: `flags u16 | data_len u16 | data`.
+/// Returns the raw xattr data (without the header).
+pub fn parse_xattr_value(value: &[u8]) -> Vec<u8> {
+    if value.len() < 4 {
+        return value.to_vec();
+    }
+    let data_len = u16::from_le_bytes([value[2], value[3]]) as usize;
+    let end = value.len().min(4 + data_len);
+    value[4..end].to_vec()
+}
+
 /// Resolve a path like "/Applications/Upscayl.app/Contents/Info.plist" to its (OID, InodeVal).
 pub fn resolve_path<R: Read + Seek>(
     reader: &mut R,
@@ -568,6 +622,40 @@ mod tests {
     use crate::omap as omap_mod;
     use crate::superblock;
     use std::io::BufReader;
+
+    #[test]
+    fn parses_xattr_value_header() {
+        // flags=0x0006, data_len=0x000e, data = "../README.txt\0"
+        let value = [
+            0x06, 0x00, 0x0e, 0x00, b'.', b'.', b'/', b'R', b'E', b'A', b'D', b'M', b'E', b'.',
+            b't', b'x', b't', b'\0',
+        ];
+        assert_eq!(parse_xattr_value(&value), b"../README.txt\0".to_vec());
+        // data_len larger than the record: clamp to the value length
+        let short = [0x06, 0x00, 0xff, 0x00, b'a', b'b'];
+        assert_eq!(parse_xattr_value(&short), b"ab".to_vec());
+        // value shorter than the header: pass through
+        assert_eq!(parse_xattr_value(b"abc"), b"abc".to_vec());
+    }
+
+    #[test]
+    fn builds_xattr_search_key_layout() {
+        // The search key must match the on-disk j_xattr_key_t layout:
+        // obj_id_and_type | name_len (incl. NUL) | name | NUL
+        let oid = 25_u64;
+        let name = "com.apple.fs.symlink";
+        let mut key = Vec::with_capacity(8 + 2 + name.len() + 1);
+        let obj_id_and_type = (oid & 0x0FFFFFFFFFFFFFFF) | ((J_TYPE_XATTR as u64) << 60);
+        key.extend_from_slice(&obj_id_and_type.to_le_bytes());
+        key.extend_from_slice(&((name.len() + 1) as u16).to_le_bytes());
+        key.extend_from_slice(name.as_bytes());
+        key.push(0);
+        assert_eq!(key.len(), 31);
+        assert_eq!(key[0], 0x19); // oid 25, low byte
+        assert_eq!(key[7], 0x40); // J_TYPE_XATTR nibble
+        assert_eq!(&key[8..10], &[0x15, 0x00]); // name_len 21
+        assert_eq!(&key[10..31], b"com.apple.fs.symlink\0");
+    }
 
     fn open_volume() -> (BufReader<std::fs::File>, u64, u64, u32) {
         let file = std::fs::File::open("../tests/appfs.raw").unwrap();

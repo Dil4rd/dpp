@@ -307,6 +307,16 @@ fn resolve_child_oid<R: Read + Seek>(
 /// - Equal: match
 /// - Greater: node key > search key
 ///
+/// `compare_fn` must reproduce the tree's on-disk ordering, and is not an
+/// equality test. Internal nodes hold separator keys that never equal the
+/// search key, so the descent picks the last separator ordering `Less` or
+/// `Equal` and follows its child pointer; a predicate that only recognises
+/// matches gives the descent no direction. Leaf scans stop at the first key
+/// ordering `Greater`, on the assumption that the search key would already
+/// have appeared. A comparator that disagrees with the on-disk order therefore
+/// does not merely slow the lookup down — it returns `Ok(None)` for keys that
+/// are present, with no error to distinguish that from a genuine miss.
+///
 /// `omap_root`: Some(block) for virtual B-trees (catalog), None for physical (OMAP).
 ///
 /// Returns the raw value bytes if found.
@@ -352,6 +362,38 @@ where
     btree_lookup_node(reader, &node, &params, compare_fn)
 }
 
+/// Debug-only check that `compare_fn` agrees with the node's on-disk key order.
+///
+/// Stored keys ascend, so comparing each of them against one fixed search key
+/// must produce a non-decreasing run of `Less`, then `Equal`, then `Greater`.
+/// An inversion proves the comparator orders keys differently than the tree
+/// does, which makes both the leaf scan's early exit and the descent's choice
+/// of child unsound: the lookup reports a miss for a key that is present, with
+/// nothing to distinguish that from a genuine absence.
+#[cfg(debug_assertions)]
+fn debug_assert_comparator_matches_node_order<F>(
+    node: &BTreeNode,
+    params: &BTreeParams,
+    compare_fn: &F,
+) -> Result<()>
+where
+    F: Fn(&[u8]) -> std::cmp::Ordering,
+{
+    let mut prev: Option<(usize, std::cmp::Ordering)> = None;
+    for i in 0..node.node_header.btn_nkeys as usize {
+        let ord = compare_fn(node.key(i, params.fixed_key_size)?);
+        if let Some((prev_i, prev_ord)) = prev {
+            assert!(
+                ord >= prev_ord,
+                "b-tree comparator disagrees with on-disk key order: key {prev_i} orders \
+                 {prev_ord:?} against the search key but key {i} orders {ord:?}"
+            );
+        }
+        prev = Some((i, ord));
+    }
+    Ok(())
+}
+
 fn btree_lookup_node<R: Read + Seek, F>(
     reader: &mut R,
     node: &BTreeNode,
@@ -361,6 +403,9 @@ fn btree_lookup_node<R: Read + Seek, F>(
 where
     F: Fn(&[u8]) -> std::cmp::Ordering,
 {
+    #[cfg(debug_assertions)]
+    debug_assert_comparator_matches_node_order(node, params, compare_fn)?;
+
     if node.node_header.is_leaf() {
         // Search leaf for exact match
         for i in 0..node.node_header.btn_nkeys as usize {

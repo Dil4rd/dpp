@@ -42,6 +42,9 @@ pub struct XarFile {
     pub path: String,
     /// Type of entry
     pub file_type: XarFileType,
+    /// Symlink target text from the TOC `<link>` element. Only present for
+    /// `XarFileType::Symlink` entries.
+    pub link: Option<String>,
     /// Data descriptor (None for directories)
     pub data: Option<XarFileData>,
     /// Child file indices (for directories)
@@ -73,6 +76,7 @@ struct FileBuilder {
     id: u64,
     name: String,
     file_type: Option<String>,
+    link: Option<String>,
     children: Vec<usize>,
     // data fields
     in_data: bool,
@@ -103,10 +107,25 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
     // Children are finalized before their parents, so child indices are known.
     let mut stack: Vec<FileBuilder> = Vec::new();
 
+    // Tracks every open element (not just <file>), so plain metadata tags like
+    // <name>/<type>/<link> are only captured when they are a direct child of
+    // the current <file> — nested blocks such as <ea> carry their own <name>
+    // and must not be mistaken for the file's own name.
+    let mut tag_stack: Vec<String> = Vec::new();
+
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tag = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                // <name>/<type>/<link> live directly under <file>; <offset>/<length>/<size>
+                // live directly under <file>'s <data> block. Either parent is a legitimate
+                // place for the catch-all below to record `current_tag` — anything deeper
+                // (e.g. inside a sibling <ea> block, which has its own <name>/<length>/etc.)
+                // must not be mistaken for the file's own metadata.
+                let captures_metadata = matches!(
+                    tag_stack.last().map(String::as_str),
+                    Some("file") | Some("data")
+                );
                 match tag.as_str() {
                     "toc" => in_toc = true,
                     "file" if in_toc => {
@@ -131,6 +150,7 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                             id,
                             name: String::new(),
                             file_type: None,
+                            link: None,
                             children: Vec::new(),
                             in_data: false,
                             data_offset: None,
@@ -172,11 +192,12 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         }
                     }
                     _ => {
-                        if let Some(f) = stack.last_mut() {
-                            f.current_tag = tag;
+                        if captures_metadata && let Some(f) = stack.last_mut() {
+                            f.current_tag = tag.clone();
                         }
                     }
                 }
+                tag_stack.push(tag);
             }
             Ok(Event::Empty(ref e)) => {
                 let tag = String::from_utf8_lossy(e.name().as_ref()).to_string();
@@ -210,6 +231,7 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         match f.current_tag.as_str() {
                             "name" => f.name = text,
                             "type" => f.file_type = Some(text),
+                            "link" => f.link = Some(text),
                             _ => {}
                         }
                     }
@@ -268,6 +290,7 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                             name: builder.name,
                             path,
                             file_type,
+                            link: builder.link,
                             data,
                             children: builder.children,
                             parent,
@@ -284,6 +307,7 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                     }
                     _ => {}
                 }
+                tag_stack.pop();
             }
             Ok(Event::Eof) => break,
             Err(e) => return Err(XarError::XmlParse(format!("XML error: {}", e))),
@@ -309,4 +333,149 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
 pub fn find_by_path<'a>(files: &'a [XarFile], path: &str) -> Option<&'a XarFile> {
     let path = path.trim_matches('/');
     files.iter().find(|f| f.path == path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_link_target_for_symlink_entry() {
+        // Matches the real element order produced by macOS `xar`: <link> comes
+        // before <type>/<name>.
+        let xml = br#"<?xml version="1.0"?>
+<xar><toc>
+  <file id="1">
+    <link type="file">../README.txt</link>
+    <type>symlink</type>
+    <name>readme-link.txt</name>
+  </file>
+</toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].file_type, XarFileType::Symlink);
+        assert_eq!(files[0].name, "readme-link.txt");
+        assert_eq!(files[0].link.as_deref(), Some("../README.txt"));
+    }
+
+    #[test]
+    fn non_symlink_entries_have_no_link_target() {
+        let xml = br#"<?xml version="1.0"?>
+<xar><toc>
+  <file id="1">
+    <name>plain.txt</name>
+    <type>file</type>
+  </file>
+</toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        assert_eq!(files[0].link, None);
+    }
+
+    #[test]
+    fn ea_block_name_before_real_name_does_not_clobber_it() {
+        // Real XAR TOCs (per macOS `xar`) emit <ea> — which carries its own
+        // <name>, e.g. "com.apple.provenance" — before the file's real <type>/<name>.
+        let xml = br#"<?xml version="1.0"?>
+<xar><toc>
+  <file id="1">
+    <ea id="0">
+      <length>19</length>
+      <offset>20</offset>
+      <size>11</size>
+      <name>com.apple.provenance</name>
+    </ea>
+    <type>file</type>
+    <name>real-name.txt</name>
+  </file>
+</toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        assert_eq!(files[0].name, "real-name.txt");
+        assert_eq!(files[0].path, "real-name.txt");
+    }
+
+    #[test]
+    fn ea_block_name_after_real_name_does_not_clobber_it() {
+        // The inverse ordering: if a producer emits <ea> AFTER <type>/<name>
+        // instead of before, the pre-fix parser (which tracked `current_tag`
+        // for any tag anywhere inside <file>, regardless of nesting depth)
+        // would let <ea>'s <name> overwrite the file's real name here, since
+        // it was the last "name" tag seen. This must not happen.
+        let xml = br#"<?xml version="1.0"?>
+<xar><toc>
+  <file id="1">
+    <type>file</type>
+    <name>real-name.txt</name>
+    <ea id="0">
+      <length>19</length>
+      <offset>20</offset>
+      <size>11</size>
+      <name>com.apple.provenance</name>
+    </ea>
+  </file>
+</toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        assert_eq!(files[0].name, "real-name.txt");
+        assert_eq!(files[0].path, "real-name.txt");
+    }
+
+    #[test]
+    fn ea_offset_length_size_do_not_leak_into_data_descriptor() {
+        // <ea> carries its own <offset>/<length>/<size>, sitting alongside a
+        // real <data> block with different values. The two must not mix.
+        let xml = br#"<?xml version="1.0"?>
+<xar><toc>
+  <file id="1">
+    <ea id="0">
+      <length>19</length>
+      <offset>999</offset>
+      <size>11</size>
+    </ea>
+    <type>file</type>
+    <name>payload.bin</name>
+    <data>
+      <offset>0</offset>
+      <length>42</length>
+      <size>42</size>
+      <encoding style="application/octet-stream"/>
+    </data>
+  </file>
+</toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        let data = files[0].data.as_ref().expect("data descriptor present");
+        assert_eq!(data.offset, 0);
+        assert_eq!(data.length, 42);
+        assert_eq!(data.size, 42);
+    }
+
+    #[test]
+    fn nested_directory_and_symlink_link_targets_are_scoped_per_file() {
+        // A directory containing a symlink; the directory's own <name> must
+        // not bleed into the child's fields or vice versa, and the full path
+        // must be built from both ancestor names.
+        let xml = br#"<?xml version="1.0"?>
+<xar><toc>
+  <file id="1">
+    <type>directory</type>
+    <name>dir</name>
+    <file id="2">
+      <link type="file">../target.txt</link>
+      <type>symlink</type>
+      <name>link.txt</name>
+    </file>
+  </file>
+</toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        assert_eq!(files.len(), 2);
+        let link_entry = files.iter().find(|f| f.name == "link.txt").unwrap();
+        assert_eq!(link_entry.path, "dir/link.txt");
+        assert_eq!(link_entry.link.as_deref(), Some("../target.txt"));
+        let dir_entry = files.iter().find(|f| f.name == "dir").unwrap();
+        assert_eq!(dir_entry.link, None);
+    }
 }

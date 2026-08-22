@@ -397,14 +397,7 @@ pub fn lookup_inode<R: Read + Seek>(
 ) -> Result<InodeVal> {
     let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
         match decode_catalog_key(key) {
-            Ok((key_oid, key_type)) => {
-                let search_oid = oid;
-                let search_type = J_TYPE_INODE;
-                match key_oid.cmp(&search_oid) {
-                    std::cmp::Ordering::Equal => (key_type).cmp(&search_type),
-                    ord => ord,
-                }
-            }
+            Ok((key_oid, key_type)) => compare_catalog_keys(key_oid, key_type, oid, J_TYPE_INODE),
             Err(_) => std::cmp::Ordering::Less,
         }
     };
@@ -646,6 +639,13 @@ fn lookup_drec<R: Read + Seek>(
 
 /// Compare two catalog keys in APFS sort order: OID first, then type.
 /// Returns the ordering of (oid_a, type_a) vs (oid_b, type_b).
+///
+/// Catalog records are deliberately *not* ordered by the packed
+/// `obj_id_and_type` word they are stored in. The record type occupies the high
+/// nibble, so ordering that word as an integer would sort by type before OID,
+/// and comparing its bytes in place is wrong again because it is stored
+/// little-endian. Decode with `decode_catalog_key` and order through this
+/// function rather than touching the raw key bytes.
 fn compare_catalog_keys(oid_a: u64, type_a: u8, oid_b: u64, type_b: u8) -> std::cmp::Ordering {
     match oid_a.cmp(&oid_b) {
         std::cmp::Ordering::Equal => type_a.cmp(&type_b),

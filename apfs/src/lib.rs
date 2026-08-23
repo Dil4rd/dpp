@@ -198,9 +198,8 @@ impl<R: Read + Seek> ApfsVolume<R> {
         else {
             return Ok(None);
         };
-        let data = catalog::parse_xattr_value(&xattr);
-        let end = data.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
-        Ok(Some(data[..end].to_vec()))
+        let end = xattr.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
+        Ok(Some(xattr[..end].to_vec()))
     }
 
     /// Stream a file to a writer
@@ -214,13 +213,13 @@ impl<R: Read + Seek> ApfsVolume<R> {
         )?;
 
         // Symlink inodes carry no extents; read the target from the xattr.
-        if inode.kind() == catalog::INODE_SYMLINK_TYPE {
-            if let Some(target) = self.symlink_target(oid)? {
-                writer.write_all(&target)?;
-                return Ok(target.len() as u64);
-            }
-            // Fall back to the extent read for images that store the
-            // target as file data.
+        // Falls through to the extent read for images that store the target
+        // as file data.
+        if inode.kind() == catalog::INODE_SYMLINK_TYPE
+            && let Some(target) = self.symlink_target(oid)?
+        {
+            writer.write_all(&target)?;
+            return Ok(target.len() as u64);
         }
 
         // File extents are keyed by private_id, not the inode OID
@@ -412,5 +411,47 @@ mod tests {
 
         let stat = vol.stat(&entry.path).unwrap();
         assert_eq!(stat.size, entry.entry.size);
+    }
+
+    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn test_read_symlink_targets() {
+        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
+        let reader = BufReader::new(file);
+
+        let mut vol = ApfsVolume::open(reader).unwrap();
+
+        let walk = vol.walk().unwrap();
+        let symlinks: Vec<_> = walk
+            .iter()
+            .filter(|e| e.entry.kind == EntryKind::Symlink)
+            .map(|e| e.path.clone())
+            .collect();
+        assert!(
+            !symlinks.is_empty(),
+            "Test image should contain symlinks to read"
+        );
+
+        for path in &symlinks {
+            let target = vol.read_file(path).unwrap();
+            assert!(
+                !target.is_empty(),
+                "Symlink {path} should resolve to a non-empty target"
+            );
+            assert!(
+                !target.contains(&0),
+                "Symlink target for {path} should have its trailing NUL stripped"
+            );
+
+            // stat() reports the target length, not the inode's zero size.
+            let stat = vol.stat(path).unwrap();
+            assert_eq!(stat.kind, EntryKind::Symlink);
+            assert_eq!(
+                stat.size,
+                target.len() as u64,
+                "stat size should match the target length for {path}"
+            );
+        }
     }
 }

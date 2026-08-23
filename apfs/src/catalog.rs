@@ -31,6 +31,13 @@ pub const INODE_SYMLINK_TYPE: u16 = 0o120000; // S_IFLNK
 /// Name of the extended attribute that stores symlink targets on APFS.
 pub const SYMLINK_XATTR_NAME: &str = "com.apple.fs.symlink";
 
+/// Offset of the attribute name within an xattr catalog key: the 8-byte
+/// `obj_id_and_type` followed by the 2-byte `name_len`.
+const XATTR_KEY_NAME_OFFSET: usize = 10;
+
+// Xattr record flags (j_xattr_flags)
+const XATTR_DATA_STREAM: u16 = 0x0001;
+
 // Extended field types (INO_EXT_TYPE_*)
 const INO_EXT_TYPE_DSTREAM: u8 = 8;
 
@@ -461,10 +468,35 @@ pub fn lookup_extents<R: Read + Seek>(
     Ok(extents)
 }
 
+/// Order an on-disk xattr catalog key against the `(oid, name)` being searched for.
+///
+/// Catalog records sort by OID, then by record type, and xattr records then sort
+/// by the NUL-terminated attribute name. The name is preceded in the key by a
+/// `name_len` field, so the tie-break skips it rather than comparing key bytes
+/// straight through.
+fn compare_xattr_key(key: &[u8], oid: u64, name_with_nul: &[u8]) -> std::cmp::Ordering {
+    let Ok((key_oid, key_type)) = decode_catalog_key(key) else {
+        return std::cmp::Ordering::Less;
+    };
+    match compare_catalog_keys(key_oid, key_type, oid, J_TYPE_XATTR) {
+        std::cmp::Ordering::Equal => key
+            .get(XATTR_KEY_NAME_OFFSET..)
+            .unwrap_or(&[])
+            .cmp(name_with_nul),
+        ord => ord,
+    }
+}
+
 /// Look up an extended attribute value for an inode.
 ///
 /// Xattr catalog keys are `[obj_id_and_type u64][name_len u16][name\0]`, so
 /// the lookup compares the OID/type first, then the NUL-terminated name.
+///
+/// Returns the attribute data with its record header removed, or `None` when
+/// the inode carries no attribute of that name. Attributes stored as a data
+/// stream rather than embedded in the record are rejected with
+/// [`ApfsError::Unsupported`], since the record holds a dstream reference in
+/// place of the value.
 pub fn lookup_xattr<R: Read + Seek>(
     reader: &mut R,
     catalog_root: u64,
@@ -473,24 +505,12 @@ pub fn lookup_xattr<R: Read + Seek>(
     oid: u64,
     name: &str,
 ) -> Result<Option<Vec<u8>>> {
-    // Build the search key: obj_id_and_type | name_len (incl. NUL) | name | NUL
-    let mut search_key = Vec::with_capacity(8 + 2 + name.len() + 1);
-    let obj_id_and_type = (oid & 0x0FFFFFFFFFFFFFFF) | ((J_TYPE_XATTR as u64) << 60);
-    search_key.extend_from_slice(&obj_id_and_type.to_le_bytes());
-    search_key.extend_from_slice(&((name.len() + 1) as u16).to_le_bytes());
-    search_key.extend_from_slice(name.as_bytes());
-    search_key.push(0);
+    let mut search_name = Vec::with_capacity(name.len() + 1);
+    search_name.extend_from_slice(name.as_bytes());
+    search_name.push(0);
+    let compare_fn = |key: &[u8]| compare_xattr_key(key, oid, &search_name);
 
-    // Catalog keys are sorted as raw bytes; compare the common prefix, then length.
-    let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
-        let prefix = key.len().min(search_key.len());
-        match key[..prefix].cmp(&search_key[..prefix]) {
-            std::cmp::Ordering::Equal => key.len().cmp(&search_key.len()),
-            ord => ord,
-        }
-    };
-
-    btree::btree_lookup(
+    let value = btree::btree_lookup(
         reader,
         catalog_root,
         block_size,
@@ -498,18 +518,35 @@ pub fn lookup_xattr<R: Read + Seek>(
         0,
         &compare_fn,
         Some(omap_root),
-    )
+    )?;
+
+    match value {
+        Some(value) => Ok(Some(parse_xattr_value(&value)?)),
+        None => Ok(None),
+    }
 }
 
 /// Parse an xattr record value: `flags u16 | data_len u16 | data`.
-/// Returns the raw xattr data (without the header).
-pub fn parse_xattr_value(value: &[u8]) -> Vec<u8> {
+///
+/// Only embedded attributes are supported. A record flagged `XATTR_DATA_STREAM`
+/// carries a dstream reference in place of the data, so returning its bytes
+/// would hand back the reference struct as though it were the value.
+fn parse_xattr_value(value: &[u8]) -> Result<Vec<u8>> {
     if value.len() < 4 {
-        return value.to_vec();
+        return Err(ApfsError::CorruptedData(format!(
+            "xattr value too short: {} bytes",
+            value.len()
+        )));
+    }
+    let flags = u16::from_le_bytes([value[0], value[1]]);
+    if flags & XATTR_DATA_STREAM != 0 {
+        return Err(ApfsError::Unsupported(
+            "xattr is stored as a data stream, not embedded in the record".into(),
+        ));
     }
     let data_len = u16::from_le_bytes([value[2], value[3]]) as usize;
     let end = value.len().min(4 + data_len);
-    value[4..end].to_vec()
+    Ok(value[4..end].to_vec())
 }
 
 /// Resolve a path like "/Applications/Upscayl.app/Contents/Info.plist" to its (OID, InodeVal).
@@ -625,36 +662,111 @@ mod tests {
 
     #[test]
     fn parses_xattr_value_header() {
-        // flags=0x0006, data_len=0x000e, data = "../README.txt\0"
+        // flags=0x0006 (embedded), data_len=0x000e, data = "../README.txt\0"
         let value = [
             0x06, 0x00, 0x0e, 0x00, b'.', b'.', b'/', b'R', b'E', b'A', b'D', b'M', b'E', b'.',
             b't', b'x', b't', b'\0',
         ];
-        assert_eq!(parse_xattr_value(&value), b"../README.txt\0".to_vec());
+        assert_eq!(
+            parse_xattr_value(&value).unwrap(),
+            b"../README.txt\0".to_vec()
+        );
         // data_len larger than the record: clamp to the value length
         let short = [0x06, 0x00, 0xff, 0x00, b'a', b'b'];
-        assert_eq!(parse_xattr_value(&short), b"ab".to_vec());
-        // value shorter than the header: pass through
-        assert_eq!(parse_xattr_value(b"abc"), b"abc".to_vec());
+        assert_eq!(parse_xattr_value(&short).unwrap(), b"ab".to_vec());
+        // value shorter than the header: rejected rather than passed through
+        assert!(parse_xattr_value(b"abc").is_err());
+        // data-stream attribute: rejected rather than returned as data
+        let dstream = [0x01, 0x00, 0x10, 0x00, 0xAA, 0xBB, 0xCC, 0xDD];
+        assert!(parse_xattr_value(&dstream).is_err());
     }
 
-    #[test]
-    fn builds_xattr_search_key_layout() {
-        // The search key must match the on-disk j_xattr_key_t layout:
-        // obj_id_and_type | name_len (incl. NUL) | name | NUL
-        let oid = 25_u64;
-        let name = "com.apple.fs.symlink";
+    /// Build an on-disk catalog key: `obj_id_and_type | name_len u16 | name | NUL`.
+    fn xattr_key(oid: u64, j_type: u8, name: &str) -> Vec<u8> {
         let mut key = Vec::with_capacity(8 + 2 + name.len() + 1);
-        let obj_id_and_type = (oid & 0x0FFFFFFFFFFFFFFF) | ((J_TYPE_XATTR as u64) << 60);
+        let obj_id_and_type = (oid & 0x0FFFFFFFFFFFFFFF) | ((j_type as u64) << 60);
         key.extend_from_slice(&obj_id_and_type.to_le_bytes());
         key.extend_from_slice(&((name.len() + 1) as u16).to_le_bytes());
         key.extend_from_slice(name.as_bytes());
         key.push(0);
+        key
+    }
+
+    #[test]
+    fn xattr_key_layout_matches_on_disk_format() {
+        let key = xattr_key(25, J_TYPE_XATTR, SYMLINK_XATTR_NAME);
         assert_eq!(key.len(), 31);
         assert_eq!(key[0], 0x19); // oid 25, low byte
         assert_eq!(key[7], 0x40); // J_TYPE_XATTR nibble
-        assert_eq!(&key[8..10], &[0x15, 0x00]); // name_len 21
-        assert_eq!(&key[10..31], b"com.apple.fs.symlink\0");
+        assert_eq!(&key[8..10], &[0x15, 0x00]); // name_len 21, incl. NUL
+        assert_eq!(&key[XATTR_KEY_NAME_OFFSET..], b"com.apple.fs.symlink\0");
+    }
+
+    #[test]
+    fn compares_xattr_keys_by_oid_then_type_then_name() {
+        use std::cmp::Ordering;
+        // The comparator matches against the NUL-terminated attribute name.
+        let mut want = SYMLINK_XATTR_NAME.as_bytes().to_vec();
+        want.push(0);
+
+        // Exact match.
+        assert_eq!(
+            compare_xattr_key(&xattr_key(25, J_TYPE_XATTR, SYMLINK_XATTR_NAME), 25, &want),
+            Ordering::Equal
+        );
+
+        // OID dominates, and is compared numerically -- not as little-endian
+        // bytes, which would order 0x100 before 0x02.
+        assert_eq!(
+            compare_xattr_key(
+                &xattr_key(0x100, J_TYPE_XATTR, SYMLINK_XATTR_NAME),
+                0x02,
+                &want
+            ),
+            Ordering::Greater
+        );
+        assert_eq!(
+            compare_xattr_key(
+                &xattr_key(0x02, J_TYPE_XATTR, SYMLINK_XATTR_NAME),
+                0x100,
+                &want
+            ),
+            Ordering::Less
+        );
+
+        // Same OID: the record type breaks the tie, even though it is packed
+        // into the high nibble of obj_id_and_type.
+        assert_eq!(
+            compare_xattr_key(&xattr_key(25, J_TYPE_INODE, ""), 25, &want),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare_xattr_key(&xattr_key(25, J_TYPE_DIR_REC, ""), 25, &want),
+            Ordering::Greater
+        );
+
+        // Same OID and type: names order by bytes, ignoring the name_len field
+        // that precedes them -- a longer name can still sort first.
+        assert_eq!(
+            compare_xattr_key(
+                &xattr_key(25, J_TYPE_XATTR, "com.apple.diskimages.recentcksum"),
+                25,
+                &want
+            ),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare_xattr_key(
+                &xattr_key(25, J_TYPE_XATTR, "com.apple.quarantine"),
+                25,
+                &want
+            ),
+            Ordering::Greater
+        );
+
+        // Undecodable keys are treated as "before the target" so the scan
+        // keeps going rather than terminating early.
+        assert_eq!(compare_xattr_key(b"short", 25, &want), Ordering::Less);
     }
 
     fn open_volume() -> (BufReader<std::fs::File>, u64, u64, u32) {

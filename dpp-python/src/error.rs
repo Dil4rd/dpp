@@ -124,6 +124,7 @@ fn apfs_to_pyerr(apfs_err: &dpp::apfs::ApfsError, top: &dpp::DppError) -> PyErr 
         | A::NotADirectory(_)
         | A::CorruptedData(_)
         | A::NoVolume => InvalidFormatError::new_err(top.to_string()),
+        A::Unsupported(_) => UnsupportedError::new_err(top.to_string()),
     }
 }
 

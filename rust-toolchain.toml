@@ -1,0 +1,5 @@
+[toolchain]
+# Pinned so a new Rust release cannot turn CI red on code no pull request
+# touched. Bump deliberately, in its own commit, fixing any new lints there.
+channel = "1.98.0"
+components = ["rustfmt", "clippy"]

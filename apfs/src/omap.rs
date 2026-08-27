@@ -83,30 +83,15 @@ pub fn omap_lookup<R: Read + Seek>(
         return parse_omap_val(&val);
     }
 
-    // If direct lookup fails, try scanning for the OID with any xid
-    let range_fn = |key: &[u8]| -> Option<bool> {
-        if key.len() < 16 {
-            return Some(false);
-        }
-        let key_oid = u64::from_le_bytes([
-            key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
-        ]);
-        if key_oid < target_oid {
-            Some(false) // skip, keep scanning
-        } else if key_oid == target_oid {
-            Some(true) // match
-        } else {
-            None // past our OID, stop
-        }
-    };
-
+    // If direct lookup fails, scan for the OID with any xid. The scan reads the
+    // same comparator as a range, so it needs no predicate of its own.
     let entries = btree::btree_scan(
         reader,
         omap_tree_root,
         block_size,
         OMAP_KEY_SIZE,
         OMAP_VAL_SIZE,
-        &range_fn,
+        &compare_fn,
         None,
     )?;
 

@@ -16,8 +16,8 @@ pub fn fletcher64(data: &[u8]) -> u64 {
     let mut sum2: u64 = 0;
 
     // Process 4 bytes at a time (little-endian u32)
-    for chunk in data.chunks_exact(4) {
-        let word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) as u64;
+    for chunk in data.as_chunks::<4>().0 {
+        let word = u32::from_le_bytes(*chunk) as u64;
         sum1 = (sum1 + word) % mod_val;
         sum2 = (sum2 + sum1) % mod_val;
     }

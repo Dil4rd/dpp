@@ -79,6 +79,17 @@ The TOC is a zlib-compressed XML document. It contains a `<toc>` element with ne
 | `directory` | Directory |
 | `symlink` | Symbolic link |
 
+Symbolic-link targets are stored as exact character data in a direct `<link>`
+child of the file entry:
+
+```xml
+<file id="4">
+  <name>current</name>
+  <type>symlink</type>
+  <link type="file">releases/2.0</link>
+</file>
+```
+
 ### Data Encoding Styles
 
 | Style | Description |

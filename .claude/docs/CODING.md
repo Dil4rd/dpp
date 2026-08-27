@@ -12,15 +12,29 @@ Update `CHANGELOG.md` in **all** affected crates for user-visible changes. Updat
 
 ## Zero warnings policy
 
-Code must pass `cargo clippy -- -D warnings` and `RUSTDOCFLAGS="-D warnings" cargo doc` with no warnings. Fix warnings immediately rather than suppressing them (use `#[allow(...)]` only when the lint is a false positive, with a justifying comment).
+Code must pass `cargo clippy -- -D warnings` and `RUSTDOCFLAGS="-D warnings" cargo doc` with no warnings. Fix warnings immediately rather than suppressing them.
+
+When a lint genuinely does not apply, prefer `#[expect(lint, reason = "…")]` over `#[allow(...)]`. `expect` fails the build once the item stops tripping the lint, so the annotation deletes itself instead of outliving its justification. Fields parsed purely to mirror an on-disk layout are the usual legitimate case.
+
+Run clippy over the **whole** workspace, including `dpp-python`. It is excluded from the test and doc gates because it needs Python headers, but not from clippy — and it is the only place a new `ApfsError` variant is caught (see below).
 
 ## No unsafe code
 
 No `unsafe` code in the `hfsplus` and `apfs` crates. Avoid `unsafe` elsewhere unless strictly necessary with a justifying comment.
 
+## Public API surface
+
+These crates are published, so `pub` is a semver commitment. New items default to `pub(crate)` unless something outside the crate actually calls them — check before widening, and check before narrowing too: `apfs` has a third-party dependent (`startup-disk`) that drives `catalog`, `omap`, `object`, `superblock` and `extents` directly rather than through `ApfsVolume`.
+
+Keep an API private when using it correctly requires knowledge the caller has no way to check. `apfs::btree` is the worked example: its comparator must reproduce the tree's on-disk key ordering, and breaking that returns `Ok(None)` for records that exist rather than an error. Higher-level readers own their comparators so callers never face that contract.
+
 ## Error handling
 
 Use `thiserror` derive in each crate's `error.rs`. Propagate errors with `?` — do not `unwrap()` or `expect()` in library code.
+
+Distinguish a malformed image (`CorruptedData`) from a well-formed one using a feature the reader does not implement (`Unsupported`). Conflating them tells callers to distrust a volume that is fine.
+
+`ApfsError` deliberately has **no** `#[non_exhaustive]`. `dpp-python`'s `apfs_to_pyerr` matches it exhaustively, so adding a variant fails the build until it has a deliberate Python mapping. That compile error is the coverage check; `#[non_exhaustive]` would require a wildcard arm and let new variants fall silently into whatever bucket it names. The accepted cost is a semver major per new variant.
 
 ## Generic I/O
 

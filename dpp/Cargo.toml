@@ -1,6 +1,6 @@
 [package]
 name = "dpp"
-version = "0.4.2"
+version = "0.5.0-dev"
 edition = "2024"
 description = "DMG + HFS+/APFS + PKG + PBZX pipeline - walk through Apple disk images to extract packages"
 license = "MIT"
@@ -11,8 +11,8 @@ categories = ["compression", "encoding", "parsing"]
 [dependencies]
 udif = { version = "0.3.4", path = "../udif" }
 pbzx = { version = "0.3.1", path = "../pbzx" }
-hfsplus = { version = "0.2.4", path = "../hfsplus" }
-apfs = { version = "0.2.4", path = "../apfs" }
+hfsplus = { version = "0.2.5-dev", path = "../hfsplus" }
+apfs = { version = "0.3.0-dev", path = "../apfs" }
 xara = { version = "0.3.2", path = "../xara" }
 thiserror = "2"
 tempfile = "3"

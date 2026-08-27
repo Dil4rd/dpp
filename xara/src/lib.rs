@@ -215,6 +215,22 @@ mod tests {
     }
 
     #[test]
+    fn test_xar_symlink_target_roundtrip() {
+        let toc_xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<xar><toc><file id="1">
+  <link type="file"><![CDATA[ ../A&B ]]></link>
+  <type>symlink</type><name>link</name>
+</file></toc></xar>"#;
+        let xar_buf = build_test_xar(toc_xml, &[]);
+        let mut cursor = Cursor::new(&xar_buf);
+        let archive = XarArchive::open(&mut cursor).unwrap();
+
+        let link = archive.find("link").unwrap();
+        assert_eq!(link.file_type, XarFileType::Symlink);
+        assert_eq!(link.link.as_deref(), Some(" ../A&B "));
+    }
+
+    #[test]
     fn test_extract_all() {
         let toc_xml = br#"<?xml version="1.0" encoding="UTF-8"?>
 <xar>

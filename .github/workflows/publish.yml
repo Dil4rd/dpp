@@ -5,6 +5,12 @@ on:
     branches:
       - main
 
+# Publishing needs the registry token, not repository write access. No
+# concurrency cancellation here: interrupting a partial publish would leave
+# some crates pushed and their version numbers permanently taken.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -12,11 +18,19 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@1.98.0
+
+      - name: Refuse to publish a -dev version
+        run: |
+          if git ls-files '*Cargo.toml' | xargs grep -nE 'version = "[^"]*-dev"'; then
+            echo "::error::a -dev version reached main; the release commit must strip the suffix"
+            exit 1
+          fi
 
       - name: Publish crates
         run: |

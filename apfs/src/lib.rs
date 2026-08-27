@@ -1,4 +1,6 @@
-pub mod btree;
+// Not public: its comparator contract fails silently when broken, so callers
+// are served by the readers below instead. See the module docs.
+pub(crate) mod btree;
 pub mod catalog;
 pub mod error;
 pub mod extents;

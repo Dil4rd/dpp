@@ -1,3 +1,23 @@
+//! APFS B-tree traversal.
+//!
+//! Crate-private on purpose. Both entry points take a comparator that has to
+//! reproduce the tree's on-disk key ordering, and violating that does not fail
+//! loudly: the descent follows the wrong child, or the scan stops early, and
+//! the caller gets `Ok(None)` or a short result set that is indistinguishable
+//! from a genuine absence.
+//!
+//! APFS makes the ordering easy to get wrong. `obj_id_and_type` packs the
+//! record type into the high nibble but sorts by OID first, so it is ordered
+//! neither as the integer it looks like nor as the little-endian bytes it is
+//! stored as. A caller reasoning about that for themselves is a caller who can
+//! silently lose records.
+//!
+//! So the contract stays inside the crate, where it has a handful of call sites
+//! that are all checked against real images. Code outside should use the
+//! higher-level readers — `ApfsVolume`, or the `catalog`, `omap` and
+//! `superblock` helpers — which own their comparators so callers do not have to
+//! think about ordering at all.
+
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{Cursor, Read, Seek};
 
@@ -11,10 +31,18 @@ pub const BTNODE_LEAF: u16 = 0x0002;
 pub const BTNODE_FIXED_KV_SIZE: u16 = 0x0004;
 
 // BTreeInfo flags
+#[expect(
+    dead_code,
+    reason = "mirrors the on-disk layout; parsed and kept so the struct documents the format"
+)]
 pub const BTREE_PHYSICAL: u32 = 0x0001;
 
 /// B-tree node header — 56 bytes after the object header.
 #[derive(Debug, Clone)]
+#[expect(
+    dead_code,
+    reason = "mirrors the on-disk layout; parsed and kept so the struct documents the format"
+)]
 pub struct BTreeNodeHeader {
     pub btn_flags: u16,
     pub btn_level: u16,
@@ -73,6 +101,10 @@ impl BTreeNodeHeader {
 
 /// BTreeInfo — 40 bytes at the end of a root node (before the footer).
 #[derive(Debug, Clone)]
+#[expect(
+    dead_code,
+    reason = "mirrors the on-disk layout; parsed and kept so the struct documents the format"
+)]
 pub struct BTreeInfo {
     pub bt_fixed: BTreeInfoFixed,
     pub bt_longest_key: u32,
@@ -82,6 +114,10 @@ pub struct BTreeInfo {
 }
 
 #[derive(Debug, Clone)]
+#[expect(
+    dead_code,
+    reason = "mirrors the on-disk layout; parsed and kept so the struct documents the format"
+)]
 pub struct BTreeInfoFixed {
     pub bt_flags: u32,
     pub bt_node_size: u32,
@@ -132,6 +168,10 @@ pub struct TocEntry {
 
 /// A parsed APFS B-tree node with extracted key-value pairs.
 pub struct BTreeNode {
+    #[expect(
+        dead_code,
+        reason = "mirrors the on-disk layout; parsed and kept so the struct documents the format"
+    )]
     pub header: ObjectHeader,
     pub node_header: BTreeNodeHeader,
     pub toc: Vec<TocEntry>,

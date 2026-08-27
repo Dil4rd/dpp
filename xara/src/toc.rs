@@ -56,12 +56,12 @@ pub struct XarFile {
 /// Parse the TOC from a XAR archive.
 /// Returns (files, heap_offset).
 pub fn parse_toc<R: Read>(reader: &mut R, header: &XarHeader) -> Result<(Vec<XarFile>, u64)> {
-    let expected_len = usize::try_from(header.toc_uncompressed_len)
-        .map_err(|_| XarError::InvalidToc("declared uncompressed TOC length does not fit in memory".to_string()))?;
-    let decode_limit = header
-        .toc_uncompressed_len
-        .checked_add(1)
-        .ok_or_else(|| XarError::InvalidToc("declared uncompressed TOC length is too large".to_string()))?;
+    let expected_len = usize::try_from(header.toc_uncompressed_len).map_err(|_| {
+        XarError::InvalidToc("declared uncompressed TOC length does not fit in memory".to_string())
+    })?;
+    let decode_limit = header.toc_uncompressed_len.checked_add(1).ok_or_else(|| {
+        XarError::InvalidToc("declared uncompressed TOC length is too large".to_string())
+    })?;
 
     // Bound the decoder to the declared TOC extent so buffering cannot consume
     // heap bytes. Drain any unused bytes to leave the reader at the heap.
@@ -90,7 +90,9 @@ pub fn parse_toc<R: Read>(reader: &mut R, header: &XarHeader) -> Result<(Vec<Xar
     let files = parse_toc_xml(&xml_data)?;
     let heap_offset = u64::from(header.header_size)
         .checked_add(header.toc_compressed_len)
-        .ok_or_else(|| XarError::InvalidToc("TOC extent overflows the archive address space".to_string()))?;
+        .ok_or_else(|| {
+            XarError::InvalidToc("TOC extent overflows the archive address space".to_string())
+        })?;
 
     Ok((files, heap_offset))
 }
@@ -298,7 +300,10 @@ fn attribute_value(
             .map_err(|error| XarError::XmlParse(format!("invalid XML attribute: {error}")))?;
         if attribute.key.as_ref() == name {
             if value.is_some() {
-                return Err(XarError::XmlParse(format!("duplicate XML attribute {:?}", String::from_utf8_lossy(name))));
+                return Err(XarError::XmlParse(format!(
+                    "duplicate XML attribute {:?}",
+                    String::from_utf8_lossy(name)
+                )));
             }
             let decoded = attribute
                 .decode_and_unescape_value(reader.decoder())
@@ -346,9 +351,13 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         ElementContext::Toc
                     }
                     b"xar" | b"toc" => {
-                        return Err(XarError::XmlParse("duplicate or misplaced XAR document element".to_string()));
+                        return Err(XarError::XmlParse(
+                            "duplicate or misplaced XAR document element".to_string(),
+                        ));
                     }
-                    b"file" if matches!(parent, Some(ElementContext::Toc | ElementContext::File)) => {
+                    b"file"
+                        if matches!(parent, Some(ElementContext::Toc | ElementContext::File)) =>
+                    {
                         let id = match attribute_value(&reader, e, b"id")? {
                             Some(value) => parse_u64_field("file id", &value)?,
                             None => 0,
@@ -416,13 +425,17 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                     }
                     b"encoding" if parent == Some(ElementContext::FileData) => {
                         let style = attribute_value(&reader, e, b"style")?.ok_or_else(|| {
-                            XarError::XmlParse("file data <encoding> is missing its style attribute".to_string())
+                            XarError::XmlParse(
+                                "file data <encoding> is missing its style attribute".to_string(),
+                            )
                         })?;
                         current_file(&mut stack)?.assign_encoding(style)?;
                         ElementContext::Other
                     }
                     _ if parent.is_none() => {
-                        return Err(XarError::XmlParse("the TOC document root must be <xar>".to_string()));
+                        return Err(XarError::XmlParse(
+                            "the TOC document root must be <xar>".to_string(),
+                        ));
                     }
                     _ => ElementContext::Other,
                 };
@@ -441,10 +454,16 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         None
                     }
                     b"xar" | b"toc" => {
-                        return Err(XarError::XmlParse("duplicate or misplaced XAR document element".to_string()));
+                        return Err(XarError::XmlParse(
+                            "duplicate or misplaced XAR document element".to_string(),
+                        ));
                     }
-                    b"file" if matches!(parent, Some(ElementContext::Toc | ElementContext::File)) => {
-                        return Err(XarError::XmlParse("empty <file> is missing required metadata".to_string()));
+                    b"file"
+                        if matches!(parent, Some(ElementContext::Toc | ElementContext::File)) =>
+                    {
+                        return Err(XarError::XmlParse(
+                            "empty <file> is missing required metadata".to_string(),
+                        ));
                     }
                     b"data" if parent == Some(ElementContext::File) => {
                         return Err(XarError::XmlParse(
@@ -471,13 +490,17 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                     }
                     b"encoding" if parent == Some(ElementContext::FileData) => {
                         let style = attribute_value(&reader, e, b"style")?.ok_or_else(|| {
-                            XarError::XmlParse("file data <encoding> is missing its style attribute".to_string())
+                            XarError::XmlParse(
+                                "file data <encoding> is missing its style attribute".to_string(),
+                            )
                         })?;
                         current_file(&mut stack)?.assign_encoding(style)?;
                         None
                     }
                     _ if parent.is_none() => {
-                        return Err(XarError::XmlParse("the TOC document root must be <xar>".to_string()));
+                        return Err(XarError::XmlParse(
+                            "the TOC document root must be <xar>".to_string(),
+                        ));
                     }
                     _ => None,
                 };
@@ -528,7 +551,9 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                             Some("symlink") => XarFileType::Symlink,
                             Some("file") => XarFileType::File,
                             None => {
-                                return Err(XarError::XmlParse("file is missing a direct <type>".to_string()));
+                                return Err(XarError::XmlParse(
+                                    "file is missing a direct <type>".to_string(),
+                                ));
                             }
                             Some(other) => {
                                 return Err(XarError::XmlParse(format!(
@@ -540,7 +565,9 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                             XarFileType::Symlink => match builder.link {
                                 Some(link) if !link.is_empty() => Some(link),
                                 _ => {
-                                    return Err(XarError::XmlParse("symlink is missing a non-empty direct <link>".to_string()));
+                                    return Err(XarError::XmlParse(
+                                        "symlink is missing a non-empty direct <link>".to_string(),
+                                    ));
                                 }
                             },
                             XarFileType::File | XarFileType::Directory => None,
@@ -574,7 +601,9 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                     return Err(XarError::XmlParse("unexpected end of TOC XML".to_string()));
                 }
                 if !seen_xar || !seen_toc {
-                    return Err(XarError::XmlParse("TOC XML must contain one <xar>/<toc> document".to_string()));
+                    return Err(XarError::XmlParse(
+                        "TOC XML must contain one <xar>/<toc> document".to_string(),
+                    ));
                 }
                 break;
             }
@@ -610,7 +639,9 @@ fn resolved_file_path(files: &[XarFile], index: usize) -> Result<String> {
     let mut remaining = files.len().saturating_add(1);
     while let Some(file_index) = current {
         if remaining == 0 {
-            return Err(XarError::XmlParse("cycle in XAR file parent graph".to_string()));
+            return Err(XarError::XmlParse(
+                "cycle in XAR file parent graph".to_string(),
+            ));
         }
         remaining -= 1;
         let file = files
@@ -900,7 +931,13 @@ mod tests {
 </file></toc></xar>"#;
 
         let files = parse_toc_xml(xml).unwrap();
-        assert_eq!(files.iter().map(|file| file.path.as_str()).collect::<Vec<_>>(), ["parent/child/leaf", "parent/child", "parent"]);
+        assert_eq!(
+            files
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<Vec<_>>(),
+            ["parent/child/leaf", "parent/child", "parent"]
+        );
     }
 
     #[test]
@@ -936,7 +973,11 @@ mod tests {
         ];
 
         for xml in cases {
-            assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))), "accepted malformed XML: {}", String::from_utf8_lossy(xml));
+            assert!(
+                matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))),
+                "accepted malformed XML: {}",
+                String::from_utf8_lossy(xml)
+            );
         }
     }
 

@@ -167,8 +167,10 @@ pub fn compare_case_insensitive(a: &[u16], b: &[u16]) -> std::cmp::Ordering {
 /// Convert a UTF-16BE byte slice to a `Vec<u16>` of code points
 pub fn utf16be_to_u16(bytes: &[u8]) -> Vec<u16> {
     bytes
-        .chunks_exact(2)
-        .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|chunk| u16::from_be_bytes(*chunk))
         .collect()
 }
 

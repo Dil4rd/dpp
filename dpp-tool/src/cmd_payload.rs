@@ -348,21 +348,9 @@ fn find(
 
             if let Some(tf) = type_filter {
                 match tf {
-                    "f" => {
-                        if e.is_dir || e.is_symlink {
-                            return false;
-                        }
-                    }
-                    "d" => {
-                        if !e.is_dir {
-                            return false;
-                        }
-                    }
-                    "l" => {
-                        if !e.is_symlink {
-                            return false;
-                        }
-                    }
+                    "f" if e.is_dir || e.is_symlink => return false,
+                    "d" if !e.is_dir => return false,
+                    "l" if !e.is_symlink => return false,
                     _ => {}
                 }
             }

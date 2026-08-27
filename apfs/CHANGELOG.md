@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking:** the `btree` module is no longer public. Its comparator contract fails silently when broken, so callers are served by `ApfsVolume` and the `catalog`, `omap` and `superblock` helpers, which own their comparators
 - `btree_lookup` documents the ordering contract its comparator has to satisfy. Debug builds now panic when a comparator disagrees with a node's on-disk key order, instead of silently reporting a miss for a key that is present
 
 ### Fixed

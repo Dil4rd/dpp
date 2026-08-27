@@ -318,13 +318,7 @@ pub fn list_directory<R: Read + Seek>(
     block_size: u32,
     parent_oid: u64,
 ) -> Result<Vec<DirEntry>> {
-    // Catalog keys are sorted by OID first, then type within the same OID.
-    let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
-        match decode_catalog_key(key) {
-            Ok((oid, j_type)) => compare_catalog_keys(oid, j_type, parent_oid, J_TYPE_DIR_REC),
-            Err(_) => std::cmp::Ordering::Less,
-        }
-    };
+    let compare_fn = catalog_key(parent_oid, J_TYPE_DIR_REC);
 
     let entries = btree::btree_scan(
         reader,
@@ -382,12 +376,7 @@ pub fn lookup_inode<R: Read + Seek>(
     block_size: u32,
     oid: u64,
 ) -> Result<InodeVal> {
-    let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
-        match decode_catalog_key(key) {
-            Ok((key_oid, key_type)) => compare_catalog_keys(key_oid, key_type, oid, J_TYPE_INODE),
-            Err(_) => std::cmp::Ordering::Less,
-        }
-    };
+    let compare_fn = catalog_key(oid, J_TYPE_INODE);
 
     let val = btree::btree_lookup(
         reader,
@@ -413,12 +402,7 @@ pub fn lookup_extents<R: Read + Seek>(
     block_size: u32,
     file_oid: u64,
 ) -> Result<Vec<FileExtentVal>> {
-    let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
-        match decode_catalog_key(key) {
-            Ok((oid, j_type)) => compare_catalog_keys(oid, j_type, file_oid, J_TYPE_FILE_EXTENT),
-            Err(_) => std::cmp::Ordering::Less,
-        }
-    };
+    let compare_fn = catalog_key(file_oid, J_TYPE_FILE_EXTENT);
 
     let entries = btree::btree_scan(
         reader,
@@ -445,10 +429,7 @@ pub fn lookup_extents<R: Read + Seek>(
 /// `name_len` field, so the tie-break skips it rather than comparing key bytes
 /// straight through.
 fn compare_xattr_key(key: &[u8], oid: u64, name_with_nul: &[u8]) -> std::cmp::Ordering {
-    let Ok((key_oid, key_type)) = decode_catalog_key(key) else {
-        return std::cmp::Ordering::Less;
-    };
-    match compare_catalog_keys(key_oid, key_type, oid, J_TYPE_XATTR) {
+    match compare_key_to(key, oid, J_TYPE_XATTR) {
         std::cmp::Ordering::Equal => key
             .get(XATTR_KEY_NAME_OFFSET..)
             .unwrap_or(&[])
@@ -519,6 +500,26 @@ fn parse_xattr_value(value: &[u8]) -> Result<Vec<u8>> {
     Ok(value[4..end].to_vec())
 }
 
+/// Order an on-disk catalog key against the `(oid, type)` being searched for.
+///
+/// An undecodable key orders `Less`, so a damaged record makes the scan keep
+/// going rather than terminate early and report a miss.
+fn compare_key_to(key: &[u8], oid: u64, j_type: u8) -> std::cmp::Ordering {
+    match decode_catalog_key(key) {
+        Ok((key_oid, key_type)) => compare_catalog_keys(key_oid, key_type, oid, j_type),
+        Err(_) => std::cmp::Ordering::Less,
+    }
+}
+
+/// Comparator selecting the record with this `(oid, type)`.
+///
+/// Used for both `btree_lookup`, which wants the single matching record, and
+/// `btree_scan`, which reads the same ordering as a range and collects the run
+/// of `Equal` keys.
+fn catalog_key(oid: u64, j_type: u8) -> impl Fn(&[u8]) -> std::cmp::Ordering {
+    move |key| compare_key_to(key, oid, j_type)
+}
+
 /// Resolve a path like "/Applications/Upscayl.app/Contents/Info.plist" to its (OID, InodeVal).
 pub fn resolve_path<R: Read + Seek>(
     reader: &mut R,
@@ -576,12 +577,7 @@ fn lookup_drec<R: Read + Seek>(
     name: &str,
 ) -> Result<DrecVal> {
     // Scan all DRECs for this parent and find the one with matching name
-    let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
-        match decode_catalog_key(key) {
-            Ok((oid, j_type)) => compare_catalog_keys(oid, j_type, parent_oid, J_TYPE_DIR_REC),
-            Err(_) => std::cmp::Ordering::Less,
-        }
-    };
+    let compare_fn = catalog_key(parent_oid, J_TYPE_DIR_REC);
 
     let entries = btree::btree_scan(
         reader,

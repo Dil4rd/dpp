@@ -30,7 +30,15 @@ cargo test -p pbzx --features parallel
 cargo test -p dpp --features parallel
 ```
 
-`dpp-python` is excluded because it requires Python headers; it is validated separately by the PyPI publish workflow.
+If a change touches a format parser, also run the fixture tests. They are `#[ignore]`d, so neither `cargo test` nor CI runs them — a green pipeline says nothing about whether real images still parse:
+
+```bash
+cargo test -p apfs -- --ignored     # likewise hfsplus, udif, dpp
+```
+
+`dpp-python` is excluded from checks 3 and 4 because it requires Python headers; it is validated separately by the PyPI publish workflow. It is **not** excluded from clippy — do not add `--exclude dpp-python` to check 2. Its exhaustive `ApfsError` match is what catches a new error variant that has no Python mapping.
+
+The toolchain is pinned in `rust-toolchain.toml`, so these commands use the same compiler as CI.
 
 ## Coding Guidelines
 

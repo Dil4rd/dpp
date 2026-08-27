@@ -319,23 +319,10 @@ pub fn list_directory<R: Read + Seek>(
     parent_oid: u64,
 ) -> Result<Vec<DirEntry>> {
     // Catalog keys are sorted by OID first, then type within the same OID.
-    let range_fn = |key: &[u8]| -> Option<bool> {
+    let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
         match decode_catalog_key(key) {
-            Ok((oid, j_type)) => {
-                match compare_catalog_keys(oid, j_type, parent_oid, J_TYPE_DIR_REC) {
-                    std::cmp::Ordering::Less => Some(false), // before target, keep scanning
-                    std::cmp::Ordering::Equal => Some(true), // match (DIR_REC entries have extra name data but oid+type matches)
-                    std::cmp::Ordering::Greater => {
-                        // For DIR_REC matching: same OID with type > DIR_REC, or higher OID
-                        if oid == parent_oid && j_type == J_TYPE_DIR_REC {
-                            Some(true) // shouldn't happen, but include
-                        } else {
-                            None // past our target, stop
-                        }
-                    }
-                }
-            }
-            Err(_) => Some(false),
+            Ok((oid, j_type)) => compare_catalog_keys(oid, j_type, parent_oid, J_TYPE_DIR_REC),
+            Err(_) => std::cmp::Ordering::Less,
         }
     };
 
@@ -345,7 +332,7 @@ pub fn list_directory<R: Read + Seek>(
         block_size,
         0,
         0, // variable-size keys and values
-        &range_fn,
+        &compare_fn,
         Some(omap_root),
     )?;
 
@@ -426,20 +413,10 @@ pub fn lookup_extents<R: Read + Seek>(
     block_size: u32,
     file_oid: u64,
 ) -> Result<Vec<FileExtentVal>> {
-    let range_fn = |key: &[u8]| -> Option<bool> {
+    let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
         match decode_catalog_key(key) {
-            Ok((oid, j_type)) => {
-                if oid == file_oid && j_type == J_TYPE_FILE_EXTENT {
-                    Some(true) // match
-                } else {
-                    match compare_catalog_keys(oid, j_type, file_oid, J_TYPE_FILE_EXTENT) {
-                        std::cmp::Ordering::Less => Some(false), // before target, skip
-                        std::cmp::Ordering::Greater => None,     // past target, stop
-                        std::cmp::Ordering::Equal => Some(true), // shouldn't reach here
-                    }
-                }
-            }
-            Err(_) => Some(false),
+            Ok((oid, j_type)) => compare_catalog_keys(oid, j_type, file_oid, J_TYPE_FILE_EXTENT),
+            Err(_) => std::cmp::Ordering::Less,
         }
     };
 
@@ -449,7 +426,7 @@ pub fn lookup_extents<R: Read + Seek>(
         block_size,
         0,
         0,
-        &range_fn,
+        &compare_fn,
         Some(omap_root),
     )?;
 
@@ -599,20 +576,10 @@ fn lookup_drec<R: Read + Seek>(
     name: &str,
 ) -> Result<DrecVal> {
     // Scan all DRECs for this parent and find the one with matching name
-    let range_fn = |key: &[u8]| -> Option<bool> {
+    let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
         match decode_catalog_key(key) {
-            Ok((oid, j_type)) => {
-                if oid == parent_oid && j_type == J_TYPE_DIR_REC {
-                    Some(true)
-                } else {
-                    match compare_catalog_keys(oid, j_type, parent_oid, J_TYPE_DIR_REC) {
-                        std::cmp::Ordering::Less => Some(false),
-                        std::cmp::Ordering::Greater => None,
-                        std::cmp::Ordering::Equal => Some(true),
-                    }
-                }
-            }
-            Err(_) => Some(false),
+            Ok((oid, j_type)) => compare_catalog_keys(oid, j_type, parent_oid, J_TYPE_DIR_REC),
+            Err(_) => std::cmp::Ordering::Less,
         }
     };
 
@@ -622,7 +589,7 @@ fn lookup_drec<R: Read + Seek>(
         block_size,
         0,
         0,
-        &range_fn,
+        &compare_fn,
         Some(omap_root),
     )?;
 
@@ -659,6 +626,28 @@ mod tests {
     use crate::omap as omap_mod;
     use crate::superblock;
     use std::io::BufReader;
+
+    #[test]
+    fn catalog_keys_compare_equal_only_when_oid_and_type_match() {
+        // The scan predicates depend on this: a record is in range exactly when
+        // the comparison is Equal, so they need no separate oid/type equality
+        // check alongside the ordering.
+        for oid_a in 0..4u64 {
+            for type_a in 0..4u8 {
+                for oid_b in 0..4u64 {
+                    for type_b in 0..4u8 {
+                        let equal = compare_catalog_keys(oid_a, type_a, oid_b, type_b)
+                            == std::cmp::Ordering::Equal;
+                        assert_eq!(
+                            equal,
+                            oid_a == oid_b && type_a == type_b,
+                            "({oid_a},{type_a}) vs ({oid_b},{type_b})"
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn parses_xattr_value_header() {

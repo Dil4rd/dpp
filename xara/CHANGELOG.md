@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Scope file metadata and payload descriptors to their exact TOC ancestry
 - Preserve complete file names and symlink targets across text, CDATA, and comments
+- Bound heap entry reads and reject offset or decoded-size inconsistencies
 
 ## [0.3.2] - 2026-04-12
 

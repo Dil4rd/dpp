@@ -1,7 +1,7 @@
 use flate2::read::ZlibDecoder;
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
-use std::io::Read;
+use std::io::{self, Read};
 
 use crate::error::{Result, XarError};
 use crate::header::XarHeader;
@@ -56,23 +56,48 @@ pub struct XarFile {
 /// Parse the TOC from a XAR archive.
 /// Returns (files, heap_offset).
 pub fn parse_toc<R: Read>(reader: &mut R, header: &XarHeader) -> Result<(Vec<XarFile>, u64)> {
-    let mut compressed = vec![0u8; header.toc_compressed_len as usize];
-    reader.read_exact(&mut compressed)?;
+    let expected_len = usize::try_from(header.toc_uncompressed_len)
+        .map_err(|_| XarError::InvalidToc("declared uncompressed TOC length does not fit in memory".to_string()))?;
+    let decode_limit = header
+        .toc_uncompressed_len
+        .checked_add(1)
+        .ok_or_else(|| XarError::InvalidToc("declared uncompressed TOC length is too large".to_string()))?;
 
-    let mut decoder = ZlibDecoder::new(&compressed[..]);
-    let mut xml_data = Vec::with_capacity(header.toc_uncompressed_len as usize);
+    // Bound the decoder to the declared TOC extent so buffering cannot consume
+    // heap bytes. Drain any unused bytes to leave the reader at the heap.
+    let mut decoder = ZlibDecoder::new(reader.take(header.toc_compressed_len));
+    let mut xml_data = Vec::new();
     decoder
+        .by_ref()
+        .take(decode_limit)
         .read_to_end(&mut xml_data)
         .map_err(|e| XarError::DecompressionFailed(format!("TOC zlib: {}", e)))?;
+    let mut compressed_extent = decoder.into_inner();
+    io::copy(&mut compressed_extent, &mut io::sink())?;
+    if compressed_extent.limit() != 0 {
+        return Err(XarError::InvalidToc(
+            "archive ended before the declared compressed TOC extent".to_string(),
+        ));
+    }
+    if xml_data.len() != expected_len {
+        return Err(XarError::InvalidToc(format!(
+            "declared uncompressed TOC length {} does not match decoded length {}",
+            header.toc_uncompressed_len,
+            xml_data.len()
+        )));
+    }
 
     let files = parse_toc_xml(&xml_data)?;
-    let heap_offset = header.header_size as u64 + header.toc_compressed_len;
+    let heap_offset = u64::from(header.header_size)
+        .checked_add(header.toc_compressed_len)
+        .ok_or_else(|| XarError::InvalidToc("TOC extent overflows the archive address space".to_string()))?;
 
     Ok((files, heap_offset))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ElementContext {
+    Xar,
     Toc,
     File,
     FileData,
@@ -89,6 +114,7 @@ enum CaptureField {
     DataSize,
     ExtractedChecksum,
     ArchivedChecksum,
+    Encoding,
 }
 
 struct TextCapture {
@@ -140,8 +166,7 @@ struct FileBuilder {
     children: Vec<usize>,
     data: Option<FileDataBuilder>,
     capture: Option<TextCapture>,
-    /// Path components from parent files on the stack.
-    parent_path: String,
+    assigned_fields: Vec<CaptureField>,
 }
 
 impl FileBuilder {
@@ -173,6 +198,13 @@ impl FileBuilder {
     }
 
     fn assign_text(&mut self, field: CaptureField, value: String) -> Result<()> {
+        if self.assigned_fields.contains(&field) {
+            return Err(XarError::XmlParse(format!(
+                "duplicate direct <{}> field in <file>",
+                field.element_name()
+            )));
+        }
+        self.assigned_fields.push(field);
         match field {
             CaptureField::Name => self.name = value,
             CaptureField::FileType => self.file_type = Some(value.trim().to_string()),
@@ -192,7 +224,19 @@ impl FileBuilder {
             CaptureField::ArchivedChecksum => {
                 self.data_mut()?.archived_checksum = Some(value.trim().to_string());
             }
+            CaptureField::Encoding => unreachable!("encoding is assigned from its style attribute"),
         }
+        Ok(())
+    }
+
+    fn assign_encoding(&mut self, value: String) -> Result<()> {
+        if self.assigned_fields.contains(&CaptureField::Encoding) {
+            return Err(XarError::XmlParse(
+                "duplicate direct <encoding> field in file <data>".to_string(),
+            ));
+        }
+        self.assigned_fields.push(CaptureField::Encoding);
+        self.data_mut()?.encoding = Some(value);
         Ok(())
     }
 
@@ -202,6 +246,22 @@ impl FileBuilder {
                 "file data field appeared outside the direct <file>/<data> block".to_string(),
             )
         })
+    }
+}
+
+impl CaptureField {
+    fn element_name(self) -> &'static str {
+        match self {
+            Self::Name => "name",
+            Self::FileType => "type",
+            Self::Link => "link",
+            Self::DataOffset => "offset",
+            Self::DataLength => "length",
+            Self::DataSize => "size",
+            Self::ExtractedChecksum => "extracted-checksum",
+            Self::ArchivedChecksum => "archived-checksum",
+            Self::Encoding => "encoding",
+        }
     }
 }
 
@@ -232,19 +292,23 @@ fn attribute_value(
     element: &BytesStart<'_>,
     name: &[u8],
 ) -> Result<Option<String>> {
+    let mut value = None;
     for attribute in element.attributes() {
         let attribute = attribute
             .map_err(|error| XarError::XmlParse(format!("invalid XML attribute: {error}")))?;
         if attribute.key.as_ref() == name {
-            let value = attribute
+            if value.is_some() {
+                return Err(XarError::XmlParse(format!("duplicate XML attribute {:?}", String::from_utf8_lossy(name))));
+            }
+            let decoded = attribute
                 .decode_and_unescape_value(reader.decoder())
                 .map_err(|error| {
                     XarError::XmlParse(format!("invalid XML attribute value: {error}"))
                 })?;
-            return Ok(Some(value.into_owned()));
+            value = Some(decoded.into_owned());
         }
     }
-    Ok(None)
+    Ok(value)
 }
 
 fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
@@ -253,7 +317,8 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
 
     let mut files: Vec<XarFile> = Vec::new();
     let mut buf = Vec::new();
-    let mut in_toc = false;
+    let mut seen_xar = false;
+    let mut seen_toc = false;
 
     // Stack of files being parsed. Children are nested inside parents in XAR TOC.
     // When </file> is encountered, the file is popped and added to `files`.
@@ -272,30 +337,21 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                 let parent = element_stack.last().copied();
                 let depth = element_stack.len();
                 let context = match e.name().as_ref() {
-                    b"toc" => {
-                        in_toc = true;
+                    b"xar" if parent.is_none() && !seen_xar => {
+                        seen_xar = true;
+                        ElementContext::Xar
+                    }
+                    b"toc" if parent == Some(ElementContext::Xar) && !seen_toc => {
+                        seen_toc = true;
                         ElementContext::Toc
                     }
-                    b"file"
-                        if in_toc
-                            && matches!(
-                                parent,
-                                Some(ElementContext::Toc | ElementContext::File)
-                            ) =>
-                    {
+                    b"xar" | b"toc" => {
+                        return Err(XarError::XmlParse("duplicate or misplaced XAR document element".to_string()));
+                    }
+                    b"file" if matches!(parent, Some(ElementContext::Toc | ElementContext::File)) => {
                         let id = match attribute_value(&reader, e, b"id")? {
                             Some(value) => parse_u64_field("file id", &value)?,
                             None => 0,
-                        };
-
-                        let parent_path = if let Some(parent) = stack.last() {
-                            if parent.parent_path.is_empty() {
-                                parent.name.clone()
-                            } else {
-                                format!("{}/{}", parent.parent_path, parent.name)
-                            }
-                        } else {
-                            String::new()
                         };
 
                         stack.push(FileBuilder {
@@ -306,7 +362,7 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                             children: Vec::new(),
                             data: None,
                             capture: None,
-                            parent_path,
+                            assigned_fields: Vec::new(),
                         });
                         ElementContext::File
                     }
@@ -359,10 +415,14 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         ElementContext::Other
                     }
                     b"encoding" if parent == Some(ElementContext::FileData) => {
-                        if let Some(style) = attribute_value(&reader, e, b"style")? {
-                            current_file(&mut stack)?.data_mut()?.encoding = Some(style);
-                        }
+                        let style = attribute_value(&reader, e, b"style")?.ok_or_else(|| {
+                            XarError::XmlParse("file data <encoding> is missing its style attribute".to_string())
+                        })?;
+                        current_file(&mut stack)?.assign_encoding(style)?;
                         ElementContext::Other
+                    }
+                    _ if parent.is_none() => {
+                        return Err(XarError::XmlParse("the TOC document root must be <xar>".to_string()));
                     }
                     _ => ElementContext::Other,
                 };
@@ -372,6 +432,20 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                 ensure_no_active_capture(&stack)?;
                 let parent = element_stack.last().copied();
                 let field = match e.name().as_ref() {
+                    b"xar" if parent.is_none() && !seen_xar => {
+                        seen_xar = true;
+                        None
+                    }
+                    b"toc" if parent == Some(ElementContext::Xar) && !seen_toc => {
+                        seen_toc = true;
+                        None
+                    }
+                    b"xar" | b"toc" => {
+                        return Err(XarError::XmlParse("duplicate or misplaced XAR document element".to_string()));
+                    }
+                    b"file" if matches!(parent, Some(ElementContext::Toc | ElementContext::File)) => {
+                        return Err(XarError::XmlParse("empty <file> is missing required metadata".to_string()));
+                    }
                     b"data" if parent == Some(ElementContext::File) => {
                         return Err(XarError::XmlParse(
                             "file <data> is missing <offset>, <length>, and <size>".to_string(),
@@ -396,10 +470,14 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         Some(CaptureField::ArchivedChecksum)
                     }
                     b"encoding" if parent == Some(ElementContext::FileData) => {
-                        if let Some(style) = attribute_value(&reader, e, b"style")? {
-                            current_file(&mut stack)?.data_mut()?.encoding = Some(style);
-                        }
+                        let style = attribute_value(&reader, e, b"style")?.ok_or_else(|| {
+                            XarError::XmlParse("file data <encoding> is missing its style attribute".to_string())
+                        })?;
+                        current_file(&mut stack)?.assign_encoding(style)?;
                         None
+                    }
+                    _ if parent.is_none() => {
+                        return Err(XarError::XmlParse("the TOC document root must be <xar>".to_string()));
                     }
                     _ => None,
                 };
@@ -434,28 +512,40 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                     XarError::XmlParse("closing element without an open element".to_string())
                 })?;
                 match context {
-                    ElementContext::Toc => in_toc = false,
+                    ElementContext::Xar | ElementContext::Toc => {}
                     ElementContext::File => {
                         let builder = stack.pop().ok_or_else(|| {
                             XarError::XmlParse("closing <file> without a current file".to_string())
                         })?;
+                        if builder.name.is_empty() {
+                            return Err(XarError::XmlParse(
+                                "file is missing a non-empty direct <name>".to_string(),
+                            ));
+                        }
 
                         let file_type = match builder.file_type.as_deref() {
                             Some("directory") => XarFileType::Directory,
                             Some("symlink") => XarFileType::Symlink,
-                            _ => XarFileType::File,
+                            Some("file") => XarFileType::File,
+                            None => {
+                                return Err(XarError::XmlParse("file is missing a direct <type>".to_string()));
+                            }
+                            Some(other) => {
+                                return Err(XarError::XmlParse(format!(
+                                    "unsupported file <type> value {other:?}"
+                                )));
+                            }
                         };
                         let link = match file_type {
-                            XarFileType::Symlink => builder.link,
+                            XarFileType::Symlink => match builder.link {
+                                Some(link) if !link.is_empty() => Some(link),
+                                _ => {
+                                    return Err(XarError::XmlParse("symlink is missing a non-empty direct <link>".to_string()));
+                                }
+                            },
                             XarFileType::File | XarFileType::Directory => None,
                         };
                         let data = builder.data.map(FileDataBuilder::build).transpose()?;
-
-                        let path = if builder.parent_path.is_empty() {
-                            builder.name.clone()
-                        } else {
-                            format!("{}/{}", builder.parent_path, builder.name)
-                        };
 
                         let file_idx = files.len();
                         if let Some(parent) = stack.last_mut() {
@@ -467,7 +557,7 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         files.push(XarFile {
                             id: builder.id,
                             name: builder.name,
-                            path,
+                            path: String::new(),
                             file_type,
                             link,
                             data,
@@ -482,6 +572,9 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
             Ok(Event::Eof) => {
                 if !element_stack.is_empty() || !stack.is_empty() {
                     return Err(XarError::XmlParse("unexpected end of TOC XML".to_string()));
+                }
+                if !seen_xar || !seen_toc {
+                    return Err(XarError::XmlParse("TOC XML must contain one <xar>/<toc> document".to_string()));
                 }
                 break;
             }
@@ -501,7 +594,33 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
         }
     }
 
+    let paths = (0..files.len())
+        .map(|index| resolved_file_path(&files, index))
+        .collect::<Result<Vec<_>>>()?;
+    for (file, path) in files.iter_mut().zip(paths) {
+        file.path = path;
+    }
+
     Ok(files)
+}
+
+fn resolved_file_path(files: &[XarFile], index: usize) -> Result<String> {
+    let mut components = Vec::new();
+    let mut current = Some(index);
+    let mut remaining = files.len().saturating_add(1);
+    while let Some(file_index) = current {
+        if remaining == 0 {
+            return Err(XarError::XmlParse("cycle in XAR file parent graph".to_string()));
+        }
+        remaining -= 1;
+        let file = files
+            .get(file_index)
+            .ok_or_else(|| XarError::XmlParse("invalid XAR file parent index".to_string()))?;
+        components.push(file.name.as_str());
+        current = file.parent;
+    }
+    components.reverse();
+    Ok(components.join("/"))
 }
 
 /// Find a file by path in the flat file list
@@ -770,5 +889,66 @@ mod tests {
   <type>file</type><name>payload</name><data></data><data></data>
 </file></toc></xar>"#;
         assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
+    }
+
+    #[test]
+    fn paths_do_not_depend_on_parent_name_element_order() {
+        let xml = br#"<xar><toc><file id="1"><type>directory</type>
+  <file id="2"><type>directory</type>
+    <file id="3"><type>file</type><name>leaf</name></file><name>child</name>
+  </file><name>parent</name>
+</file></toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        assert_eq!(files.iter().map(|file| file.path.as_str()).collect::<Vec<_>>(), ["parent/child/leaf", "parent/child", "parent"]);
+    }
+
+    #[test]
+    fn duplicate_scalar_fields_and_unknown_types_are_rejected() {
+        let cases: &[&[u8]] = &[
+            br#"<xar><toc><file><type>file</type><name>first</name><name>second</name></file></toc></xar>"#,
+            br#"<xar><toc><file><type>file</type><type>symlink</type><name>entry</name></file></toc></xar>"#,
+            br#"<xar><toc><file><type>file</type><name>entry</name><data><offset>0</offset><offset>1</offset><length>0</length><size>0</size></data></file></toc></xar>"#,
+            br#"<xar><toc><file><type>file</type><name>entry</name><data><offset>0</offset><length>0</length><size>0</size><encoding style="a"/><encoding style="b"/></data></file></toc></xar>"#,
+            br#"<xar><toc><file><type>file</type><name>entry</name><data><offset>0</offset><length>0</length><size>0</size><encoding/></data></file></toc></xar>"#,
+            br#"<xar><toc><file><type>file</type></file></toc></xar>"#,
+            br#"<xar><toc><file><type>file</type><name/></file></toc></xar>"#,
+            br#"<xar><toc><file><type>mystery</type><name>entry</name></file></toc></xar>"#,
+        ];
+
+        for xml in cases {
+            assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
+        }
+    }
+
+    #[test]
+    fn document_structure_and_required_symlink_state_are_rejected_when_malformed() {
+        let cases: &[&[u8]] = &[
+            br#"<toc><file><type>file</type><name>entry</name></file></toc>"#,
+            br#"<xar></xar>"#,
+            br#"<xar><toc/><toc/></xar>"#,
+            br#"<xar><extension><toc/></extension></xar>"#,
+            br#"<xar><toc><file/></toc></xar>"#,
+            br#"<xar><toc><file><name>entry</name></file></toc></xar>"#,
+            br#"<xar><toc><file><type>symlink</type><name>link</name></file></toc></xar>"#,
+            br#"<xar><toc><file><type>symlink</type><name>link</name><link/></file></toc></xar>"#,
+            br#"<xar><toc/></xar><second/>"#,
+        ];
+
+        for xml in cases {
+            assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))), "accepted malformed XML: {}", String::from_utf8_lossy(xml));
+        }
+    }
+
+    #[test]
+    fn duplicate_relevant_attributes_are_rejected() {
+        let cases: &[&[u8]] = &[
+            br#"<xar><toc><file id="1" id="2"><type>file</type><name>entry</name></file></toc></xar>"#,
+            br#"<xar><toc><file><type>file</type><name>entry</name><data><offset>0</offset><length>0</length><size>0</size><encoding style="a" style="b"/></data></file></toc></xar>"#,
+        ];
+
+        for xml in cases {
+            assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
+        }
     }
 }

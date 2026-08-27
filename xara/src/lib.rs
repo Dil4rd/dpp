@@ -231,6 +231,28 @@ mod tests {
     }
 
     #[test]
+    fn test_xar_rejects_declared_toc_length_mismatch() {
+        let toc_xml = br#"<xar><toc></toc></xar>"#;
+        for declared_len in [toc_xml.len() - 1, toc_xml.len() + 1] {
+            let mut xar_buf = build_test_xar(toc_xml, &[]);
+            xar_buf[16..24].copy_from_slice(&u64::try_from(declared_len).unwrap().to_be_bytes());
+            assert!(matches!(XarArchive::open(Cursor::new(&xar_buf)), Err(XarError::InvalidToc(_))));
+        }
+    }
+
+    #[test]
+    fn test_xar_rejects_truncated_declared_toc_extent() {
+        let toc_xml = br#"<xar><toc></toc></xar>"#;
+        let mut xar_buf = build_test_xar(toc_xml, &[]);
+        let declared_len = u64::from_be_bytes(xar_buf[8..16].try_into().unwrap()) + 1;
+        xar_buf[8..16].copy_from_slice(&declared_len.to_be_bytes());
+        assert!(matches!(
+            XarArchive::open(Cursor::new(&xar_buf)),
+            Err(XarError::InvalidToc(_))
+        ));
+    }
+
+    #[test]
     fn test_extract_all() {
         let toc_xml = br#"<?xml version="1.0" encoding="UTF-8"?>
 <xar>
@@ -333,6 +355,7 @@ mod tests {
     <file id="2">
       <name>link.txt</name>
       <type>symlink</type>
+      <link type="file">real.txt</link>
     </file>
   </toc>
 </xar>"#;

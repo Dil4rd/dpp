@@ -398,6 +398,8 @@ pub struct PyXarFile {
     #[pyo3(get)]
     pub file_type: String,
     #[pyo3(get)]
+    pub link: Option<String>,
+    #[pyo3(get)]
     pub size: Option<u64>,
     #[pyo3(get)]
     pub compressed_size: Option<u64>,
@@ -425,9 +427,32 @@ impl From<&dpp::xara::XarFile> for PyXarFile {
             name: f.name.clone(),
             path: f.path.clone(),
             file_type: file_type.to_string(),
+            link: f.link.clone(),
             size: f.data.as_ref().map(|d| d.size),
             compressed_size: f.data.as_ref().map(|d| d.length),
         }
+    }
+}
+
+#[cfg(test)]
+mod xar_file_tests {
+    use super::PyXarFile;
+
+    #[test]
+    fn conversion_preserves_symlink_target() {
+        let source = dpp::xara::XarFile {
+            id: 1,
+            name: "link".to_string(),
+            path: "dir/link".to_string(),
+            file_type: dpp::xara::XarFileType::Symlink,
+            link: Some("../target".to_string()),
+            data: None,
+            children: Vec::new(),
+            parent: None,
+        };
+
+        let converted = PyXarFile::from(&source);
+        assert_eq!(converted.link.as_deref(), Some("../target"));
     }
 }
 

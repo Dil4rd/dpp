@@ -450,12 +450,13 @@ where
     }
 }
 
-/// Scan a B-tree, collecting all key-value pairs where `range_fn` returns true.
+/// Scan a B-tree, collecting every key-value pair whose key orders `Equal`.
 ///
-/// `range_fn` takes key bytes and returns:
-/// - Some(true): include this entry
-/// - Some(false): skip this entry, keep scanning
-/// - None: stop scanning
+/// `compare_fn` is the same comparator [`btree_lookup`] takes, and carries the
+/// same contract: it must reproduce the tree's on-disk ordering. The scan reads
+/// it as a range — `Less` is before the range, `Equal` is in it, and `Greater`
+/// ends the scan — so a comparator that disagrees with the on-disk order
+/// silently truncates the results.
 ///
 /// `omap_root`: Some(block) for virtual B-trees, None for physical.
 pub fn btree_scan<R: Read + Seek, F>(
@@ -464,11 +465,11 @@ pub fn btree_scan<R: Read + Seek, F>(
     block_size: u32,
     fixed_key_size: u32,
     fixed_val_size: u32,
-    range_fn: &F,
+    compare_fn: &F,
     omap_root: Option<u64>,
 ) -> Result<Vec<(Vec<u8>, Vec<u8>)>>
 where
-    F: Fn(&[u8]) -> Option<bool>,
+    F: Fn(&[u8]) -> std::cmp::Ordering,
 {
     let block_data = object::read_block(reader, root_block, block_size)?;
     let node = BTreeNode::parse(&block_data)?;
@@ -497,7 +498,7 @@ where
         omap_root,
     };
     let mut results = Vec::new();
-    btree_scan_node(reader, &node, &params, range_fn, &mut results)?;
+    btree_scan_node(reader, &node, &params, compare_fn, &mut results)?;
     Ok(results)
 }
 
@@ -505,23 +506,26 @@ fn btree_scan_node<R: Read + Seek, F>(
     reader: &mut R,
     node: &BTreeNode,
     params: &BTreeParams,
-    range_fn: &F,
+    compare_fn: &F,
     results: &mut Vec<(Vec<u8>, Vec<u8>)>,
 ) -> Result<bool>
 // returns false if scanning should stop
 where
-    F: Fn(&[u8]) -> Option<bool>,
+    F: Fn(&[u8]) -> std::cmp::Ordering,
 {
     if node.node_header.is_leaf() {
+        #[cfg(debug_assertions)]
+        debug_assert_comparator_matches_node_order(node, params, compare_fn)?;
+
         for i in 0..node.node_header.btn_nkeys as usize {
             let key = node.key(i, params.fixed_key_size)?;
-            match range_fn(key) {
-                Some(true) => {
+            match compare_fn(key) {
+                std::cmp::Ordering::Equal => {
                     let val = node.value(i, params.fixed_val_size)?;
                     results.push((key.to_vec(), val.to_vec()));
                 }
-                Some(false) => continue,
-                None => return Ok(false),
+                std::cmp::Ordering::Less => continue,
+                std::cmp::Ordering::Greater => return Ok(false),
             }
         }
         Ok(true)
@@ -537,7 +541,7 @@ where
             let child_data = object::read_block(reader, child_block, params.block_size)?;
             let child_node = BTreeNode::parse(&child_data)?;
 
-            if !btree_scan_node(reader, &child_node, params, range_fn, results)? {
+            if !btree_scan_node(reader, &child_node, params, compare_fn, results)? {
                 return Ok(false);
             }
         }

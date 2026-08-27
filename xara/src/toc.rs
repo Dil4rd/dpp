@@ -1,6 +1,6 @@
 use flate2::read::ZlibDecoder;
 use quick_xml::Reader;
-use quick_xml::events::Event;
+use quick_xml::events::{BytesStart, Event};
 use std::io::Read;
 
 use crate::error::{Result, XarError};
@@ -71,32 +71,185 @@ pub fn parse_toc<R: Read>(reader: &mut R, header: &XarHeader) -> Result<(Vec<Xar
     Ok((files, heap_offset))
 }
 
-/// Internal state for a file being parsed
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ElementContext {
+    Toc,
+    File,
+    FileData,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CaptureField {
+    Name,
+    FileType,
+    Link,
+    DataOffset,
+    DataLength,
+    DataSize,
+    ExtractedChecksum,
+    ArchivedChecksum,
+}
+
+struct TextCapture {
+    field: CaptureField,
+    depth: usize,
+    value: String,
+}
+
+#[derive(Default)]
+struct FileDataBuilder {
+    offset: Option<u64>,
+    length: Option<u64>,
+    size: Option<u64>,
+    encoding: Option<String>,
+    extracted_checksum: Option<String>,
+    archived_checksum: Option<String>,
+}
+
+impl FileDataBuilder {
+    fn build(self) -> Result<XarFileData> {
+        let offset = self
+            .offset
+            .ok_or_else(|| XarError::XmlParse("file <data> is missing <offset>".to_string()))?;
+        let length = self
+            .length
+            .ok_or_else(|| XarError::XmlParse("file <data> is missing <length>".to_string()))?;
+        let size = self
+            .size
+            .ok_or_else(|| XarError::XmlParse("file <data> is missing <size>".to_string()))?;
+        Ok(XarFileData {
+            offset,
+            length,
+            size,
+            encoding: self
+                .encoding
+                .unwrap_or_else(|| "application/octet-stream".to_string()),
+            extracted_checksum: self.extracted_checksum,
+            archived_checksum: self.archived_checksum,
+        })
+    }
+}
+
+/// Internal state for a file being parsed.
 struct FileBuilder {
     id: u64,
     name: String,
     file_type: Option<String>,
     link: Option<String>,
     children: Vec<usize>,
-    // data fields
-    in_data: bool,
-    data_offset: Option<u64>,
-    data_length: Option<u64>,
-    data_size: Option<u64>,
-    data_encoding: Option<String>,
-    extracted_checksum: Option<String>,
-    archived_checksum: Option<String>,
-    in_extracted_checksum: bool,
-    in_archived_checksum: bool,
-    // current tag being parsed
-    current_tag: String,
-    // path components from parent files on the stack
+    data: Option<FileDataBuilder>,
+    capture: Option<TextCapture>,
+    /// Path components from parent files on the stack.
     parent_path: String,
+}
+
+impl FileBuilder {
+    fn begin_capture(&mut self, field: CaptureField, depth: usize) -> Result<()> {
+        if self.capture.is_some() {
+            return Err(XarError::XmlParse(
+                "nested scalar metadata elements are not supported".to_string(),
+            ));
+        }
+        self.capture = Some(TextCapture {
+            field,
+            depth,
+            value: String::new(),
+        });
+        Ok(())
+    }
+
+    fn append_text(&mut self, text: &str) {
+        if let Some(capture) = &mut self.capture {
+            capture.value.push_str(text);
+        }
+    }
+
+    fn finish_capture(&mut self, depth: usize) -> Result<()> {
+        let Some(capture) = self.capture.take_if(|capture| capture.depth == depth) else {
+            return Ok(());
+        };
+        self.assign_text(capture.field, capture.value)
+    }
+
+    fn assign_text(&mut self, field: CaptureField, value: String) -> Result<()> {
+        match field {
+            CaptureField::Name => self.name = value,
+            CaptureField::FileType => self.file_type = Some(value.trim().to_string()),
+            CaptureField::Link => self.link = Some(value),
+            CaptureField::DataOffset => {
+                self.data_mut()?.offset = Some(parse_u64_field("offset", &value)?);
+            }
+            CaptureField::DataLength => {
+                self.data_mut()?.length = Some(parse_u64_field("length", &value)?);
+            }
+            CaptureField::DataSize => {
+                self.data_mut()?.size = Some(parse_u64_field("size", &value)?);
+            }
+            CaptureField::ExtractedChecksum => {
+                self.data_mut()?.extracted_checksum = Some(value.trim().to_string());
+            }
+            CaptureField::ArchivedChecksum => {
+                self.data_mut()?.archived_checksum = Some(value.trim().to_string());
+            }
+        }
+        Ok(())
+    }
+
+    fn data_mut(&mut self) -> Result<&mut FileDataBuilder> {
+        self.data.as_mut().ok_or_else(|| {
+            XarError::XmlParse(
+                "file data field appeared outside the direct <file>/<data> block".to_string(),
+            )
+        })
+    }
+}
+
+fn parse_u64_field(name: &str, value: &str) -> Result<u64> {
+    value
+        .trim()
+        .parse()
+        .map_err(|error| XarError::XmlParse(format!("invalid <{name}> value {value:?}: {error}")))
+}
+
+fn current_file(stack: &mut [FileBuilder]) -> Result<&mut FileBuilder> {
+    stack.last_mut().ok_or_else(|| {
+        XarError::XmlParse("file metadata appeared without a current <file>".to_string())
+    })
+}
+
+fn ensure_no_active_capture(stack: &[FileBuilder]) -> Result<()> {
+    if stack.last().is_some_and(|file| file.capture.is_some()) {
+        return Err(XarError::XmlParse(
+            "nested element inside scalar file metadata".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn attribute_value(
+    reader: &Reader<&[u8]>,
+    element: &BytesStart<'_>,
+    name: &[u8],
+) -> Result<Option<String>> {
+    for attribute in element.attributes() {
+        let attribute = attribute
+            .map_err(|error| XarError::XmlParse(format!("invalid XML attribute: {error}")))?;
+        if attribute.key.as_ref() == name {
+            let value = attribute
+                .decode_and_unescape_value(reader.decoder())
+                .map_err(|error| {
+                    XarError::XmlParse(format!("invalid XML attribute value: {error}"))
+                })?;
+            return Ok(Some(value.into_owned()));
+        }
+    }
+    Ok(None)
 }
 
 fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
     let mut reader = Reader::from_reader(xml);
-    reader.config_mut().trim_text(true);
+    reader.config_mut().trim_text(false);
 
     let mut files: Vec<XarFile> = Vec::new();
     let mut buf = Vec::new();
@@ -107,34 +260,33 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
     // Children are finalized before their parents, so child indices are known.
     let mut stack: Vec<FileBuilder> = Vec::new();
 
-    // Tracks every open element (not just <file>), so plain metadata tags like
-    // <name>/<type>/<link> are only captured when they are a direct child of
-    // the current <file> — nested blocks such as <ea> carry their own <name>
-    // and must not be mistaken for the file's own name.
-    let mut tag_stack: Vec<String> = Vec::new();
+    // The typed element stack makes field eligibility structural: only a
+    // direct file child can provide name/type/link, and only the direct data
+    // child of that file can provide its payload descriptor.
+    let mut element_stack: Vec<ElementContext> = Vec::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let tag = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                // <name>/<type>/<link> live directly under <file>; <offset>/<length>/<size>
-                // live directly under <file>'s <data> block. Either parent is a legitimate
-                // place for the catch-all below to record `current_tag` — anything deeper
-                // (e.g. inside a sibling <ea> block, which has its own <name>/<length>/etc.)
-                // must not be mistaken for the file's own metadata.
-                let captures_metadata = matches!(
-                    tag_stack.last().map(String::as_str),
-                    Some("file") | Some("data")
-                );
-                match tag.as_str() {
-                    "toc" => in_toc = true,
-                    "file" if in_toc => {
-                        let mut id = 0u64;
-                        for attr in e.attributes().flatten() {
-                            if attr.key.as_ref() == b"id" {
-                                id = String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
-                            }
-                        }
+                ensure_no_active_capture(&stack)?;
+                let parent = element_stack.last().copied();
+                let depth = element_stack.len();
+                let context = match e.name().as_ref() {
+                    b"toc" => {
+                        in_toc = true;
+                        ElementContext::Toc
+                    }
+                    b"file"
+                        if in_toc
+                            && matches!(
+                                parent,
+                                Some(ElementContext::Toc | ElementContext::File)
+                            ) =>
+                    {
+                        let id = match attribute_value(&reader, e, b"id")? {
+                            Some(value) => parse_u64_field("file id", &value)?,
+                            None => 0,
+                        };
 
                         let parent_path = if let Some(parent) = stack.last() {
                             if parent.parent_path.is_empty() {
@@ -152,120 +304,152 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                             file_type: None,
                             link: None,
                             children: Vec::new(),
-                            in_data: false,
-                            data_offset: None,
-                            data_length: None,
-                            data_size: None,
-                            data_encoding: None,
-                            extracted_checksum: None,
-                            archived_checksum: None,
-                            in_extracted_checksum: false,
-                            in_archived_checksum: false,
-                            current_tag: String::new(),
+                            data: None,
+                            capture: None,
                             parent_path,
                         });
+                        ElementContext::File
                     }
-                    "data" if !stack.is_empty() => {
-                        stack.last_mut().unwrap().in_data = true;
-                    }
-                    "extracted-checksum" if !stack.is_empty() => {
-                        let f = stack.last_mut().unwrap();
-                        if f.in_data {
-                            f.in_extracted_checksum = true;
+                    b"data" if parent == Some(ElementContext::File) => {
+                        let file = stack.last_mut().ok_or_else(|| {
+                            XarError::XmlParse(
+                                "<data> appeared without a current <file>".to_string(),
+                            )
+                        })?;
+                        if file.data.is_some() {
+                            return Err(XarError::XmlParse(
+                                "duplicate direct <data> block in <file>".to_string(),
+                            ));
                         }
+                        file.data = Some(FileDataBuilder::default());
+                        ElementContext::FileData
                     }
-                    "archived-checksum" if !stack.is_empty() => {
-                        let f = stack.last_mut().unwrap();
-                        if f.in_data {
-                            f.in_archived_checksum = true;
+                    b"name" if parent == Some(ElementContext::File) => {
+                        current_file(&mut stack)?.begin_capture(CaptureField::Name, depth)?;
+                        ElementContext::Other
+                    }
+                    b"type" if parent == Some(ElementContext::File) => {
+                        current_file(&mut stack)?.begin_capture(CaptureField::FileType, depth)?;
+                        ElementContext::Other
+                    }
+                    b"link" if parent == Some(ElementContext::File) => {
+                        current_file(&mut stack)?.begin_capture(CaptureField::Link, depth)?;
+                        ElementContext::Other
+                    }
+                    b"offset" if parent == Some(ElementContext::FileData) => {
+                        current_file(&mut stack)?.begin_capture(CaptureField::DataOffset, depth)?;
+                        ElementContext::Other
+                    }
+                    b"length" if parent == Some(ElementContext::FileData) => {
+                        current_file(&mut stack)?.begin_capture(CaptureField::DataLength, depth)?;
+                        ElementContext::Other
+                    }
+                    b"size" if parent == Some(ElementContext::FileData) => {
+                        current_file(&mut stack)?.begin_capture(CaptureField::DataSize, depth)?;
+                        ElementContext::Other
+                    }
+                    b"extracted-checksum" if parent == Some(ElementContext::FileData) => {
+                        current_file(&mut stack)?
+                            .begin_capture(CaptureField::ExtractedChecksum, depth)?;
+                        ElementContext::Other
+                    }
+                    b"archived-checksum" if parent == Some(ElementContext::FileData) => {
+                        current_file(&mut stack)?
+                            .begin_capture(CaptureField::ArchivedChecksum, depth)?;
+                        ElementContext::Other
+                    }
+                    b"encoding" if parent == Some(ElementContext::FileData) => {
+                        if let Some(style) = attribute_value(&reader, e, b"style")? {
+                            current_file(&mut stack)?.data_mut()?.encoding = Some(style);
                         }
+                        ElementContext::Other
                     }
-                    "encoding" if !stack.is_empty() => {
-                        let f = stack.last_mut().unwrap();
-                        if f.in_data {
-                            for attr in e.attributes().flatten() {
-                                if attr.key.as_ref() == b"style" {
-                                    f.data_encoding =
-                                        Some(String::from_utf8_lossy(&attr.value).to_string());
-                                }
-                            }
-                        }
-                    }
-                    _ => {
-                        if captures_metadata && let Some(f) = stack.last_mut() {
-                            f.current_tag = tag.clone();
-                        }
-                    }
-                }
-                tag_stack.push(tag);
+                    _ => ElementContext::Other,
+                };
+                element_stack.push(context);
             }
             Ok(Event::Empty(ref e)) => {
-                let tag = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                if tag == "encoding"
-                    && let Some(f) = stack.last_mut()
-                    && f.in_data
-                {
-                    for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"style" {
-                            f.data_encoding =
-                                Some(String::from_utf8_lossy(&attr.value).to_string());
-                        }
+                ensure_no_active_capture(&stack)?;
+                let parent = element_stack.last().copied();
+                let field = match e.name().as_ref() {
+                    b"data" if parent == Some(ElementContext::File) => {
+                        return Err(XarError::XmlParse(
+                            "file <data> is missing <offset>, <length>, and <size>".to_string(),
+                        ));
                     }
+                    b"name" if parent == Some(ElementContext::File) => Some(CaptureField::Name),
+                    b"type" if parent == Some(ElementContext::File) => Some(CaptureField::FileType),
+                    b"link" if parent == Some(ElementContext::File) => Some(CaptureField::Link),
+                    b"offset" if parent == Some(ElementContext::FileData) => {
+                        Some(CaptureField::DataOffset)
+                    }
+                    b"length" if parent == Some(ElementContext::FileData) => {
+                        Some(CaptureField::DataLength)
+                    }
+                    b"size" if parent == Some(ElementContext::FileData) => {
+                        Some(CaptureField::DataSize)
+                    }
+                    b"extracted-checksum" if parent == Some(ElementContext::FileData) => {
+                        Some(CaptureField::ExtractedChecksum)
+                    }
+                    b"archived-checksum" if parent == Some(ElementContext::FileData) => {
+                        Some(CaptureField::ArchivedChecksum)
+                    }
+                    b"encoding" if parent == Some(ElementContext::FileData) => {
+                        if let Some(style) = attribute_value(&reader, e, b"style")? {
+                            current_file(&mut stack)?.data_mut()?.encoding = Some(style);
+                        }
+                        None
+                    }
+                    _ => None,
+                };
+                if let Some(field) = field {
+                    current_file(&mut stack)?.assign_text(field, String::new())?;
                 }
             }
             Ok(Event::Text(ref e)) => {
-                let text = e.unescape().unwrap_or_default().to_string();
-                if let Some(f) = stack.last_mut() {
-                    if f.in_extracted_checksum {
-                        f.extracted_checksum = Some(text);
-                    } else if f.in_archived_checksum {
-                        f.archived_checksum = Some(text);
-                    } else if f.in_data {
-                        match f.current_tag.as_str() {
-                            "offset" => f.data_offset = text.parse().ok(),
-                            "length" => f.data_length = text.parse().ok(),
-                            "size" => f.data_size = text.parse().ok(),
-                            _ => {}
-                        }
-                    } else {
-                        match f.current_tag.as_str() {
-                            "name" => f.name = text,
-                            "type" => f.file_type = Some(text),
-                            "link" => f.link = Some(text),
-                            _ => {}
-                        }
-                    }
+                let text = e
+                    .unescape()
+                    .map_err(|error| XarError::XmlParse(format!("invalid XML text: {error}")))?;
+                if let Some(file) = stack.last_mut() {
+                    file.append_text(&text);
                 }
             }
-            Ok(Event::End(ref e)) => {
-                let tag = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                match tag.as_str() {
-                    "toc" => in_toc = false,
-                    "file" if !stack.is_empty() => {
-                        let builder = stack.pop().unwrap();
+            Ok(Event::CData(ref e)) => {
+                let text = e
+                    .decode()
+                    .map_err(|error| XarError::XmlParse(format!("invalid CDATA text: {error}")))?;
+                if let Some(file) = stack.last_mut() {
+                    file.append_text(&text);
+                }
+            }
+            Ok(Event::End(_)) => {
+                let depth = element_stack.len().checked_sub(1).ok_or_else(|| {
+                    XarError::XmlParse("closing element without an open element".to_string())
+                })?;
+                if let Some(file) = stack.last_mut() {
+                    file.finish_capture(depth)?;
+                }
+                let context = element_stack.pop().ok_or_else(|| {
+                    XarError::XmlParse("closing element without an open element".to_string())
+                })?;
+                match context {
+                    ElementContext::Toc => in_toc = false,
+                    ElementContext::File => {
+                        let builder = stack.pop().ok_or_else(|| {
+                            XarError::XmlParse("closing <file> without a current file".to_string())
+                        })?;
 
                         let file_type = match builder.file_type.as_deref() {
                             Some("directory") => XarFileType::Directory,
                             Some("symlink") => XarFileType::Symlink,
                             _ => XarFileType::File,
                         };
-
-                        let data = if let (Some(offset), Some(length), Some(size)) =
-                            (builder.data_offset, builder.data_length, builder.data_size)
-                        {
-                            Some(XarFileData {
-                                offset,
-                                length,
-                                size,
-                                encoding: builder
-                                    .data_encoding
-                                    .unwrap_or_else(|| "application/octet-stream".to_string()),
-                                extracted_checksum: builder.extracted_checksum,
-                                archived_checksum: builder.archived_checksum,
-                            })
-                        } else {
-                            None
+                        let link = match file_type {
+                            XarFileType::Symlink => builder.link,
+                            XarFileType::File | XarFileType::Directory => None,
                         };
+                        let data = builder.data.map(FileDataBuilder::build).transpose()?;
 
                         let path = if builder.parent_path.is_empty() {
                             builder.name.clone()
@@ -274,42 +458,33 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         };
 
                         let file_idx = files.len();
-                        let parent = if stack.is_empty() {
-                            None
-                        } else {
+                        if let Some(parent) = stack.last_mut() {
                             // Parent is not yet finalized, but we can record that
                             // this file is a child of whatever is on top of the stack
-                            stack.last_mut().unwrap().children.push(file_idx);
-                            // Parent index will be set when the parent is finalized
-                            // For now, store None; we'll fix it up at the end
-                            None
-                        };
+                            parent.children.push(file_idx);
+                        }
 
                         files.push(XarFile {
                             id: builder.id,
                             name: builder.name,
                             path,
                             file_type,
-                            link: builder.link,
+                            link,
                             data,
                             children: builder.children,
-                            parent,
+                            // Parent index is fixed up from the child lists below.
+                            parent: None,
                         });
                     }
-                    "data" if !stack.is_empty() => {
-                        stack.last_mut().unwrap().in_data = false;
-                    }
-                    "extracted-checksum" if !stack.is_empty() => {
-                        stack.last_mut().unwrap().in_extracted_checksum = false;
-                    }
-                    "archived-checksum" if !stack.is_empty() => {
-                        stack.last_mut().unwrap().in_archived_checksum = false;
-                    }
-                    _ => {}
+                    ElementContext::FileData | ElementContext::Other => {}
                 }
-                tag_stack.pop();
             }
-            Ok(Event::Eof) => break,
+            Ok(Event::Eof) => {
+                if !element_stack.is_empty() || !stack.is_empty() {
+                    return Err(XarError::XmlParse("unexpected end of TOC XML".to_string()));
+                }
+                break;
+            }
             Err(e) => return Err(XarError::XmlParse(format!("XML error: {}", e))),
             _ => {}
         }
@@ -366,6 +541,7 @@ mod tests {
   <file id="1">
     <name>plain.txt</name>
     <type>file</type>
+    <link type="file">must-not-leak</link>
   </file>
 </toc></xar>"#;
 
@@ -477,5 +653,122 @@ mod tests {
         assert_eq!(link_entry.link.as_deref(), Some("../target.txt"));
         let dir_entry = files.iter().find(|f| f.name == "dir").unwrap();
         assert_eq!(dir_entry.link, None);
+    }
+
+    #[test]
+    fn preserves_exact_link_text_across_xml_event_types() {
+        let cases: &[(&[u8], &str)] = &[
+            (
+                br#"<xar><toc><file id="1"><link type="file"> target </link><type>symlink</type><name>link</name></file></toc></xar>"#,
+                " target ",
+            ),
+            (
+                br#"<xar><toc><file id="1"><link type="file"><![CDATA[../A&B]]></link><type>symlink</type><name>link</name></file></toc></xar>"#,
+                "../A&B",
+            ),
+            (
+                br#"<xar><toc><file id="1"><link type="file">foo<!-- split -->bar</link><type>symlink</type><name>link</name></file></toc></xar>"#,
+                "foobar",
+            ),
+            (
+                br#"<xar><toc><file id="1"><link type="file">A&amp;B</link><type>symlink</type><name>link</name></file></toc></xar>"#,
+                "A&B",
+            ),
+        ];
+
+        for &(xml, expected) in cases {
+            let files = parse_toc_xml(xml).unwrap();
+            assert_eq!(files[0].link.as_deref(), Some(expected));
+        }
+    }
+
+    #[test]
+    fn nested_ea_data_does_not_overwrite_file_data() {
+        let xml = br#"<xar><toc><file id="1">
+  <type>file</type><name>payload</name>
+  <data>
+    <offset>0</offset><length>4</length><size>4</size>
+    <encoding style="application/octet-stream"/>
+    <extracted-checksum>real-extracted</extracted-checksum>
+    <archived-checksum>real-archived</archived-checksum>
+  </data>
+  <ea id="0"><name>extension</name><data>
+    <offset>999</offset><length>3</length><size>3</size>
+    <encoding style="application/x-gzip"/>
+    <extracted-checksum>fake-extracted</extracted-checksum>
+    <archived-checksum>fake-archived</archived-checksum>
+  </data></ea>
+</file></toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        let data = files[0].data.as_ref().unwrap();
+        assert_eq!((data.offset, data.length, data.size), (0, 4, 4));
+        assert_eq!(data.encoding, "application/octet-stream");
+        assert_eq!(data.extracted_checksum.as_deref(), Some("real-extracted"));
+        assert_eq!(data.archived_checksum.as_deref(), Some("real-archived"));
+    }
+
+    #[test]
+    fn nested_ea_data_does_not_create_file_data() {
+        let xml = br#"<xar><toc><file id="1">
+  <type>file</type><name>metadata-only</name>
+  <ea id="0"><data><offset>9</offset><length>3</length><size>3</size></data></ea>
+</file></toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        assert!(files[0].data.is_none());
+    }
+
+    #[test]
+    fn nested_data_does_not_interrupt_the_direct_file_data_block() {
+        let xml = br#"<xar><toc><file id="1">
+  <type>file</type><name>payload</name>
+  <data>
+    <offset>0</offset>
+    <extension><data><offset>999</offset><length>3</length><size>3</size></data></extension>
+    <length>4</length><size>4</size>
+    <encoding style="application&#x2f;octet-stream"/>
+  </data>
+</file></toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        let data = files[0].data.as_ref().unwrap();
+        assert_eq!((data.offset, data.length, data.size), (0, 4, 4));
+        assert_eq!(data.encoding, "application/octet-stream");
+    }
+
+    #[test]
+    fn invalid_xml_text_is_reported_instead_of_silently_erased() {
+        let xml = br#"<xar><toc><file id="1"><link>&unknown;</link><type>symlink</type><name>link</name></file></toc></xar>"#;
+        assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
+    }
+
+    #[test]
+    fn incomplete_direct_data_block_is_rejected() {
+        let xml = br#"<xar><toc><file id="1">
+  <type>file</type><name>payload</name>
+  <data><offset>0</offset><length>4</length></data>
+</file></toc></xar>"#;
+        assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
+    }
+
+    #[test]
+    fn empty_direct_data_block_is_rejected() {
+        let xml = br#"<xar><toc><file id="1"><type>file</type><name>payload</name><data/></file></toc></xar>"#;
+        assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
+    }
+
+    #[test]
+    fn nested_elements_inside_scalar_metadata_are_rejected() {
+        let xml = br#"<xar><toc><file id="1"><type>symlink</type><name>link</name><link>before<extension/>after</link></file></toc></xar>"#;
+        assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
+    }
+
+    #[test]
+    fn duplicate_direct_data_blocks_are_rejected() {
+        let xml = br#"<xar><toc><file id="1">
+  <type>file</type><name>payload</name><data></data><data></data>
+</file></toc></xar>"#;
+        assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
     }
 }

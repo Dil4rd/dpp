@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UniFFI — what it is &amp; how it works</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --ink:#e6edf3; --muted:#8b949e;
+    --rust:#dea584; --go:#00add8; --accent:#7ee787; --warn:#f0883e; --line:#30363d;
+    --code:#0a0e14;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:880px;margin:0 auto;padding:48px 24px 96px}
+  header.hero{padding:40px 0 28px;border-bottom:1px solid var(--line);margin-bottom:36px}
+  h1{font-size:2.4rem;margin:0 0 .25em;letter-spacing:-.02em}
+  h1 .ff{color:var(--accent)}
+  .sub{color:var(--muted);font-size:1.12rem;margin:0}
+  .tag{display:inline-block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 10px;margin-top:14px}
+  h2{font-size:1.5rem;margin:48px 0 14px;letter-spacing:-.01em;border-left:3px solid var(--accent);padding-left:12px}
+  h3{font-size:1.12rem;margin:28px 0 8px;color:var(--ink)}
+  p{margin:12px 0}
+  a{color:var(--go)}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 6px;
+    font:0.86em/1.4 "SF Mono",ui-monospace,Menlo,Consolas,monospace;color:#c9d1d9}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;
+    overflow:auto;font:0.82rem/1.55 "SF Mono",ui-monospace,Menlo,Consolas,monospace;margin:14px 0}
+  pre code{background:none;border:none;padding:0}
+  .k{color:#ff7b72}.s{color:#a5d6ff}.c{color:#8b949e;font-style:italic}.fn{color:#d2a8ff}.t{color:#7ee787}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin:18px 0}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  .callout{border-left:3px solid var(--warn);background:var(--panel2);border-radius:0 10px 10px 0;
+    padding:14px 18px;margin:20px 0}
+  .callout.good{border-left-color:var(--accent)}
+  .callout b{color:var(--warn)}.callout.good b{color:var(--accent)}
+  ul{margin:10px 0;padding-left:22px}li{margin:6px 0}
+  .flow{font:0.8rem/1.5 "SF Mono",ui-monospace,Menlo,monospace;background:var(--code);
+    border:1px solid var(--line);border-radius:10px;padding:20px;overflow:auto;color:var(--muted);white-space:pre}
+  .flow .r{color:var(--rust)}.flow .g{color:var(--go)}.flow .a{color:var(--accent)}.flow .w{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.92rem}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em}
+  td code{font-size:.82em}
+  .toc{font-size:.95rem;columns:2;column-gap:28px}
+  @media(max-width:680px){.toc{columns:1}}
+  .toc a{display:block;padding:3px 0;color:var(--muted);text-decoration:none}
+  .toc a:hover{color:var(--go)}
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
+  .pill{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+    padding:2px 8px;font-size:.78rem;color:var(--muted);margin:2px 4px 2px 0}
+  .rust{color:var(--rust)}.gocol{color:var(--go)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Uni<span class="ff">FFI</span></h1>
+  <p class="sub">Mozilla's toolkit for generating safe, multi-language bindings from a single Rust library — and exactly what happens under the hood.</p>
+  <span class="tag">Context: evaluating it for <code>dpp</code> → Go bindings</span>
+</header>
+
+<div class="panel">
+  <strong>On this page</strong>
+  <nav class="toc">
+    <a href="#what">1 · What UniFFI is</a>
+    <a href="#why">2 · The problem it solves</a>
+    <a href="#define">3 · How you define an interface</a>
+    <a href="#pipeline">4 · The build pipeline</a>
+    <a href="#scaffolding">5 · Scaffolding (the Rust C-ABI)</a>
+    <a href="#rustbuffer">6 · RustBuffer &amp; FfiConverter</a>
+    <a href="#objects">7 · Objects, handles &amp; memory</a>
+    <a href="#errors">8 · Errors, callbacks, async</a>
+    <a href="#go">9 · The Go story (uniffi-bindgen-go)</a>
+    <a href="#safety">10 · Does it keep memory safety?</a>
+  </nav>
+</div>
+
+<h2 id="what">1 · What UniFFI is</h2>
+<p><b>UniFFI</b> is a tool from Mozilla (born out of the Firefox/Application-Services effort to ship one Rust core to iOS, Android, and desktop) that <b>auto-generates the FFI glue</b> needed to call a Rust library from other languages. You write your logic once in Rust, describe the interface, and UniFFI emits:</p>
+<ul>
+  <li>a <b>Rust "scaffolding" layer</b> — the <code>extern "C"</code> entry points compiled <i>into</i> your crate, and</li>
+  <li><b>idiomatic bindings</b> in each target language that call those entry points for you.</li>
+</ul>
+<p>Officially supported targets: <span class="pill">Kotlin</span><span class="pill">Swift</span><span class="pill">Python</span><span class="pill">Ruby</span>. Additional targets exist as <b>external bindings generators</b> — including <span class="pill gocol">Go</span> (see §9), C#, Kotlin-Multiplatform, and Dart.</p>
+
+<h2 id="why">2 · The problem it solves</h2>
+<p>Calling Rust from another language always has to cross a <b>C ABI</b> — that is the only calling convention every runtime agrees on. Hand-writing that boundary means manually authoring <code>#[no_mangle] extern "C"</code> functions, raw-pointer marshalling, string/array encoding, error codes, and a matching set of <code>unsafe</code> declarations on the <i>other</i> side. It is repetitive, easy to get subtly wrong, and must be re-done for every language.</p>
+<p>UniFFI's bet: <b>that glue is mechanical, so generate it.</b> One interface description &rarr; correct, consistent glue for N languages, regenerated automatically whenever the API changes.</p>
+
+<h2 id="define">3 · How you define an interface</h2>
+<p>There are two ways to tell UniFFI about your API. Modern projects favor <b>proc-macros</b>; the original mechanism is a <b>UDL file</b>.</p>
+
+<div class="grid">
+  <div>
+    <h3>a) Proc-macro mode (current)</h3>
+    <p>Annotate the real Rust directly — no separate file:</p>
+<pre><code><span class="c">// lib.rs</span>
+<span class="k">#[derive(uniffi::Record)]</span>
+<span class="k">pub struct</span> <span class="t">DirEntry</span> { <span class="k">pub</span> name: String, <span class="k">pub</span> size: u64 }
+
+<span class="k">#[derive(uniffi::Object)]</span>
+<span class="k">pub struct</span> <span class="t">Filesystem</span> { <span class="c">/* … */</span> }
+
+<span class="k">#[uniffi::export]</span>
+<span class="k">impl</span> <span class="t">Filesystem</span> {
+  <span class="k">pub fn</span> <span class="fn">list_directory</span>(&<span class="k">self</span>, path: String)
+      -> Result&lt;Vec&lt;DirEntry&gt;, DppError&gt; { <span class="c">/* … */</span> }
+}
+
+uniffi::<span class="fn">setup_scaffolding</span>!();</code></pre>
+  </div>
+  <div>
+    <h3>b) UDL mode (original)</h3>
+    <p>A WebIDL-like schema file, kept in sync with the Rust:</p>
+<pre><code><span class="c">// dpp.udl</span>
+<span class="k">dictionary</span> DirEntry {
+  string name;
+  u64 size;
+};
+
+<span class="k">interface</span> Filesystem {
+  [Throws=DppError]
+  sequence&lt;DirEntry&gt; list_directory(string path);
+};</code></pre>
+    <p style="font-size:.86rem;color:var(--muted)">Pulled in via <code>uniffi::include_scaffolding!("dpp")</code> in <code>build.rs</code>.</p>
+  </div>
+</div>
+<p>Either way, UniFFI builds an internal <b>component-interface metadata model</b> (records, enums, objects, functions, errors, their types) that drives all code generation.</p>
+
+<h2 id="pipeline">4 · The build pipeline</h2>
+<p>End to end, here is what runs and what it produces:</p>
+<div class="flow"><span class="r">┌─ Rust crate ───────────────────────────────┐</span>
+<span class="r">│  your logic  +  #[uniffi::export] / .udl     │</span>
+<span class="r">└───────────────┬─────────────────────────────┘</span>
+                │  <span class="a">cargo build</span>  (proc-macros / build.rs run)
+                ▼
+   <span class="a">①</span> <span class="r">SCAFFOLDING</span> compiled into your <span class="r">cdylib/staticlib</span>
+       (the extern "C" symbols + a metadata blob)
+                │
+                │  <span class="a">uniffi-bindgen generate</span>  (reads the metadata)
+                ▼
+   <span class="a">②</span> <span class="g">FOREIGN BINDINGS</span> source files, one set per language
+       <span class="g">Kotlin .kt   Swift .swift   Python .py   Go .go</span>
+                │
+                ▼
+   <span class="g">③</span> app imports the bindings; at runtime they
+       dlopen / link the <span class="r">cdylib</span> and call <span class="a">①</span>
+</div>
+<p>So there are two generated artifacts: <b>(1)</b> the C-ABI surface inside your compiled Rust library, and <b>(2)</b> the per-language wrapper source that knows how to call it. Both come from the same metadata, which is why they never drift.</p>
+
+<h2 id="scaffolding">5 · Scaffolding — the Rust C-ABI layer</h2>
+<p>The scaffolding is ordinary (generated) Rust that UniFFI compiles <i>into your crate</i>. For each exported function it emits a <code>#[no_mangle] pub extern "C"</code> shim that:</p>
+<ul>
+  <li>takes <b>only C-ABI-safe parameters</b> (integers, floats, pointers, and <code>RustBuffer</code> — see §6);</li>
+  <li>lowers each argument from its FFI form back into the real Rust type;</li>
+  <li>calls your actual function inside a <code>catch_unwind</code> guard (a Rust panic must never unwind across the boundary);</li>
+  <li>lifts the return value back into an FFI form and writes any error into an out-param status struct.</li>
+</ul>
+<p>It also exports housekeeping symbols: a per-type <b>free function</b>, allocators for <code>RustBuffer</code>, a checksum/contract-version symbol so a mismatched binding refuses to load, and (in proc-macro mode) the metadata the generator reads. You never see or hand-edit this code.</p>
+
+<h2 id="rustbuffer">6 · RustBuffer &amp; the FfiConverter trait</h2>
+<p>Scalars (<code>i32</code>, <code>f64</code>, …) cross the boundary directly. <b>Everything compound</b> — strings, structs (records), enums, sequences, maps, optionals — is <b>serialized into bytes</b> and passed as a <code>RustBuffer</code>: a small <code>{ ptr, len, capacity }</code> struct describing a Rust-allocated byte buffer.</p>
+<p>The encoding is defined by the <b><code>FfiConverter</code></b> trait (and <code>Lift</code>/<code>Lower</code>/<code>Read</code>/<code>Write</code> helpers). Each side implements the <i>same</i> wire format:</p>
+<table>
+  <tr><th>Type</th><th>Wire encoding</th></tr>
+  <tr><td><code>i32 / u64 / f64 …</code></td><td>passed by value, no buffer</td></tr>
+  <tr><td><code>String</code></td><td>length-prefixed UTF-8 in a RustBuffer</td></tr>
+  <tr><td><code>record</code> (struct)</td><td>fields written back-to-back in declaration order</td></tr>
+  <tr><td><code>enum</code></td><td>u32 variant discriminant, then that variant's fields</td></tr>
+  <tr><td><code>Option&lt;T&gt;</code></td><td>1 flag byte, then <code>T</code> if present</td></tr>
+  <tr><td><code>sequence&lt;T&gt; / map</code></td><td>i32 count, then each element encoded in turn</td></tr>
+  <tr><td><code>object</code> (interface)</td><td>an opaque <b>handle</b>, not serialized — see §7</td></tr>
+</table>
+<div class="callout good"><b>Why this matters for memory safety:</b> the foreign side never dereferences Rust's struct layout. It reads a byte stream with a known grammar and a length it was given. There is no pointer-chasing into Rust's heap for <i>data</i> — only the handle for <i>objects</i>.</div>
+
+<h2 id="objects">7 · Objects, handles &amp; memory management</h2>
+<p>Records are passed <b>by value</b> (copied through a RustBuffer). <b>Objects</b> (anything with methods and identity — e.g. a <code>Filesystem</code> or <code>Pipeline</code>) are passed <b>by reference</b> as an opaque <b>handle</b>: the foreign side holds an integer/pointer it cannot inspect, and every method call passes that handle back to Rust.</p>
+<p>Lifetime is reference-counted. The Rust side keeps the object behind an <code>Arc</code>; the scaffolding exposes <code>clone</code>/<code>free</code> symbols. The generated binding wires the object's <b>destructor</b> in the host language to the <code>free</code> symbol:</p>
+<ul>
+  <li><b>Swift</b> — <code>deinit</code></li>
+  <li><b>Kotlin</b> — a <code>Cleaner</code> / explicit <code>.destroy()</code> (and <code>AutoCloseable</code>)</li>
+  <li><b>Python</b> — <code>__del__</code> / context manager</li>
+  <li><b>Go</b> — a <code>runtime.SetFinalizer</code> plus a generated <code>Destroy()</code> method</li>
+</ul>
+<div class="callout"><b>The one sharp edge:</b> the host GC and Rust's <code>Arc</code> are two separate accountants. UniFFI bridges them, but <i>use-after-<code>Destroy</code></i> on a handle is the failure mode you still have to respect — the same lifecycle care any handle-based API needs. It is bounded to object handles, not to data.</div>
+
+<h2 id="errors">8 · Errors, callbacks &amp; async</h2>
+<ul>
+  <li><b>Errors</b> — a Rust <code>Result&lt;T, E&gt;</code> where <code>E</code> is a UniFFI error enum becomes a <b>thrown exception</b> (Kotlin/Swift/Python) or an <b>idiomatic <code>error</code> return</b> (Go). The scaffolding writes a status code + serialized error into an out-param; the binding turns it into the host idiom.</li>
+  <li><b>Callback / foreign-trait interfaces</b> — Rust can call <i>back</i> into host-language code. The host registers a vtable of function pointers; Rust invokes them through the same C ABI. This is how you'd pass, say, a progress callback or a host-provided reader.</li>
+  <li><b>Async</b> — newer UniFFI supports <code>async fn</code> across the boundary by integrating the host's event loop with a Rust future poller. (Go support for async lags the core; verify before relying on it.)</li>
+</ul>
+
+<h2 id="go">9 · The Go story — <code>uniffi-bindgen-go</code></h2>
+<p>Go is <b>not</b> an officially-maintained target. It is served by an <b>external generator</b>, <a href="https://github.com/NordSecurity/uniffi-bindgen-go">NordSecurity/uniffi-bindgen-go</a>, which plugs into UniFFI as a custom bindings backend. Practical realities:</p>
+<ul>
+  <li>It emits Go source that talks to the scaffolding <b>via CGO</b> — i.e. it generates exactly the <code>import "C"</code> / cgo glue you'd otherwise hand-write, plus typed Go structs for your records and <code>Destroy()</code>-bearing wrappers for your objects.</li>
+  <li>It is <b>version-pinned</b>: each release supports a specific <code>uniffi-rs</code> version. You must keep the generator, the runtime, and your crate's UniFFI dependency in lockstep.</li>
+  <li>You still ship a compiled Rust <b>cdylib/staticlib</b> per target platform and link it with CGO — the packaging story is the same as a hand-written binding.</li>
+</ul>
+<div class="callout"><b>Key honesty point for our decision:</b> UniFFI-for-Go does <i>not</i> remove CGO or the C ABI. It <b>generates</b> the same unsafe boundary you'd otherwise write by hand — the value is that the unsafe is machine-generated and uniform, not that it disappears.</div>
+
+<h2 id="safety">10 · Does it preserve Rust's memory safety?</h2>
+<p>This is the question that actually matters for <code>dpp</code>, whose selling point is a memory-safe Apple-format parser. Precise answer:</p>
+<div class="grid">
+  <div class="callout good">
+    <b>What is preserved</b>
+    <ul>
+      <li>100% of your <b>core logic</b> stays safe Rust — the parsers never become <code>unsafe</code>.</li>
+      <li>Compound <b>data</b> crosses as a length-checked byte grammar, not raw struct pointers.</li>
+      <li>The hand-written <code>unsafe</code> surface is ~<b>zero</b>: the glue is generated and shared across every consumer of UniFFI.</li>
+      <li>Panics are caught at the boundary, not unwound into the host.</li>
+    </ul>
+  </div>
+  <div class="callout">
+    <b>What is <i>not</i> magically guaranteed</b>
+    <ul>
+      <li>The C ABI itself is still <code>unsafe</code> by nature — UniFFI generates that <code>unsafe</code>, it does not eliminate it.</li>
+      <li>Two memory managers (host GC + Rust <code>Arc</code>) coexist; <b>use-after-<code>Destroy</code></b> of a handle is still possible from host misuse.</li>
+      <li>You trust the <b>generator's</b> correctness instead of your own.</li>
+    </ul>
+  </div>
+</div>
+<p style="margin-top:18px">If the requirement is a <b>hard</b> memory boundary — where even a hypothetical Rust bug cannot touch Go's address space — no in-process FFI (UniFFI or hand-written) achieves that, because they share an address space by definition. That guarantee only comes from <b>process isolation</b> (a subprocess/IPC daemon) or a <b>WASM sandbox</b> (compile <code>dpp</code> to <code>wasm32-wasi</code>, run it under a wasm runtime). Those trade performance and ergonomics for a true isolation wall. UniFFI's actual claim is narrower and still valuable: <i>minimize and standardize the unavoidable unsafe, and keep every line of your real logic safe.</i></p>
+
+<footer>
+  Generated as a decision aid for exposing the <code>dpp</code> Rust workspace to Go. UniFFI is developed by Mozilla
+  (<code>mozilla/uniffi-rs</code>); the Go backend is <code>NordSecurity/uniffi-bindgen-go</code>.
+  Details reflect UniFFI's proc-macro era; verify version-specific behavior against the current docs before committing.
+</footer>
+
+</div>
+</body>
+</html>

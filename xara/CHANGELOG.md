@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Scope file metadata and payload descriptors to their exact TOC ancestry
 - Preserve complete file names and symlink targets across text, CDATA, and comments
 - Bound heap entry reads and reject offset or decoded-size inconsistencies
+- Decode `<name enctype="base64">`, which macOS `xar` uses for names that
+  aren't safe as bare XML text (observed for non-ASCII names); previously the
+  raw base64 text was surfaced as the entry's name and path
 
 ## [0.3.2] - 2026-04-12
 

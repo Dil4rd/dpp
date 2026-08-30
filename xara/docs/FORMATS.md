@@ -90,6 +90,22 @@ child of the file entry:
 </file>
 ```
 
+### Base64-Encoded Names
+
+A `<name>` element that isn't safe as bare XML text carries `enctype="base64"`
+and holds the base64 encoding of the real, UTF-8 name in place of the literal
+text. macOS `xar` does this for names containing non-ASCII characters:
+
+```xml
+<file id="5">
+  <name enctype="base64">44GT44KT44Gr44Gh44GvLnR4dA==</name>
+  <type>file</type>
+</file>
+```
+
+decodes to the name `こんにちは.txt`. Any other `enctype` value, or base64 or
+UTF-8 that fails to decode, is a parse error.
+
 ### Data Encoding Styles
 
 | Style | Description |

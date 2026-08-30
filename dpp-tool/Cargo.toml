@@ -12,11 +12,11 @@ path = "src/main.rs"
 
 [dependencies]
 dpp = { version = "0.5.0-dev", path = "../dpp" }
-udif = { version = "0.3.4", path = "../udif" }
+udif = { version = "0.3.5-dev", path = "../udif" }
 hfsplus = { version = "0.2.5-dev", path = "../hfsplus" }
 apfs = { version = "0.3.0-dev", path = "../apfs" }
 xara = { version = "0.3.2", path = "../xara" }
-pbzx = { version = "0.3.1", path = "../pbzx" }
+pbzx = { version = "0.3.2-dev", path = "../pbzx" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 

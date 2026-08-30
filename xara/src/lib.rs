@@ -472,4 +472,39 @@ mod tests {
         assert!(tmp.path().join("real.txt").exists());
         assert!(!tmp.path().join("link.txt").exists());
     }
+
+    #[test]
+    fn test_extract_rejects_base64_name_decoding_to_traversal() {
+        // "Li4v...cGFzc3dk" is the base64 encoding of "../../etc/passwd". A
+        // maliciously crafted XAR could set enctype="base64" on a <name> to
+        // smuggle a traversal payload through decoding; sanitize_path must
+        // still catch it post-decode, same as it does for a literal name.
+        let toc_xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<xar>
+  <toc>
+    <file id="1">
+      <name enctype="base64">Li4vLi4vZXRjL3Bhc3N3ZA==</name>
+      <type>file</type>
+      <data>
+        <offset>0</offset>
+        <length>4</length>
+        <size>4</size>
+        <encoding style="application/octet-stream"/>
+      </data>
+    </file>
+  </toc>
+</xar>"#;
+
+        let xar_buf = build_test_xar(toc_xml, b"data");
+        let mut cursor = Cursor::new(&xar_buf);
+        let mut archive = XarArchive::open(&mut cursor).unwrap();
+
+        let tmp = tempfile::tempdir().unwrap();
+        let result = archive.extract_all(tmp.path());
+
+        assert!(
+            matches!(result, Err(XarError::InvalidPath(_))),
+            "expected traversal rejection, got {result:?}"
+        );
+    }
 }

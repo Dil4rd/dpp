@@ -1,3 +1,4 @@
+use base64::Engine;
 use flate2::read::ZlibDecoder;
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
@@ -163,6 +164,11 @@ impl FileDataBuilder {
 struct FileBuilder {
     id: u64,
     name: String,
+    /// `enctype` attribute captured from `<name>`, if any. macOS `xar` sets
+    /// `enctype="base64"` when a name isn't safe as bare XML text (observed
+    /// for non-ASCII names). Consumed by `assign_text` when the `<name>`
+    /// capture closes.
+    name_enctype: Option<String>,
     file_type: Option<String>,
     link: Option<String>,
     children: Vec<usize>,
@@ -208,7 +214,7 @@ impl FileBuilder {
         }
         self.assigned_fields.push(field);
         match field {
-            CaptureField::Name => self.name = value,
+            CaptureField::Name => self.name = decode_name(value, self.name_enctype.take())?,
             CaptureField::FileType => self.file_type = Some(value.trim().to_string()),
             CaptureField::Link => self.link = Some(value),
             CaptureField::DataOffset => {
@@ -272,6 +278,31 @@ fn parse_u64_field(name: &str, value: &str) -> Result<u64> {
         .trim()
         .parse()
         .map_err(|error| XarError::XmlParse(format!("invalid <{name}> value {value:?}: {error}")))
+}
+
+/// Decode a `<name>` element's text, applying the `enctype` attribute
+/// captured from its start tag. macOS `xar` sets `enctype="base64"` when a
+/// name isn't safe as bare XML text (observed for non-ASCII names); the text
+/// content is then the base64 encoding of the real, UTF-8 name.
+fn decode_name(value: String, enctype: Option<String>) -> Result<String> {
+    match enctype.as_deref() {
+        None => Ok(value),
+        Some("base64") => {
+            let decoded = base64::engine::general_purpose::STANDARD
+                .decode(value.trim())
+                .map_err(|error| {
+                    XarError::XmlParse(format!("invalid base64 <name> value {value:?}: {error}"))
+                })?;
+            String::from_utf8(decoded).map_err(|error| {
+                XarError::XmlParse(format!(
+                    "<name enctype=\"base64\"> decoded to invalid UTF-8: {error}"
+                ))
+            })
+        }
+        Some(other) => Err(XarError::XmlParse(format!(
+            "unsupported <name> enctype {other:?}"
+        ))),
+    }
 }
 
 fn current_file(stack: &mut [FileBuilder]) -> Result<&mut FileBuilder> {
@@ -366,6 +397,7 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         stack.push(FileBuilder {
                             id,
                             name: String::new(),
+                            name_enctype: None,
                             file_type: None,
                             link: None,
                             children: Vec::new(),
@@ -390,7 +422,10 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         ElementContext::FileData
                     }
                     b"name" if parent == Some(ElementContext::File) => {
-                        current_file(&mut stack)?.begin_capture(CaptureField::Name, depth)?;
+                        let enctype = attribute_value(&reader, e, b"enctype")?;
+                        let file = current_file(&mut stack)?;
+                        file.name_enctype = enctype;
+                        file.begin_capture(CaptureField::Name, depth)?;
                         ElementContext::Other
                     }
                     b"type" if parent == Some(ElementContext::File) => {
@@ -470,7 +505,11 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                             "file <data> is missing <offset>, <length>, and <size>".to_string(),
                         ));
                     }
-                    b"name" if parent == Some(ElementContext::File) => Some(CaptureField::Name),
+                    b"name" if parent == Some(ElementContext::File) => {
+                        let enctype = attribute_value(&reader, e, b"enctype")?;
+                        current_file(&mut stack)?.name_enctype = enctype;
+                        Some(CaptureField::Name)
+                    }
                     b"type" if parent == Some(ElementContext::File) => Some(CaptureField::FileType),
                     b"link" if parent == Some(ElementContext::File) => Some(CaptureField::Link),
                     b"offset" if parent == Some(ElementContext::FileData) => {
@@ -991,5 +1030,61 @@ mod tests {
         for xml in cases {
             assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
         }
+    }
+
+    #[test]
+    fn decodes_base64_encoded_name() {
+        // Real bytes from fixtures/archives/basic.xar's TOC: macOS `xar` sets
+        // enctype="base64" for names that aren't safe as bare XML text. This
+        // is the base64 encoding of "こんにちは.txt".
+        let xml = br#"<xar><toc>
+  <file id="1">
+    <type>file</type>
+    <name enctype="base64">44GT44KT44Gr44Gh44GvLnR4dA==</name>
+  </file>
+</toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        assert_eq!(files[0].name, "こんにちは.txt");
+        assert_eq!(files[0].path, "こんにちは.txt");
+    }
+
+    #[test]
+    fn base64_name_decoding_applies_within_nested_directories() {
+        let xml = br#"<xar><toc>
+  <file id="1">
+    <type>directory</type>
+    <name>unicode</name>
+    <file id="2">
+      <type>file</type>
+      <name enctype="base64">44GT44KT44Gr44Gh44GvLnR4dA==</name>
+    </file>
+  </file>
+</toc></xar>"#;
+
+        let files = parse_toc_xml(xml).unwrap();
+        let child = files.iter().find(|f| f.id == 2).unwrap();
+        assert_eq!(child.name, "こんにちは.txt");
+        assert_eq!(child.path, "unicode/こんにちは.txt");
+    }
+
+    #[test]
+    fn rejects_unsupported_name_enctype() {
+        let xml = br#"<xar><toc><file id="1"><type>file</type><name enctype="quoted-printable">entry</name></file></toc></xar>"#;
+        assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
+    }
+
+    #[test]
+    fn rejects_invalid_base64_name() {
+        let xml = br#"<xar><toc><file id="1"><type>file</type><name enctype="base64">not valid base64!!</name></file></toc></xar>"#;
+        assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
+    }
+
+    #[test]
+    fn rejects_base64_name_decoding_to_invalid_utf8() {
+        // "//4=" is the base64 encoding of the two bytes 0xFF 0xFE, which is
+        // not valid UTF-8.
+        let xml = br#"<xar><toc><file id="1"><type>file</type><name enctype="base64">//4=</name></file></toc></xar>"#;
+        assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
     }
 }

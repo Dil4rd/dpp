@@ -9,6 +9,7 @@ keywords = ["xar", "pkg", "apple", "macos", "archive"]
 categories = ["parsing", "compression"]
 
 [dependencies]
+base64 = "0.22"
 byteorder = "1.5"
 thiserror = "2"
 flate2 = "1.0"

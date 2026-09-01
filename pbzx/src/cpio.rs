@@ -60,6 +60,10 @@ fn normalize_cpio_path(path: &str) -> String {
 pub struct CpioReader<R> {
     reader: R,
     position: u64,
+    /// Format of the most recently read header. Entry data is framed
+    /// differently per format, so reads must follow what the header said
+    /// rather than what the first entry in the archive happened to be.
+    format: Option<CpioFormat>,
 }
 
 impl<R: Read> CpioReader<R> {
@@ -68,6 +72,7 @@ impl<R: Read> CpioReader<R> {
         Self {
             reader,
             position: 0,
+            format: None,
         }
     }
 
@@ -110,6 +115,8 @@ impl<R: Read> CpioReader<R> {
                 String::from_utf8_lossy(&magic)
             ))
         })?;
+
+        self.format = Some(format);
 
         match format {
             CpioFormat::Newc | CpioFormat::Crc => self.read_newc_header(),
@@ -329,6 +336,24 @@ impl<R: Read> CpioReader<R> {
         Ok(data)
     }
 
+    /// Read entry data, consuming whatever trailing padding the format of the
+    /// current header requires.
+    fn read_data(&mut self, size: u64) -> Result<Vec<u8>> {
+        match self.format {
+            Some(CpioFormat::Odc) => self.read_data_odc(size),
+            _ => self.read_data_newc(size),
+        }
+    }
+
+    /// Skip entry data, consuming whatever trailing padding the format of the
+    /// current header requires.
+    fn skip_data(&mut self, size: u64) -> Result<()> {
+        match self.format {
+            Some(CpioFormat::Odc) => self.skip_data_odc(size),
+            _ => self.skip_data_newc(size),
+        }
+    }
+
     /// Internal: Detect format at current position without consuming.
     fn peek_format(&mut self) -> Result<Option<CpioFormat>>
     where
@@ -355,10 +380,9 @@ impl<R: Read + Seek> CpioReader<R> {
         let mut entries = Vec::new();
 
         // Detect format from first header
-        let format = match self.peek_format()? {
-            Some(f) => f,
-            None => return Ok(entries),
-        };
+        if self.peek_format()?.is_none() {
+            return Ok(entries);
+        }
 
         while let Some(header) = self.read_header()? {
             if header.is_trailer() {
@@ -367,18 +391,12 @@ impl<R: Read + Seek> CpioReader<R> {
 
             // Read symlink target if applicable
             let link_target = if header.is_symlink() && header.filesize > 0 {
-                let data = match format {
-                    CpioFormat::Odc => self.read_data_odc(header.filesize as u64)?,
-                    _ => self.read_data_newc(header.filesize as u64)?,
-                };
+                let data = self.read_data(header.filesize as u64)?;
                 Some(String::from_utf8(data).map_err(|e| {
                     PbzxError::InvalidCpio(format!("Invalid symlink target: {}", e))
                 })?)
             } else {
-                match format {
-                    CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
-                    _ => self.skip_data_newc(header.filesize as u64)?,
-                }
+                self.skip_data(header.filesize as u64)?;
                 None
             };
 
@@ -404,10 +422,9 @@ impl<R: Read + Seek> CpioReader<R> {
         self.position = 0;
 
         // Detect format
-        let format = match self.peek_format()? {
-            Some(f) => f,
-            None => return Err(PbzxError::FileNotFound(path.to_string())),
-        };
+        if self.peek_format()?.is_none() {
+            return Err(PbzxError::FileNotFound(path.to_string()));
+        }
 
         while let Some(header) = self.read_header()? {
             if header.is_trailer() {
@@ -418,16 +435,10 @@ impl<R: Read + Seek> CpioReader<R> {
                 if header.is_directory() {
                     return Err(PbzxError::InvalidPath(format!("'{}' is a directory", path)));
                 }
-                return match format {
-                    CpioFormat::Odc => self.read_data_odc(header.filesize as u64),
-                    _ => self.read_data_newc(header.filesize as u64),
-                };
+                return self.read_data(header.filesize as u64);
             }
 
-            match format {
-                CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
-                _ => self.skip_data_newc(header.filesize as u64)?,
-            }
+            self.skip_data(header.filesize as u64)?
         }
 
         Err(PbzxError::FileNotFound(path.to_string()))
@@ -463,10 +474,9 @@ impl<R: Read + Seek> CpioReader<R> {
         self.position = 0;
 
         // Detect format
-        let format = match self.peek_format()? {
-            Some(f) => f,
-            None => return Ok(ExtractStats::default()),
-        };
+        if self.peek_format()?.is_none() {
+            return Ok(ExtractStats::default());
+        }
 
         let mut stats = ExtractStats::default();
 
@@ -485,10 +495,7 @@ impl<R: Read + Seek> CpioReader<R> {
             };
 
             if !matches {
-                match format {
-                    CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
-                    _ => self.skip_data_newc(header.filesize as u64)?,
-                }
+                self.skip_data(header.filesize as u64)?;
                 continue;
             }
 
@@ -497,10 +504,7 @@ impl<R: Read + Seek> CpioReader<R> {
 
             // The base dir itself maps to dest (already created above)
             if rel_path.is_empty() {
-                match format {
-                    CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
-                    _ => self.skip_data_newc(header.filesize as u64)?,
-                }
+                self.skip_data(header.filesize as u64)?;
                 if header.is_directory() {
                     stats.dirs += 1;
                 }
@@ -517,23 +521,14 @@ impl<R: Read + Seek> CpioReader<R> {
 
             if header.is_directory() {
                 std::fs::create_dir_all(&full_path)?;
-                match format {
-                    CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
-                    _ => self.skip_data_newc(header.filesize as u64)?,
-                }
+                self.skip_data(header.filesize as u64)?;
                 stats.dirs += 1;
             } else if header.is_symlink() {
                 // Skip symlinks — just consume the data
-                match format {
-                    CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
-                    _ => self.skip_data_newc(header.filesize as u64)?,
-                }
+                self.skip_data(header.filesize as u64)?;
                 stats.symlinks_skipped += 1;
             } else if header.is_file() {
-                let data = match format {
-                    CpioFormat::Odc => self.read_data_odc(header.filesize as u64)?,
-                    _ => self.read_data_newc(header.filesize as u64)?,
-                };
+                let data = self.read_data(header.filesize as u64)?;
                 let mut file = std::fs::File::create(&full_path)?;
                 file.write_all(&data)?;
                 stats.bytes += data.len() as u64;
@@ -547,10 +542,7 @@ impl<R: Read + Seek> CpioReader<R> {
                 }
             } else {
                 // Skip special files (devices, fifos, etc.)
-                match format {
-                    CpioFormat::Odc => self.skip_data_odc(header.filesize as u64)?,
-                    _ => self.skip_data_newc(header.filesize as u64)?,
-                }
+                self.skip_data(header.filesize as u64)?
             }
         }
 
@@ -579,10 +571,8 @@ impl<'a, R: Read> Iterator for CpioEntries<'a, R> {
                     return None;
                 }
 
-                // For streaming iterator, we read data with odc-style (no padding)
-                // This is a simplification - in practice you'd need to track format
                 let data = if header.filesize > 0 {
-                    match self.reader.read_data_odc(header.filesize as u64) {
+                    match self.reader.read_data(header.filesize as u64) {
                         Ok(d) => Some(d),
                         Err(e) => return Some(Err(e)),
                     }
@@ -733,6 +723,32 @@ mod tests {
         assert!(tmp.path().join("hello").exists());
         assert!(!tmp.path().join("usr").exists());
         assert!(!tmp.path().join("etc").exists());
+    }
+
+    #[test]
+    fn test_entries_iterator_honours_newc_padding() {
+        use crate::writer::CpioBuilder;
+
+        // 7 bytes of content needs 1 byte of newc padding. An entry read that
+        // does not consume that pad leaves the stream a byte short, so every
+        // later header is parsed from the wrong offset.
+        let mut builder = CpioBuilder::new();
+        builder.add_file("first.txt", b"content", 0o644);
+        builder.add_file("second.txt", b"more", 0o644);
+        let cpio_data = builder.finish();
+
+        let mut reader = CpioReader::new(std::io::Cursor::new(&cpio_data));
+        let entries: Vec<_> = reader
+            .entries()
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].path, "first.txt");
+        assert_eq!(entries[0].data.as_deref(), Some(&b"content"[..]));
+        assert_eq!(entries[1].path, "second.txt");
+        assert_eq!(entries[1].data.as_deref(), Some(&b"more"[..]));
     }
 
     #[test]

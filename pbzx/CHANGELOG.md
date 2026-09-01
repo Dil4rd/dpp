@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Reject a zero-length chunk header that has data behind it. Apple's payloads end
+  at EOF rather than with a marker, so treating one mid-stream as a clean end
+  silently truncated the archive and reported success
+
 - Read entry data in the format its own header declared. The streaming entry
   iterator always used the unpadded odc framing, so a newc or crc archive
   desynchronised by up to three bytes per entry and every later header was

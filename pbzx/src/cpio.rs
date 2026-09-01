@@ -181,8 +181,8 @@ impl<R: Read> CpioReader<R> {
             uid,
             gid,
             nlink,
-            mtime,
-            filesize,
+            mtime: u64::from(mtime),
+            filesize: u64::from(filesize),
             devmajor,
             devminor,
             rdevmajor,
@@ -235,9 +235,9 @@ impl<R: Read> CpioReader<R> {
         let gid = parse_octal(24, 6)?;
         let nlink = parse_octal(30, 6)?;
         let rdev = parse_octal(36, 6)?;
-        let mtime = parse_octal_u64(42, 11)? as u32;
+        let mtime = parse_octal_u64(42, 11)?;
         let namesize = parse_octal(53, 6)?;
-        let filesize = parse_octal_u64(59, 11)? as u32;
+        let filesize = parse_octal_u64(59, 11)?;
 
         // Read filename
         let mut name_buf = vec![0u8; namesize as usize];
@@ -391,18 +391,18 @@ impl<R: Read + Seek> CpioReader<R> {
 
             // Read symlink target if applicable
             let link_target = if header.is_symlink() && header.filesize > 0 {
-                let data = self.read_data(header.filesize as u64)?;
+                let data = self.read_data(header.filesize)?;
                 Some(String::from_utf8(data).map_err(|e| {
                     PbzxError::InvalidCpio(format!("Invalid symlink target: {}", e))
                 })?)
             } else {
-                self.skip_data(header.filesize as u64)?;
+                self.skip_data(header.filesize)?;
                 None
             };
 
             entries.push(FileEntry {
                 path: header.name.clone(),
-                size: header.filesize as u64,
+                size: header.filesize,
                 mode: header.mode,
                 mtime: header.mtime,
                 uid: header.uid,
@@ -435,10 +435,10 @@ impl<R: Read + Seek> CpioReader<R> {
                 if header.is_directory() {
                     return Err(PbzxError::InvalidPath(format!("'{}' is a directory", path)));
                 }
-                return self.read_data(header.filesize as u64);
+                return self.read_data(header.filesize);
             }
 
-            self.skip_data(header.filesize as u64)?
+            self.skip_data(header.filesize)?
         }
 
         Err(PbzxError::FileNotFound(path.to_string()))
@@ -495,7 +495,7 @@ impl<R: Read + Seek> CpioReader<R> {
             };
 
             if !matches {
-                self.skip_data(header.filesize as u64)?;
+                self.skip_data(header.filesize)?;
                 continue;
             }
 
@@ -504,7 +504,7 @@ impl<R: Read + Seek> CpioReader<R> {
 
             // The base dir itself maps to dest (already created above)
             if rel_path.is_empty() {
-                self.skip_data(header.filesize as u64)?;
+                self.skip_data(header.filesize)?;
                 if header.is_directory() {
                     stats.dirs += 1;
                 }
@@ -521,14 +521,14 @@ impl<R: Read + Seek> CpioReader<R> {
 
             if header.is_directory() {
                 std::fs::create_dir_all(&full_path)?;
-                self.skip_data(header.filesize as u64)?;
+                self.skip_data(header.filesize)?;
                 stats.dirs += 1;
             } else if header.is_symlink() {
                 // Skip symlinks — just consume the data
-                self.skip_data(header.filesize as u64)?;
+                self.skip_data(header.filesize)?;
                 stats.symlinks_skipped += 1;
             } else if header.is_file() {
-                let data = self.read_data(header.filesize as u64)?;
+                let data = self.read_data(header.filesize)?;
                 let mut file = std::fs::File::create(&full_path)?;
                 file.write_all(&data)?;
                 stats.bytes += data.len() as u64;
@@ -542,7 +542,7 @@ impl<R: Read + Seek> CpioReader<R> {
                 }
             } else {
                 // Skip special files (devices, fifos, etc.)
-                self.skip_data(header.filesize as u64)?
+                self.skip_data(header.filesize)?
             }
         }
 
@@ -572,7 +572,7 @@ impl<'a, R: Read> Iterator for CpioEntries<'a, R> {
                 }
 
                 let data = if header.filesize > 0 {
-                    match self.reader.read_data(header.filesize as u64) {
+                    match self.reader.read_data(header.filesize) {
                         Ok(d) => Some(d),
                         Err(e) => return Some(Err(e)),
                     }
@@ -582,7 +582,7 @@ impl<'a, R: Read> Iterator for CpioEntries<'a, R> {
 
                 Some(Ok(CpioEntry {
                     path: header.name.clone(),
-                    size: header.filesize as u64,
+                    size: header.filesize,
                     mode: header.mode,
                     mtime: header.mtime,
                     uid: header.uid,
@@ -614,7 +614,7 @@ pub struct CpioEntry {
     /// File mode/permissions
     pub mode: u32,
     /// Modification time (Unix timestamp)
-    pub mtime: u32,
+    pub mtime: u64,
     /// User ID
     pub uid: u32,
     /// Group ID
@@ -723,6 +723,43 @@ mod tests {
         assert!(tmp.path().join("hello").exists());
         assert!(!tmp.path().join("usr").exists());
         assert!(!tmp.path().join("etc").exists());
+    }
+
+    #[test]
+    fn test_odc_header_keeps_values_wider_than_32_bits() {
+        // odc stores filesize and mtime as 11 octal digits, a 33-bit range, so
+        // values above u32::MAX are representable on the wire. Narrowing the
+        // filesize wraps the byte count the reader then consumes, which
+        // corrupts every entry after it.
+        let filesize: u64 = 5_000_000_000;
+        let mtime: u64 = 5_000_000_001;
+        assert!(filesize > u64::from(u32::MAX));
+
+        let fields: [(usize, u64); 10] = [
+            (6, 0),        // dev
+            (6, 1),        // ino
+            (6, 0o100644), // mode
+            (6, 0),        // uid
+            (6, 0),        // gid
+            (6, 1),        // nlink
+            (6, 0),        // rdev
+            (11, mtime),
+            (6, 4), // namesize, including the NUL
+            (11, filesize),
+        ];
+
+        let mut header = b"070707".to_vec();
+        for (width, value) in fields {
+            header.extend_from_slice(format!("{value:0width$o}").as_bytes());
+        }
+        header.extend_from_slice(b"big\0");
+
+        let mut reader = CpioReader::new(std::io::Cursor::new(header));
+        let parsed = reader.read_header().unwrap().unwrap();
+
+        assert_eq!(parsed.filesize, filesize);
+        assert_eq!(parsed.mtime, mtime);
+        assert_eq!(parsed.name, "big");
     }
 
     #[test]

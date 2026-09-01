@@ -237,7 +237,7 @@ pub struct PyFileEntry {
     #[pyo3(get)]
     pub mode: u32,
     #[pyo3(get)]
-    pub mtime: u32,
+    pub mtime: u64,
     #[pyo3(get)]
     pub uid: u32,
     #[pyo3(get)]

@@ -31,6 +31,12 @@ PBZX is Apple's streaming compression format used in macOS software updates and 
 
 The concatenated decompressed chunks form a CPIO archive.
 
+The stream ends at EOF: there is no terminator record. The payload fixture is
+255 chunks running exactly to the end of the file with no marker. A chunk
+header of all zeroes is therefore only meaningful as the very last bytes of a
+stream; one appearing with data behind it is corruption, and treating it as a
+clean end would silently truncate the archive.
+
 ### Header
 
 | Offset | Size | Type | Description |
@@ -81,6 +87,14 @@ The POSIX.1 portable format uses octal ASCII for all numeric fields.
 | 48 | 11 | mtime | Modification time |
 | 59 | 6 | namesize | Length of filename (including null) |
 | 65 | 11 | filesize | File size in bytes |
+
+`mtime` and `filesize` are 11 octal digits, so both hold values up to
+8,589,934,591 — 33 bits. Neither fits in a `u32`, and a truncated `filesize`
+misstates how many bytes of entry data follow, desynchronising every later
+header.
+
+Unlike newc and crc, odc pads nothing: the filename follows the header
+immediately, and the file data follows the filename immediately.
 
 ## CPIO newc/crc Format (070701/070702)
 

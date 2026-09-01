@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Breaking:** DMGs written by udif before 0.4.0 stored a short trailing chunk
   under a block run declaring a full sector, and are now rejected on read rather
-  than silently zero-filled. Re-create affected images with 0.4.0 or later.
+  than silently zero-filled; other DMG readers accept them. Re-create affected
+  images with 0.4.0 or later.
 
 ### Fixed
 

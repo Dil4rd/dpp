@@ -7,12 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `CpioHeader::filesize`, `CpioHeader::mtime`, `FileEntry::mtime` and
+  `CpioEntry::mtime` widened from `u32` to `u64`
+
 ### Fixed
 
 - Read entry data in the format its own header declared. The streaming entry
   iterator always used the unpadded odc framing, so a newc or crc archive
   desynchronised by up to three bytes per entry and every later header was
   parsed from the wrong offset
+- Keep odc `filesize` and `mtime` values above 32 bits instead of wrapping them.
+  Both are 11 octal digits on the wire, a 33-bit range, and a wrapped filesize
+  drives how many bytes the reader consumes
 
 ## [0.3.1] - 2026-04-12
 

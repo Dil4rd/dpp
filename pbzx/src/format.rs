@@ -118,9 +118,9 @@ pub struct CpioHeader {
     /// Number of hard links
     pub nlink: u32,
     /// Modification time
-    pub mtime: u32,
+    pub mtime: u64,
     /// File size
-    pub filesize: u32,
+    pub filesize: u64,
     /// Device major number (for device files)
     pub devmajor: u32,
     /// Device minor number (for device files)
@@ -191,7 +191,7 @@ pub struct FileEntry {
     /// File mode/permissions
     pub mode: u32,
     /// Modification time (Unix timestamp)
-    pub mtime: u32,
+    pub mtime: u64,
     /// User ID
     pub uid: u32,
     /// Group ID

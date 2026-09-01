@@ -629,6 +629,50 @@ mod tests {
     }
 
     #[test]
+    fn test_writer_pads_final_chunk_to_its_declared_sector_count() {
+        use std::io::{Read, Seek, SeekFrom};
+
+        // Shorter than a sector, but the block run still declares a whole one.
+        // The stored stream has to decode to the full 512 bytes: a reader that
+        // trusts the block map would otherwise leave the tail of the sector as
+        // fabricated zeroes it cannot distinguish from recovered data.
+        let original = b"not sector aligned".to_vec();
+
+        let mut dmg_buf = Vec::new();
+        {
+            let mut writer = DmgWriter::new(Cursor::new(&mut dmg_buf));
+            writer.add_partition("test", &original).unwrap();
+            writer.finish().unwrap();
+        }
+
+        let reader = DmgReader::new(Cursor::new(&dmg_buf)).unwrap();
+        let data_fork_offset = reader.koly().data_fork_offset;
+        let run = reader.partitions()[0]
+            .block_map
+            .block_runs
+            .iter()
+            .find(|r| r.block_type == BlockType::Zlib)
+            .expect("expected a compressed run")
+            .clone();
+
+        let mut cursor = Cursor::new(&dmg_buf);
+        cursor
+            .seek(SeekFrom::Start(data_fork_offset + run.compressed_offset))
+            .unwrap();
+        let mut compressed = vec![0u8; run.compressed_length as usize];
+        cursor.read_exact(&mut compressed).unwrap();
+
+        let mut decoded = Vec::new();
+        flate2::read::ZlibDecoder::new(&compressed[..])
+            .read_to_end(&mut decoded)
+            .unwrap();
+
+        assert_eq!(decoded.len() as u64, run.sector_count * 512);
+        assert_eq!(&decoded[..original.len()], &original[..]);
+        assert!(decoded[original.len()..].iter().all(|&b| b == 0));
+    }
+
+    #[test]
     fn test_roundtrip_empty_data() {
         // Edge case: empty data
         let original: Vec<u8> = vec![];

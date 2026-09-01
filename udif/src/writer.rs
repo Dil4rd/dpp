@@ -2,6 +2,7 @@
 //!
 //! Provides creation of DMG disk images with various compression options.
 
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufWriter, Seek, Write};
 use std::path::Path;
@@ -139,6 +140,21 @@ impl<W: Write + Seek> DmgWriter<W> {
             let chunk = &data[data_offset..chunk_end];
             let chunk_sectors = (chunk.len() as u64).div_ceil(SECTOR_SIZE).max(1);
 
+            // Pad the trailing chunk out to the sector count its block run
+            // declares. A reader decompresses each run expecting exactly
+            // sector_count * SECTOR_SIZE bytes, and the partition checksum
+            // above is taken over padded data, so storing the short tail
+            // produces a run no conformant reader can decode to its declared
+            // length.
+            let padded_len = (chunk_sectors * SECTOR_SIZE) as usize;
+            let chunk: Cow<'_, [u8]> = if chunk.len() == padded_len {
+                Cow::Borrowed(chunk)
+            } else {
+                let mut padded = chunk.to_vec();
+                padded.resize(padded_len, 0);
+                Cow::Owned(padded)
+            };
+
             // Check if chunk is all zeros
             if chunk.iter().all(|&b| b == 0) {
                 block_runs.push(BlockRun {
@@ -151,7 +167,7 @@ impl<W: Write + Seek> DmgWriter<W> {
                 });
             } else {
                 // Compress the chunk
-                let compressed = self.compress_chunk(chunk)?;
+                let compressed = self.compress_chunk(&chunk)?;
                 let compressed_offset = self.current_offset;
                 let compressed_length = compressed.len() as u64;
 

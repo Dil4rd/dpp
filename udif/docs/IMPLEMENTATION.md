@@ -73,20 +73,35 @@ output.truncate(actual_size);  // ✓
 
 The library uses 2x the expected size to be safe.
 
-### 5. Partial Sector Decompression
+### 5. A Compressed Run Decodes to Exactly Its Declared Length
 
-Decompressed data may be **smaller than `sector_count * 512`** when the original file wasn't sector-aligned.
+A compressed block run must decode to exactly `sector_count * 512`. Creators
+pad the final chunk before compressing it, so the padding is inside the
+compressed stream rather than implied by the reader.
 
 ```rust
-// Wrong - assumes exact size
-decoder.read_exact(&mut buffer[0..sector_count * 512])?;  // ❌ May fail
+// Wrong - a short decode leaves the tail of the buffer zeroed and returns Ok,
+// so fabricated null bytes are indistinguishable from recovered data
+let bytes_read = decoder.read(&mut buffer[0..sector_count * 512])?;  // ❌
 
-// Correct - allow partial reads
-let bytes_read = decoder.read(&mut buffer[0..sector_count * 512])?;  // ✓
-// bytes_read may be less than sector_count * 512
+// Correct - fill the buffer, and fail if the stream cannot
+let decoded = read_full(&mut decoder, &mut buffer[0..sector_count * 512])?;
+if decoded != sector_count * 512 { return Err(...); }  // ✓
 ```
 
-This happens when creating DMGs from files that aren't multiples of 512 bytes.
+Verified against the fixture images: every one of their 1929 compressed runs,
+across LZFSE, XZ and zlib, decodes to exactly its declared length.
+`libdmg-hfsplus` compresses exactly `sectorCount * SECTOR_SIZE` per run and
+asserts the read returned that much.
+
+Note that `dmg2img` inflates to the end of the stream and writes whatever it
+gets, without comparing against the declared count, so it accepts images this
+crate now rejects.
+
+Before 0.4.0 this crate's own writer stored a short trailing chunk under a run
+declaring a full sector, and its reader relied on a pre-zeroed output buffer to
+paper over the gap. Both sides are fixed; images written by earlier versions no
+longer read.
 
 ### 6. Block Run Size is Fixed
 

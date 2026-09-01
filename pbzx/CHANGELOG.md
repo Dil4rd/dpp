@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Read entry data in the format its own header declared. The streaming entry
+  iterator always used the unpadded odc framing, so a newc or crc archive
+  desynchronised by up to three bytes per entry and every later header was
+  parsed from the wrong offset
+
 ## [0.3.1] - 2026-04-12
 
 ### Changed

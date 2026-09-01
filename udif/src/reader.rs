@@ -328,7 +328,14 @@ impl<R: Read + Seek> DmgReader<R> {
                         self.reader.read_exact(&mut buf)?;
                         writer.write_all(&buf)?;
                         bytes_written += block_run.compressed_length;
-                        let remaining = out_size - block_run.compressed_length;
+                        let remaining = out_size
+                            .checked_sub(block_run.compressed_length)
+                            .ok_or_else(|| {
+                                DppError::InvalidBlockMap(format!(
+                                    "block run stores {} bytes but declares only {}",
+                                    block_run.compressed_length, out_size
+                                ))
+                            })?;
                         if remaining > 0 {
                             let zeros = vec![0u8; remaining as usize];
                             writer.write_all(&zeros)?;

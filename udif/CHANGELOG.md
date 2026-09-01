@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Pad the trailing chunk of a partition out to the sector count its block run
   declares, so the stored stream decodes to its full declared length
+- Fail when a decoder yields fewer bytes than a block run declares, instead of
+  leaving the remainder of the block zero-filled and reporting a successful read
 
 ## [0.3.4] - 2026-04-12
 

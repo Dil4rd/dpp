@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Reject a raw block run that stores more bytes than the sector count it declares,
+  instead of underflowing the zero-fill length
+
 - Pad the trailing chunk of a partition out to the sector count its block run
   declares, so the stored stream decodes to its full declared length
 - Fail when a decoder yields fewer bytes than a block run declares, instead of

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Pad the trailing chunk of a partition out to the sector count its block run
+  declares, so the stored stream decodes to its full declared length
+
 ## [0.3.4] - 2026-04-12
 
 ### Changed

@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Map `ApfsError::Unsupported` to `UnsupportedError`, alongside the existing unsupported-version and unsupported-encoding mappings
 
+### Fixed
+
+- `FileEntry.mtime` no longer wraps for CPIO timestamps above 32 bits
+
 ## [0.2.1] - 2026-04-12
 
 ### Changed

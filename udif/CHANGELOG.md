@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** DMGs written by udif before 0.4.0 stored a short trailing chunk
+  under a block run declaring a full sector, and are now rejected on read rather
+  than silently zero-filled. Re-create affected images with 0.4.0 or later.
+
 ### Fixed
 
 - Pad the trailing chunk of a partition out to the sector count its block run

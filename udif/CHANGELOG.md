@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Reject LZFSE output that disagrees with the block map, instead of clamping it
+  and leaving the rest of the block zeroed
+
 - Reject a raw block run that stores more bytes than the sector count it declares,
   instead of underflowing the zero-fill length
 

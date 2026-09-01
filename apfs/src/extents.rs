@@ -1,7 +1,7 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::catalog::FileExtentVal;
-use crate::error::Result;
+use crate::error::{ApfsError, Result};
 
 /// Read file data from extents, streaming to a writer.
 /// Returns the number of bytes written.
@@ -26,7 +26,15 @@ pub fn read_file_data<R: Read + Seek, W: Write>(
         }
 
         let extent_length = extent.length();
-        let phys_start = extent.phys_block_num * block_size;
+        let phys_start = extent
+            .phys_block_num
+            .checked_mul(block_size)
+            .ok_or_else(|| {
+                ApfsError::CorruptedData(format!(
+                    "extent physical block {} overflows the device address space",
+                    extent.phys_block_num
+                ))
+            })?;
 
         let mut extent_offset = 0u64;
         while extent_offset < extent_length && bytes_written < logical_size {
@@ -71,7 +79,12 @@ impl<'a, R: Read + Seek> ApfsForkReader<'a, R> {
             if length == 0 {
                 continue;
             }
-            let physical_start = extent.phys_block_num * block_size;
+            let physical_start = match extent.phys_block_num.checked_mul(block_size) {
+                Some(start) => start,
+                // A block number that cannot be addressed cannot be read from
+                // either. Drop the extent rather than seeking somewhere else.
+                None => continue,
+            };
             extent_map.push((logical_offset, physical_start, length));
             logical_offset += length;
         }
@@ -162,6 +175,30 @@ impl<R: Read + Seek> Seek for ApfsForkReader<'_, R> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::catalog::FileExtentVal;
+
+    #[test]
+    fn test_extent_block_number_beyond_the_address_space_is_rejected() {
+        // phys_block_num comes straight off disk. Multiplied by the block size
+        // it used to wrap, sending the read to an unrelated offset that looks
+        // like recovered data.
+        let extents = vec![FileExtentVal {
+            flags_and_length: 4096,
+            phys_block_num: u64::MAX,
+            crypto_id: 0,
+        }];
+
+        let mut reader = std::io::Cursor::new(vec![0u8; 8192]);
+        let mut out = Vec::new();
+        let err = read_file_data(&mut reader, 4096, &extents, 4096, &mut out).unwrap_err();
+
+        assert!(
+            matches!(err, ApfsError::CorruptedData(_)),
+            "expected CorruptedData, got {err:?}"
+        );
+    }
+
     /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
     #[ignore]

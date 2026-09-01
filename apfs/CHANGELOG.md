@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Reject file extents whose physical block number overflows the device address
+  space instead of wrapping and reading from an unrelated offset
+
 - Symlink targets are now read from the `com.apple.fs.symlink` extended attribute, where APFS stores them. `read_file` and `read_file_to` previously returned empty data for every symlink, and `stat` reported size 0, because symlink inodes carry no extents
 
 ## [0.2.4] - 2026-04-12

@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `XarFile.link` exposes XAR symbolic-link targets
 
+### Changed
+
+- Map `ApfsError::Unsupported` to `UnsupportedError`, alongside the existing unsupported-version and unsupported-encoding mappings
+
 ## [0.2.1] - 2026-04-12
 
 ### Changed

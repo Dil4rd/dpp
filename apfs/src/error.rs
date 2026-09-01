@@ -23,6 +23,9 @@ pub enum ApfsError {
     #[error("corrupted data: {0}")]
     CorruptedData(String),
 
+    #[error("unsupported: {0}")]
+    Unsupported(String),
+
     #[error("no volume found in container")]
     NoVolume,
 }

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `ApfsError::Unsupported` for images that use a feature the reader does not implement, keeping those cases distinct from `CorruptedData`
+- `catalog::lookup_xattr` and `catalog::SYMLINK_XATTR_NAME` for reading an inode's extended attribute by name. Attributes stored as a data stream rather than embedded in the record are reported as `ApfsError::Unsupported`
+
+### Fixed
+
+- Symlink targets are now read from the `com.apple.fs.symlink` extended attribute, where APFS stores them. `read_file` and `read_file_to` previously returned empty data for every symlink, and `stat` reported size 0, because symlink inodes carry no extents
+
 ## [0.2.4] - 2026-04-12
 
 ### Changed

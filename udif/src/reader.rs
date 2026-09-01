@@ -29,6 +29,23 @@ pub(crate) fn read_full<R: Read>(reader: &mut R, buf: &mut [u8]) -> std::io::Res
     Ok(total)
 }
 
+/// Fill `buf` from a decoder, failing if it yields fewer bytes than the block
+/// map declared.
+///
+/// A short decode means the image disagrees with its own block map. Leaving the
+/// rest of `buf` untouched would substitute zeroes for data that could not be
+/// recovered, and the caller has no way to tell those zeroes from real content.
+pub(crate) fn decode_exact<R: Read>(reader: &mut R, buf: &mut [u8], format: &str) -> Result<()> {
+    let decoded = read_full(reader, buf)?;
+    if decoded != buf.len() {
+        return Err(DppError::Decompression(format!(
+            "{format} decoded {decoded} bytes, expected {}",
+            buf.len()
+        )));
+    }
+    Ok(())
+}
+
 /// Options for DMG reader
 #[derive(Debug, Clone)]
 pub struct DmgReaderOptions {
@@ -210,7 +227,7 @@ impl<R: Read + Seek> DmgReader<R> {
 
                     let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
                     let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
-                    read_full(&mut decoder, slice)?;
+                    decode_exact(&mut decoder, slice, "zlib")?;
                 }
                 BlockType::Bzip2 => {
                     self.reader.seek(SeekFrom::Start(
@@ -221,7 +238,7 @@ impl<R: Read + Seek> DmgReader<R> {
 
                     let mut decoder = bzip2::read::BzDecoder::new(&compressed[..]);
                     let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
-                    read_full(&mut decoder, slice)?;
+                    decode_exact(&mut decoder, slice, "bzip2")?;
                 }
                 BlockType::Lzfse => {
                     self.reader.seek(SeekFrom::Start(
@@ -251,7 +268,7 @@ impl<R: Read + Seek> DmgReader<R> {
 
                     let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
                     let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
-                    read_full(&mut decoder, slice)?;
+                    decode_exact(&mut decoder, slice, "xz")?;
                 }
                 BlockType::Adc => {
                     return Err(DppError::Unsupported("ADC compression".into()));
@@ -332,7 +349,7 @@ impl<R: Read + Seek> DmgReader<R> {
 
                     let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
                     let mut decompressed = vec![0u8; out_size as usize];
-                    read_full(&mut decoder, &mut decompressed)?;
+                    decode_exact(&mut decoder, &mut decompressed, "zlib")?;
                     writer.write_all(&decompressed)?;
                     bytes_written += out_size;
                 }
@@ -345,7 +362,7 @@ impl<R: Read + Seek> DmgReader<R> {
 
                     let mut decoder = bzip2::read::BzDecoder::new(&compressed[..]);
                     let mut decompressed = vec![0u8; out_size as usize];
-                    read_full(&mut decoder, &mut decompressed)?;
+                    decode_exact(&mut decoder, &mut decompressed, "bzip2")?;
                     writer.write_all(&decompressed)?;
                     bytes_written += out_size;
                 }
@@ -376,7 +393,7 @@ impl<R: Read + Seek> DmgReader<R> {
 
                     let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
                     let mut decompressed = vec![0u8; out_size as usize];
-                    read_full(&mut decoder, &mut decompressed)?;
+                    decode_exact(&mut decoder, &mut decompressed, "xz")?;
                     writer.write_all(&decompressed)?;
                     bytes_written += out_size;
                 }
@@ -483,7 +500,7 @@ impl<R: Read + Seek> DmgReader<R> {
 
                         let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
                         let end = (out_offset + out_size) as usize;
-                        let _ = decoder.read(&mut output[out_offset as usize..end])?;
+                        decode_exact(&mut decoder, &mut output[out_offset as usize..end], "zlib")?;
                     }
                     BlockType::Bzip2 => {
                         self.reader.seek(SeekFrom::Start(
@@ -494,7 +511,7 @@ impl<R: Read + Seek> DmgReader<R> {
 
                         let mut decoder = bzip2::read::BzDecoder::new(&compressed[..]);
                         let end = (out_offset + out_size) as usize;
-                        let _ = decoder.read(&mut output[out_offset as usize..end])?;
+                        decode_exact(&mut decoder, &mut output[out_offset as usize..end], "bzip2")?;
                     }
                     BlockType::Lzfse => {
                         self.reader.seek(SeekFrom::Start(
@@ -523,7 +540,7 @@ impl<R: Read + Seek> DmgReader<R> {
                         let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
                         let slice =
                             &mut output[out_offset as usize..(out_offset + out_size) as usize];
-                        read_full(&mut decoder, slice)?;
+                        decode_exact(&mut decoder, slice, "xz")?;
                     }
                     BlockType::Adc => {
                         return Err(DppError::Unsupported("ADC compression".into()));
@@ -630,11 +647,11 @@ fn decompress_block(block: &ReadBlock, output: &mut [u8]) -> Result<()> {
         }
         BlockType::Zlib => {
             let mut decoder = flate2::read::ZlibDecoder::new(&block.data[..]);
-            read_full(&mut decoder, output)?;
+            decode_exact(&mut decoder, output, "zlib")?;
         }
         BlockType::Bzip2 => {
             let mut decoder = bzip2::read::BzDecoder::new(&block.data[..]);
-            read_full(&mut decoder, output)?;
+            decode_exact(&mut decoder, output, "bzip2")?;
         }
         BlockType::Lzfse => {
             let expected_size = output.len();
@@ -646,7 +663,7 @@ fn decompress_block(block: &ReadBlock, output: &mut [u8]) -> Result<()> {
         }
         BlockType::Xz => {
             let mut decoder = xz2::read::XzDecoder::new(&block.data[..]);
-            read_full(&mut decoder, output)?;
+            decode_exact(&mut decoder, output, "xz")?;
         }
         _ => {
             // ZeroFill, Comment, End — should not appear in ReadBlock list
@@ -899,4 +916,42 @@ pub fn is_dmg<P: AsRef<Path>>(path: P) -> bool {
         .map(BufReader::new)
         .map(|mut r| crate::format::is_dmg(&mut r))
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    fn zlib_compress(data: &[u8]) -> Vec<u8> {
+        use flate2::{Compression, write::ZlibEncoder};
+        use std::io::Write;
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(data).unwrap();
+        encoder.finish().unwrap()
+    }
+
+    #[test]
+    fn test_decode_exact_accepts_a_full_block() {
+        let compressed = zlib_compress(&[0xAB; 64]);
+        let mut decoder = flate2::read::ZlibDecoder::new(Cursor::new(compressed));
+        let mut output = [0u8; 64];
+
+        decode_exact(&mut decoder, &mut output, "zlib").unwrap();
+
+        assert_eq!(output, [0xAB; 64]);
+    }
+
+    #[test]
+    fn test_decode_exact_rejects_a_short_block() {
+        // Decodes to 32 bytes while the block map claims 64. The trailing 32
+        // bytes used to stay zeroed and were handed back as recovered data.
+        let compressed = zlib_compress(&[0xAB; 32]);
+        let mut decoder = flate2::read::ZlibDecoder::new(Cursor::new(compressed));
+        let mut output = [0u8; 64];
+
+        let err = decode_exact(&mut decoder, &mut output, "zlib").unwrap_err();
+
+        assert!(matches!(err, DppError::Decompression(_)), "got {err:?}");
+    }
 }

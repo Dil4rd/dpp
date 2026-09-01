@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `XarFile::link` exposes the target text of symbolic-link entries
+
+### Changed
+
+- **Breaking:** downstream `XarFile` struct literals must initialize the new `link` field
+
+### Fixed
+
+- Scope file metadata and payload descriptors to their exact TOC ancestry
+- Preserve complete file names and symlink targets across text, CDATA, and comments
+- Bound heap entry reads and reject offset or decoded-size inconsistencies
+
 ## [0.3.2] - 2026-04-12
 
 ### Changed

@@ -215,6 +215,144 @@ mod tests {
     }
 
     #[test]
+    fn test_xar_symlink_target_roundtrip() {
+        let toc_xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<xar><toc><file id="1">
+  <link type="file"><![CDATA[ ../A&B ]]></link>
+  <type>symlink</type><name>link</name>
+</file></toc></xar>"#;
+        let xar_buf = build_test_xar(toc_xml, &[]);
+        let mut cursor = Cursor::new(&xar_buf);
+        let archive = XarArchive::open(&mut cursor).unwrap();
+
+        let link = archive.find("link").unwrap();
+        assert_eq!(link.file_type, XarFileType::Symlink);
+        assert_eq!(link.link.as_deref(), Some(" ../A&B "));
+    }
+
+    #[test]
+    fn test_xar_rejects_declared_toc_length_mismatch() {
+        let toc_xml = br#"<xar><toc></toc></xar>"#;
+        for declared_len in [toc_xml.len() - 1, toc_xml.len() + 1] {
+            let mut xar_buf = build_test_xar(toc_xml, &[]);
+            xar_buf[16..24].copy_from_slice(&u64::try_from(declared_len).unwrap().to_be_bytes());
+            assert!(matches!(
+                XarArchive::open(Cursor::new(&xar_buf)),
+                Err(XarError::InvalidToc(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn test_xar_rejects_truncated_declared_toc_extent() {
+        let toc_xml = br#"<xar><toc></toc></xar>"#;
+        let mut xar_buf = build_test_xar(toc_xml, &[]);
+        let declared_len = u64::from_be_bytes(xar_buf[8..16].try_into().unwrap()) + 1;
+        xar_buf[8..16].copy_from_slice(&declared_len.to_be_bytes());
+        assert!(matches!(
+            XarArchive::open(Cursor::new(&xar_buf)),
+            Err(XarError::InvalidToc(_))
+        ));
+    }
+
+    #[test]
+    fn test_xar_rejects_heap_entry_offset_overflow() {
+        let toc_xml = br#"<xar><toc><file id="1">
+  <name>overflow</name><type>file</type>
+  <data><offset>18446744073709551615</offset><length>0</length><size>0</size></data>
+</file></toc></xar>"#;
+        let xar_buf = build_test_xar(toc_xml, &[]);
+        let mut archive = XarArchive::open(Cursor::new(&xar_buf)).unwrap();
+        let file = archive.find("overflow").unwrap().clone();
+        assert!(matches!(
+            archive.read_file(&file),
+            Err(XarError::InvalidToc(_))
+        ));
+    }
+
+    #[test]
+    fn test_xar_rejects_raw_entry_size_mismatch() {
+        let toc_xml = br#"<xar><toc><file id="1">
+  <name>mismatch</name><type>file</type>
+  <data><offset>0</offset><length>5</length><size>4</size></data>
+</file></toc></xar>"#;
+        let xar_buf = build_test_xar(toc_xml, b"hello");
+        let mut archive = XarArchive::open(Cursor::new(&xar_buf)).unwrap();
+        let file = archive.find("mismatch").unwrap().clone();
+        assert!(matches!(
+            archive.read_file(&file),
+            Err(XarError::InvalidToc(_))
+        ));
+    }
+
+    #[test]
+    fn test_xar_streams_compressed_entries_and_checks_decoded_size() {
+        use flate2::Compression;
+        use flate2::write::{GzEncoder, ZlibEncoder};
+        use std::io::{self, Write};
+
+        struct RejectWrites;
+
+        impl Write for RejectWrites {
+            fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+                Err(io::Error::other("writer rejected data"))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let mut zlib_encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        zlib_encoder.write_all(b"hello").unwrap();
+        let zlib_heap = zlib_encoder.finish().unwrap();
+
+        let mut gzip_encoder = GzEncoder::new(Vec::new(), Compression::default());
+        gzip_encoder.write_all(b"hello").unwrap();
+        let gzip_heap = gzip_encoder.finish().unwrap();
+
+        for (encoding, heap) in [
+            ("application/zlib", zlib_heap.as_slice()),
+            ("application/x-gzip", gzip_heap.as_slice()),
+        ] {
+            for (declared_size, should_succeed) in [(5, true), (4, false)] {
+                let toc_xml = format!(
+                    "<xar><toc><file id=\"1\"><name>payload</name><type>file</type>\
+                     <data><offset>0</offset><length>{}</length><size>{declared_size}</size>\
+                     <encoding style=\"{encoding}\"/></data></file></toc></xar>",
+                    heap.len()
+                );
+                let xar_buf = build_test_xar(toc_xml.as_bytes(), heap);
+                let mut archive = XarArchive::open(Cursor::new(&xar_buf)).unwrap();
+                let file = archive.find("payload").unwrap().clone();
+                let mut output = Vec::new();
+                let result = archive.read_file_to(&file, &mut output);
+                if should_succeed {
+                    assert_eq!(result.unwrap(), 5);
+                    assert_eq!(output, b"hello");
+                } else {
+                    assert!(matches!(result, Err(XarError::DecompressionFailed(_))));
+                    assert_eq!(output, b"hell");
+                }
+            }
+        }
+
+        let toc_xml = format!(
+            "<xar><toc><file id=\"1\"><name>payload</name><type>file</type>\
+             <data><offset>0</offset><length>{}</length><size>5</size>\
+             <encoding style=\"application/zlib\"/></data></file></toc></xar>",
+            zlib_heap.len()
+        );
+        let xar_buf = build_test_xar(toc_xml.as_bytes(), &zlib_heap);
+        let mut archive = XarArchive::open(Cursor::new(&xar_buf)).unwrap();
+        let file = archive.find("payload").unwrap().clone();
+        assert!(matches!(
+            archive.read_file_to(&file, RejectWrites),
+            Err(XarError::Io(_))
+        ));
+    }
+
+    #[test]
     fn test_extract_all() {
         let toc_xml = br#"<?xml version="1.0" encoding="UTF-8"?>
 <xar>
@@ -317,6 +455,7 @@ mod tests {
     <file id="2">
       <name>link.txt</name>
       <type>symlink</type>
+      <link type="file">real.txt</link>
     </file>
   </toc>
 </xar>"#;

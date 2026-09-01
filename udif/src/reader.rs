@@ -46,6 +46,25 @@ pub(crate) fn decode_exact<R: Read>(reader: &mut R, buf: &mut [u8], format: &str
     Ok(())
 }
 
+/// Decode an LZFSE block, failing if its length disagrees with the block map.
+///
+/// The decoder needs headroom past the expected output, so it decodes into
+/// scratch first. A short result used to be copied in and the rest of `buf`
+/// left zeroed, which is indistinguishable from recovered data.
+fn decode_lzfse_exact(compressed: &[u8], buf: &mut [u8]) -> Result<()> {
+    let mut scratch = vec![0u8; buf.len().saturating_mul(2).max(1)];
+    let decoded = lzfse::decode_buffer(compressed, &mut scratch)
+        .map_err(|e| DppError::Decompression(format!("LZFSE: {e:?}")))?;
+    if decoded != buf.len() {
+        return Err(DppError::Decompression(format!(
+            "lzfse decoded {decoded} bytes, expected {}",
+            buf.len()
+        )));
+    }
+    buf.copy_from_slice(&scratch[..decoded]);
+    Ok(())
+}
+
 /// Options for DMG reader
 #[derive(Debug, Clone)]
 pub struct DmgReaderOptions {
@@ -247,17 +266,8 @@ impl<R: Read + Seek> DmgReader<R> {
                     let mut compressed = vec![0u8; block_run.compressed_length as usize];
                     self.reader.read_exact(&mut compressed)?;
 
-                    // LZFSE decoder needs extra buffer space beyond the actual output size
-                    // Allocate 2x the expected size to be safe
-                    let expected_size = out_size as usize;
-                    let mut temp_buf = vec![0u8; expected_size * 2];
-                    let decoded_size = lzfse::decode_buffer(&compressed, &mut temp_buf)
-                        .map_err(|e| DppError::Decompression(format!("LZFSE: {:?}", e)))?;
-
-                    // Copy only the expected amount to output
-                    let copy_size = decoded_size.min(expected_size);
-                    let end = out_offset as usize + copy_size;
-                    output[out_offset as usize..end].copy_from_slice(&temp_buf[..copy_size]);
+                    let end = out_offset as usize + out_size as usize;
+                    decode_lzfse_exact(&compressed, &mut output[out_offset as usize..end])?;
                 }
                 BlockType::Xz => {
                     self.reader.seek(SeekFrom::Start(
@@ -380,16 +390,10 @@ impl<R: Read + Seek> DmgReader<R> {
                     let mut compressed = vec![0u8; block_run.compressed_length as usize];
                     self.reader.read_exact(&mut compressed)?;
 
-                    let expected_size = out_size as usize;
-                    let mut temp_buf = vec![0u8; expected_size * 2];
-                    let decoded_size = lzfse::decode_buffer(&compressed, &mut temp_buf)
-                        .map_err(|e| DppError::Decompression(format!("LZFSE: {:?}", e)))?;
-
-                    let mut block = vec![0u8; expected_size];
-                    let copy_size = decoded_size.min(expected_size);
-                    block[..copy_size].copy_from_slice(&temp_buf[..copy_size]);
+                    let mut block = vec![0u8; out_size as usize];
+                    decode_lzfse_exact(&compressed, &mut block)?;
                     writer.write_all(&block)?;
-                    bytes_written += expected_size as u64;
+                    bytes_written += out_size;
                 }
                 BlockType::Xz => {
                     self.reader.seek(SeekFrom::Start(
@@ -527,15 +531,8 @@ impl<R: Read + Seek> DmgReader<R> {
                         let mut compressed = vec![0u8; block_run.compressed_length as usize];
                         self.reader.read_exact(&mut compressed)?;
 
-                        // LZFSE decoder needs extra buffer space
-                        let expected_size = out_size as usize;
-                        let mut temp_buf = vec![0u8; expected_size * 2];
-                        let decoded_size = lzfse::decode_buffer(&compressed, &mut temp_buf)
-                            .map_err(|e| DppError::Decompression(format!("LZFSE: {:?}", e)))?;
-
-                        let copy_size = decoded_size.min(expected_size);
-                        let end = out_offset as usize + copy_size;
-                        output[out_offset as usize..end].copy_from_slice(&temp_buf[..copy_size]);
+                        let end = out_offset as usize + out_size as usize;
+                        decode_lzfse_exact(&compressed, &mut output[out_offset as usize..end])?;
                     }
                     BlockType::Xz => {
                         self.reader.seek(SeekFrom::Start(
@@ -661,12 +658,7 @@ fn decompress_block(block: &ReadBlock, output: &mut [u8]) -> Result<()> {
             decode_exact(&mut decoder, output, "bzip2")?;
         }
         BlockType::Lzfse => {
-            let expected_size = output.len();
-            let mut temp_buf = vec![0u8; expected_size * 2];
-            let decoded_size = lzfse::decode_buffer(&block.data, &mut temp_buf)
-                .map_err(|e| DppError::Decompression(format!("LZFSE: {:?}", e)))?;
-            let copy_size = decoded_size.min(expected_size);
-            output[..copy_size].copy_from_slice(&temp_buf[..copy_size]);
+            decode_lzfse_exact(&block.data, output)?;
         }
         BlockType::Xz => {
             let mut decoder = xz2::read::XzDecoder::new(&block.data[..]);
@@ -936,6 +928,35 @@ mod tests {
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
         encoder.write_all(data).unwrap();
         encoder.finish().unwrap()
+    }
+
+    fn lzfse_compress(data: &[u8]) -> Vec<u8> {
+        let mut out = vec![0u8; data.len() * 2 + 4096];
+        let n = lzfse::encode_buffer(data, &mut out).unwrap();
+        out.truncate(n);
+        out
+    }
+
+    #[test]
+    fn test_decode_lzfse_exact_accepts_a_full_block() {
+        let compressed = lzfse_compress(&[0xCD; 512]);
+        let mut output = vec![0u8; 512];
+
+        decode_lzfse_exact(&compressed, &mut output).unwrap();
+
+        assert_eq!(output, vec![0xCD; 512]);
+    }
+
+    #[test]
+    fn test_decode_lzfse_exact_rejects_a_short_block() {
+        // Decodes to 256 bytes while the block map claims 512. The tail used to
+        // be left zeroed and returned as if it were recovered data.
+        let compressed = lzfse_compress(&[0xCD; 256]);
+        let mut output = vec![0u8; 512];
+
+        let err = decode_lzfse_exact(&compressed, &mut output).unwrap_err();
+
+        assert!(matches!(err, DppError::Decompression(_)), "got {err:?}");
     }
 
     #[test]

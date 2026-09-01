@@ -95,9 +95,20 @@ impl<R: Read> PbzxReader<R> {
 
         self.current_offset += CHUNK_HEADER_SIZE as u64;
 
-        // End marker check
+        // A zero-length chunk header is only ever a terminator. Apple's own
+        // payloads simply run to EOF instead -- the fixture has 255 chunks and
+        // no marker -- so one appearing with data behind it is corruption, and
+        // treating it as a clean end would silently truncate the archive.
         if uncompressed_size == 0 && compressed_size == 0 {
-            return Ok(None);
+            let mut probe = [0u8; 1];
+            return match self.reader.read(&mut probe) {
+                Ok(0) => Ok(None),
+                Ok(_) => Err(PbzxError::InvalidChunk {
+                    offset: self.current_offset - CHUNK_HEADER_SIZE as u64,
+                    message: "zero-length chunk header followed by more data".to_string(),
+                }),
+                Err(e) => Err(e.into()),
+            };
         }
 
         Ok(Some(ChunkHeader {
@@ -384,6 +395,39 @@ mod tests {
         // Flags (8 bytes, big-endian)
         data.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 1]);
         data
+    }
+
+    #[test]
+    fn test_zero_chunk_header_at_eof_ends_the_stream() {
+        let mut data = create_minimal_pbzx();
+        data.extend_from_slice(&[0u8; 16]);
+
+        let mut reader = PbzxReader::new(Cursor::new(data)).unwrap();
+        let mut out = Vec::new();
+
+        assert_eq!(reader.decompress_to(&mut out).unwrap(), 0);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn test_zero_chunk_header_followed_by_data_is_rejected() {
+        // Apple's payloads end at EOF rather than with a marker, so a zero
+        // header with data behind it is corruption. Accepting it would report
+        // a truncated archive as a complete one.
+        let mut data = create_minimal_pbzx();
+        data.extend_from_slice(&[0u8; 16]);
+        data.extend_from_slice(&[0u8; 8]);
+        data.extend_from_slice(b"more chunks would follow");
+
+        let mut reader = PbzxReader::new(Cursor::new(data)).unwrap();
+        let mut out = Vec::new();
+
+        let err = reader.decompress_to(&mut out).unwrap_err();
+
+        assert!(
+            matches!(err, PbzxError::InvalidChunk { .. }),
+            "expected InvalidChunk, got {err:?}"
+        );
     }
 
     #[test]

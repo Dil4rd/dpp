@@ -288,8 +288,16 @@ fn decode_name(value: String, enctype: Option<String>) -> Result<String> {
     match enctype.as_deref() {
         None => Ok(value),
         Some("base64") => {
+            // Apple's XAR writer may wrap long base64 values with CRLF line
+            // breaks. Ignore ASCII whitespace as part of the base64
+            // transport, while leaving all other invalid bytes for the
+            // decoder to reject.
+            let compact_value = value
+                .bytes()
+                .filter(|byte| !byte.is_ascii_whitespace())
+                .collect::<Vec<_>>();
             let decoded = base64::engine::general_purpose::STANDARD
-                .decode(value.trim())
+                .decode(compact_value)
                 .map_err(|error| {
                     XarError::XmlParse(format!("invalid base64 <name> value {value:?}: {error}"))
                 })?;
@@ -1035,8 +1043,8 @@ mod tests {
     #[test]
     fn decodes_base64_encoded_name() {
         // Real bytes from fixtures/archives/basic.xar's TOC: macOS `xar` sets
-        // enctype="base64" for names that aren't safe as bare XML text. This
-        // is the base64 encoding of "こんにちは.txt".
+        // enctype="base64" for names that aren't representable in
+        // ISO-8859-1. This is the base64 encoding of "こんにちは.txt".
         let xml = br#"<xar><toc>
   <file id="1">
     <type>file</type>
@@ -1066,6 +1074,29 @@ mod tests {
         let child = files.iter().find(|f| f.id == 2).unwrap();
         assert_eq!(child.name, "こんにちは.txt");
         assert_eq!(child.path, "unicode/こんにちは.txt");
+    }
+
+    #[test]
+    fn accepts_line_wrapped_base64_encoded_name() {
+        const APPLE_XAR_BASE64_LINE_LENGTH: usize = 72;
+
+        let name = "これはとても長いファイル名であり、XARのbase64ラッピングを検証します.txt";
+        let encoded = base64::engine::general_purpose::STANDARD.encode(name.as_bytes());
+        let wrapped = encoded
+            .as_bytes()
+            .chunks(APPLE_XAR_BASE64_LINE_LENGTH)
+            .map(|chunk| std::str::from_utf8(chunk).unwrap())
+            .collect::<Vec<_>>()
+            .join("\r\n");
+        assert!(wrapped.contains("\r\n"));
+
+        let xml = format!(
+            "<xar><toc><file id=\"1\"><type>file</type><name enctype=\"base64\">{wrapped}</name></file></toc></xar>"
+        );
+
+        let files = parse_toc_xml(xml.as_bytes()).unwrap();
+        assert_eq!(files[0].name, name);
+        assert_eq!(files[0].path, name);
     }
 
     #[test]

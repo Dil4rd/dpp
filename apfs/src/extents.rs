@@ -83,9 +83,8 @@ impl<'a, R: Read + Seek> ApfsForkReader<'a, R> {
                 Some(start) => start,
                 // A block number that cannot be addressed cannot be read from
                 // either. Drop the extent rather than seeking somewhere else.
-                //
-                // PROVISIONAL(anomaly-channel): dropping it silently shortens
-                // the fork with no signal to the caller. Report the extent.
+                // PROVISIONAL(anomaly-channel): dropped silently, shortening
+                // the fork with no signal to the caller.
                 None => continue,
             };
             extent_map.push((logical_offset, physical_start, length));

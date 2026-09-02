@@ -281,9 +281,9 @@ fn parse_u64_field(name: &str, value: &str) -> Result<u64> {
 }
 
 /// Decode a `<name>` element's text, applying the `enctype` attribute
-/// captured from its start tag. macOS `xar` sets `enctype="base64"` when a
-/// name isn't safe as bare XML text (observed for non-ASCII names); the text
-/// content is then the base64 encoding of the real, UTF-8 name.
+/// captured from its start tag. macOS `xar` sets `enctype="base64"` when the
+/// name's UTF-8 value is not representable in ISO-8859-1; the text content is
+/// then the base64 encoding of the real name.
 fn decode_name(value: String, enctype: Option<String>) -> Result<String> {
     match enctype.as_deref() {
         None => Ok(value),

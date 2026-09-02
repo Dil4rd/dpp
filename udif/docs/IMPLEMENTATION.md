@@ -141,22 +141,30 @@ Koly Header Fields:
   Total                                           = 512 bytes
 ```
 
-### 8. Raw Block Decompression Length
+### 8. Raw Block Length
 
-For Raw/uncompressed blocks, you must read **`compressed_length` bytes**, not `sector_count * 512`.
+Read **`compressed_length` bytes** for a Raw run, never `sector_count * 512` —
+the stored length is what is actually there, and reading past it walks into the
+next run's data.
 
 ```rust
-// Wrong - tries to read more bytes than stored
-let size = block_run.sector_count * 512;
-reader.read_exact(&mut output[..size])?;  // ❌ May read past data!
-
-// Correct - read only the stored data
 let size = block_run.compressed_length;
-reader.read_exact(&mut output[..size])?;  // ✓
-// Remaining bytes stay zero-filled
+reader.read_exact(&mut output[..size])?;
 ```
 
-This matters because the writer stores the actual data size, which may be smaller than the padded sector size.
+In practice the two are the same. Every Raw run in the fixture images stores
+exactly `sector_count * 512`; it is `Ignore` runs that store nothing, and their
+whole meaning is "these sectors are zeros", so they never read at all.
+
+A Raw run storing *less* than it declares is therefore a deviation, not a
+normal case. The remainder is currently left zeroed and the deviation is not
+reported — see the note on provisional handling in
+[Coding](../../.claude/docs/CODING.md#provisional-strictness).
+
+Earlier revisions of this document claimed the shortfall was routine "because
+the writer stores the actual data size". That described this crate's own
+pre-0.4.0 writer, which stored a short trailing chunk under a run declaring a
+full sector, not anything a DMG creator does.
 
 ### 9. Checksum Verification
 

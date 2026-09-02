@@ -53,23 +53,36 @@ so it is not total. Measure `appfs.raw` for Fletcher failures before switching
 — the same block-audit approach used for the DMGs — since this could reject
 real images.
 
-**6. apfs sparse files read from the wrong offsets** `[unverified]` — high.
-`ApfsForkReader::new` (`apfs/src/extents.rs:90-91`) builds its map by
-concatenating extent lengths, discarding the extents' real logical offsets
-(the key is dropped at `catalog.rs:418`). For a sparse or non-contiguous file
-this returns data from the wrong place with no error. Needs real understanding
-of the extent semantics before touching.
+**6. apfs ignores each extent's logical address** `[verified]` — high.
+An APFS extent's logical offset lives in its *key*
+(`j_file_extent_key_t.logical_addr`); the value carries only length, physical
+block and crypto id. `lookup_file_extents` discards it — `for (_key, val) in
+&entries` at `apfs/src/catalog.rs:418` — so both readers reconstruct logical
+position by summing lengths: `ApfsForkReader::new` (`extents.rs:90-91`) and
+`read_file_data` (`extents.rs:33`).
+
+That is only correct for a dense, in-order file. Across a hole the running sum
+under-counts, so every extent after it is placed at the wrong logical offset
+and reads return data from elsewhere in the file, with no error. Fixing it
+means preserving the key through `lookup_file_extents` and building the map
+from it — and deciding what a hole yields (zeros, and ideally a report).
 
 **7. hfsplus returns truncated files as complete** `[verified]` — high.
 `read_fork_data` (`hfsplus/src/extents.rs:128`) ends `Ok(bytes_written)` with
 no check that it reached `total_bytes`, and `read_file` (`lib.rs:115`) discards
 the count entirely.
 
-**8. hfsplus `ForkReader` ignores the overflow B-tree** `[unverified]` — med.
-Reportedly built from inline extents only, so `open_file` short-reads past the
-eighth extent on a fragmented file. Note `read_fork_data` *does* consult the
-overflow tree, so this is specific to the streaming reader. Closer to feature
-work than a fix.
+**8. hfsplus `ForkReader` cannot see overflow extents** `[verified]` — med.
+`ForkReader::new` (`hfsplus/src/extents.rs:18`) takes only `reader, fork,
+block_size` — no B-tree — so it maps just the eight inline descriptors in
+`fork.extents`. Its `Read` impl still uses the full `logical_size`, so reading
+past the eighth extent fails `logical_to_physical` and returns
+`UnexpectedEof("logical offset beyond extent map")`.
+
+Correction to the earlier audit note: this is a loud error, not a silent short
+read. `open_file` is affected; `read_file` is not, because `read_fork_data`
+(`extents.rs:165`) does consult the overflow tree. Fixing it means threading
+the extents B-tree into the constructor — closer to feature work than a fix.
 
 **9. Comparators return `Less` on undecodable keys** `[verified]` — high.
 `apfs/src/catalog.rs:510`, `apfs/src/omap.rs:60`, `hfsplus/src/catalog.rs:278`,
@@ -127,9 +140,9 @@ One bad entry destroys the whole result.
 
 ## Tests and infrastructure
 
-- `dpp/tests/integration.rs:243` — `test_hfsplus_to_xar_to_pbzx` cannot pass:
-  `hfsp.raw` is the Chrome volume and has no `.pkg`. Repoint or delete. Expect
-  `5 passed; 1 failed` until then.
+- ~~`test_hfsplus_to_xar_to_pbzx` cannot pass~~ — fixed: repointed at the HFS+
+  partition inside `kdk.dmg`. `cargo test -p dpp -- --ignored` is now
+  `6 passed; 0 failed`.
 - No real-image XAR coverage. The only XAR fixture has no symlinks and no
   `<ea>` blocks, so fixture tests are structurally blind to that bug class.
 - `rust-toolchain.toml` exists only on `dev`. Every PR targeting `main` hits

@@ -474,6 +474,32 @@ mod tests {
     }
 
     #[test]
+    fn test_open_and_extract_base64_encoded_name() {
+        use base64::Engine;
+
+        let name = "こんにちは.txt";
+        let encoded_name = base64::engine::general_purpose::STANDARD.encode(name.as_bytes());
+        let toc_xml = format!(
+            "<xar><toc><file id=\"1\"><name enctype=\"base64\">{encoded_name}</name><type>file</type><data><offset>0</offset><length>7</length><size>7</size><encoding style=\"application/octet-stream\"/></data></file></toc></xar>"
+        );
+
+        let xar_buf = build_test_xar(toc_xml.as_bytes(), b"payload");
+        let mut archive = XarArchive::open(Cursor::new(&xar_buf)).unwrap();
+
+        let file = archive
+            .find(name)
+            .expect("decoded name should be searchable")
+            .clone();
+        assert_eq!(file.name, name);
+        assert_eq!(archive.read_file(&file).unwrap(), b"payload");
+
+        let tmp = tempfile::tempdir().unwrap();
+        let stats = archive.extract_all(tmp.path()).unwrap();
+        assert_eq!(stats.files, 1);
+        assert_eq!(std::fs::read(tmp.path().join(name)).unwrap(), b"payload");
+    }
+
+    #[test]
     fn test_extract_rejects_base64_name_decoding_to_traversal() {
         // "Li4v...cGFzc3dk" is the base64 encoding of "../../etc/passwd". A
         // maliciously crafted XAR could set enctype="base64" on a <name> to

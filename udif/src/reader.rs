@@ -18,6 +18,10 @@ const SECTOR_SIZE: u64 = 512;
 
 /// Read from a decoder until the buffer is full or EOF.
 /// Unlike `read()`, this loops to handle decoders that return partial data.
+///
+/// PROVISIONAL(anomaly-channel): stops once `buf` is full, so a decoder with
+/// more to give is truncated without comment. Truncating is required — writing
+/// past `buf` would overrun the next run — but the discard should be reported.
 pub(crate) fn read_full<R: Read>(reader: &mut R, buf: &mut [u8]) -> std::io::Result<usize> {
     let mut total = 0;
     while total < buf.len() {
@@ -31,6 +35,9 @@ pub(crate) fn read_full<R: Read>(reader: &mut R, buf: &mut [u8]) -> std::io::Res
 
 /// Fill `buf` from a decoder, failing if it yields fewer bytes than the block
 /// map declared.
+///
+/// PROVISIONAL(anomaly-channel): the shortfall is contained to this run, so it
+/// should become a reported partial recovery rather than an error.
 ///
 /// A short decode means the image disagrees with its own block map. Leaving the
 /// rest of `buf` untouched would substitute zeroes for data that could not be
@@ -47,6 +54,11 @@ pub(crate) fn decode_exact<R: Read>(reader: &mut R, buf: &mut [u8], format: &str
 }
 
 /// Decode an LZFSE block, failing if its length disagrees with the block map.
+///
+/// PROVISIONAL(anomaly-channel): a run that decodes short is recoverable —
+/// runs are independently addressed, so the shortfall cannot move any other
+/// one. Recover the prefix and report the unfilled byte range instead of
+/// failing, once there is somewhere to report it.
 ///
 /// The decoder needs headroom past the expected output, so it decodes into
 /// scratch first. A short result used to be copied in and the rest of `buf`
@@ -338,6 +350,10 @@ impl<R: Read + Seek> DmgReader<R> {
                         self.reader.read_exact(&mut buf)?;
                         writer.write_all(&buf)?;
                         bytes_written += block_run.compressed_length;
+                        // PROVISIONAL(anomaly-channel): a raw run storing less
+                        // than it declares is a deviation, and the zeroed
+                        // remainder below is indistinguishable from recovered
+                        // data. Report the range rather than failing here.
                         let remaining = out_size
                             .checked_sub(block_run.compressed_length)
                             .ok_or_else(|| {

@@ -36,6 +36,35 @@ Distinguish a malformed image (`CorruptedData`) from a well-formed one using a f
 
 `ApfsError` deliberately has **no** `#[non_exhaustive]`. `dpp-python`'s `apfs_to_pyerr` matches it exhaustively, so adding a variant fails the build until it has a deliberate Python mapping. That compile error is the coverage check; `#[non_exhaustive]` would require a wildcard arm and let new variants fall silently into whatever bucket it names. The accepted cost is a semver major per new variant.
 
+## Provisional strictness
+
+Some readers currently **fail** on a per-entry deviation that they should
+eventually **recover from and report**. That is deliberate but temporary: there
+is no channel for reporting a degraded result yet, so the only alternative to
+failing is failing silently, which is worse for a forensic tool.
+
+A deviation is recoverable when its blast radius is one item. UDIF block runs
+qualify: each is addressed absolutely on both sides — `compressed_offset` into
+the data fork, `sector_number * 512` in the output — so a bad decode cannot
+move any other run. Sequential formats do not qualify: a pbzx chunk size or a
+cpio `filesize` *is* the stream position, so a wrong one desynchronises
+everything after it and must stay fatal.
+
+Mark both kinds so neither is lost:
+
+```rust
+// PROVISIONAL(anomaly-channel): fail now, degrade and report once there is
+// somewhere to report to. Blast radius is this run only.
+
+// DELIBERATE(fatal): not recoverable — the declared size is the stream
+// position, so continuing past a wrong one corrupts every later entry.
+```
+
+`rg 'PROVISIONAL\(anomaly-channel\)'` lists the sites to revisit when the
+channel lands. When relaxing one, the report has to carry the affected byte
+range, not just a counter: "bytes 4096-4608 of partition 0 were not recovered"
+is investigable, "1 block skipped" is not.
+
 ## Generic I/O
 
 Keep reader types generic over `R: Read + Seek`. No trait objects — fully monomorphized.

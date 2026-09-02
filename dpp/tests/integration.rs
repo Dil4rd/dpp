@@ -228,13 +228,31 @@ fn test_pipeline_filesystem_auto_detect() {
 // Existing fixture-based tests (require external files, run with --ignored)
 // ---------------------------------------------------------------------------
 
-/// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
+/// Requires ../tests/kdk.dmg fixture. Run with `cargo test -- --ignored`.
+///
+/// Covers `XarArchive` reading straight from an `hfsplus` fork reader. Both
+/// pipeline entry points copy the pkg out first — `open_pkg` into memory,
+/// `open_pkg_streaming` into a temp file — so nothing else exercises XAR's
+/// seek pattern against a fork.
 #[test]
 #[ignore]
 fn test_hfsplus_to_xar_to_pbzx() {
-    let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
-    let reader = BufReader::new(file);
-    let mut volume = hfsplus::HfsVolume::open(reader).unwrap();
+    use std::io::Seek;
+
+    // Not hfsp.raw: that is the Google Chrome volume and holds no .pkg. Lift
+    // the HFS+ partition out of kdk.dmg instead, so the fork reader still sees
+    // a real volume.
+    let mut dmg = udif::DmgReader::open("../tests/kdk.dmg").unwrap();
+    let partition_id = dmg.main_partition_id().unwrap();
+    let mut raw = tempfile::tempfile().unwrap();
+    {
+        let mut writer = std::io::BufWriter::new(&mut raw);
+        dmg.decompress_partition_to(partition_id, &mut writer)
+            .unwrap();
+    }
+    raw.seek(std::io::SeekFrom::Start(0)).unwrap();
+
+    let mut volume = hfsplus::HfsVolume::open(BufReader::new(raw)).unwrap();
 
     let entries = volume.list_directory("/").unwrap();
     let pkg_entry = entries

@@ -95,6 +95,10 @@ impl<R: Read> PbzxReader<R> {
 
         self.current_offset += CHUNK_HEADER_SIZE as u64;
 
+        // DELIBERATE(fatal): not recoverable. Chunk sizes are the stream
+        // position, so continuing past a bad header misreads every chunk after
+        // it. This must not be relaxed when the anomaly channel lands.
+        //
         // A zero-length chunk header is only ever a terminator. Apple's own
         // payloads simply run to EOF instead -- the fixture has 255 chunks and
         // no marker -- so one appearing with data behind it is corruption, and

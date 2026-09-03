@@ -1042,9 +1042,10 @@ mod tests {
 
     #[test]
     fn decodes_base64_encoded_name() {
-        // Real bytes from fixtures/archives/basic.xar's TOC: macOS `xar` sets
-        // enctype="base64" for names that aren't representable in
-        // ISO-8859-1. This is the base64 encoding of "こんにちは.txt".
+        // Synthetic: no fixture in this repo exercises this. The only XAR in
+        // the fixture set is kdk.dmg's KernelDebugKit.pkg, whose names are
+        // all ASCII and so never carry enctype. This is the base64 encoding
+        // of "こんにちは.txt".
         let xml = br#"<xar><toc>
   <file id="1">
     <type>file</type>

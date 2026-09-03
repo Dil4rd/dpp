@@ -108,6 +108,21 @@ decodes to the name `こんにちは.txt`. Base64 line wrapping whitespace is
 ignored. Any other `enctype` value, or base64 or UTF-8 that fails to decode, is
 a parse error.
 
+`enctype` applies to `<name>` and to nothing else. That is not an observation
+about which values happen to need encoding — it is enforced on both sides of
+the reference implementation. The writer gates the whole base64 branch on the
+property key (`strcmp(XAR_PROP(i)->key, "name") == 0` in `xar_prop_serialize`),
+and the reader only honours the attribute when the element it is parsing is
+`<name>` (`isname` in `xar_prop_unserialize`); elsewhere it keeps `enctype` as
+an ordinary attribute and takes the text verbatim. libarchive matches this,
+setting its `base64text` flag only inside the `name` branch and decoding only
+in `case FILE_NAME`.
+
+So `<link enctype="base64">` is not a base64 symlink target — it is a literal
+target that happens to carry a meaningless attribute, and decoding it would
+read valid archives differently from every other implementation. Do not
+generalise the decode to other elements.
+
 ### Data Encoding Styles
 
 | Style | Description |

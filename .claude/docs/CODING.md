@@ -10,6 +10,34 @@ Every code change must include or update relevant tests. Run all four pre-commit
 
 Update `CHANGELOG.md` in **all** affected crates for user-visible changes. Update `README.md` if public API, features, or usage changes. Update `<crate>/docs/FORMATS.md` if binary format parsing changes.
 
+## Verify format claims against the reference implementation
+
+Before writing code that depends on what a format *does* — which elements may
+carry an attribute, what a field means when absent, how a writer encodes an
+edge case — read the reference implementation and quote it. Not the spec, not
+a wiki page, not recall. Every time this was skipped in this repo it produced
+confident, wrong work:
+
+- "`enctype="base64"` is a per-property transport, so `<link>` can carry it"
+  — read from the inner `UTF8Toisolat1` condition in `xar_prop_serialize`
+  without its enclosing `strcmp(key, "name")`. The whole branch is
+  `<name>`-only. A parser generalising it rejects archives that xar and
+  libarchive both accept.
+- "xar puts `<link>` on hardlinks too" — it does not. `lib/stat.c` writes
+  `<link>` only for symlinks; hardlinks get a `link` attribute on `<type>`.
+
+Both were one fetch away. Quote the deciding lines in the commit message or
+the code comment, so the next reader can check the claim without redoing the
+search. Where two implementations exist, check both — agreement between xar
+and libarchive is much stronger evidence than either alone.
+
+Reference sources: [mackyle/xar](https://github.com/mackyle/xar) (the
+maintained fork of Apple's original) for XAR/pkg;
+[libarchive](https://github.com/libarchive/libarchive) for XAR and cpio.
+
+A claim that cannot be checked this way is provisional. Say so where it
+lands, rather than letting it harden into an assumption.
+
 ## Zero warnings policy
 
 Code must pass `cargo clippy -- -D warnings` and `RUSTDOCFLAGS="-D warnings" cargo doc` with no warnings. Fix warnings immediately rather than suppressing them.

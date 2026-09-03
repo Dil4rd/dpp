@@ -160,12 +160,29 @@ may be mid-flight:
 
 1. unrecognised or missing `<type>`, a symlink with no `<link>`, and a
    malformed `id` should not be fatal, and should not be coerced to a default
-2. `<link>` is discarded on non-symlinks; xar puts it on hardlinks too
+2. `<link>` is discarded on non-symlinks. **The stated reason was wrong** —
+   checked against `lib/stat.c`, xar does *not* write `<link>` for hardlinks.
+   Symlinks get `xar_prop_set(f, "link", target)`, a child element; hardlinks
+   get `xar_attr_set(f, "type", "link", ...)`, an attribute on `<type>` whose
+   value is `original` for the first occurrence and the original's id for the
+   rest. So the real gap is that `xara` reads only the *text* of `<type>` and
+   drops that attribute, losing hardlink identity entirely. Decide whether to
+   model it before touching `<link>` handling.
 3. `type` and both checksums still get `.trim()` while `name` and `link` are
    verbatim
 4. `extract.rs` propagates the new decode-size errors, so one corrupt entry
    kills the run and leaves a partial tree
 
-His `xar-name-base64-enctype` branch decodes `enctype="base64"` on `<name>`.
-That is a data transformation landing in the middle of this policy — worth
-folding into the same conversation rather than reviewing cold.
+~~His `xar-name-base64-enctype` branch decodes `enctype="base64"` on
+`<name>`.~~ Landed as PR #6 (`21d8fe8`). It needs no policy conversation
+after all: `enctype` is `<name>`-only by construction, so it is not a general
+data-transformation question. Verified on both sides of the reference —
+`xar_prop_serialize` gates the base64 branch on `key == "name"`,
+`xar_prop_unserialize` honours the attribute only when `isname`, and
+libarchive sets `base64text` only in its `name` branch and decodes only in
+`case FILE_NAME`. Recorded in `xara/docs/FORMATS.md`.
+
+Do **not** extend the decode to `<link>` or other elements: no conforming
+writer emits them, no reference reader decodes them, and doing so would both
+reinterpret valid archives and add whole-TOC fatal paths for input that xar
+and libarchive read without complaint. This was attempted and reverted.

@@ -25,6 +25,9 @@ struct FileEntry {
     content: Vec<u8>,
     mode: u16,
     cnid: u32,
+    /// Overrides the fork's declared `logical_size`. `None` means "state the
+    /// truth", which is what a real volume does.
+    declared_size: Option<u64>,
 }
 
 /// Builds a minimal valid HFSX filesystem image in memory.
@@ -67,7 +70,27 @@ impl HfsPlusImageBuilder {
             content: content.to_vec(),
             mode,
             cnid,
+            declared_size: None,
         });
+        self
+    }
+
+    /// Add a file whose fork claims to be `declared_size` bytes while only
+    /// `content` is actually allocated, modelling a volume whose extent chain
+    /// ends before the file does. Used to test that readers do not present a
+    /// short read as a complete file.
+    pub fn add_file_with_declared_size(
+        &mut self,
+        name: &str,
+        content: &[u8],
+        mode: u16,
+        declared_size: u64,
+    ) -> &mut Self {
+        self.add_file(name, content, mode);
+        self.files
+            .last_mut()
+            .expect("add_file just pushed an entry")
+            .declared_size = Some(declared_size);
         self
     }
 
@@ -160,7 +183,7 @@ impl HfsPlusImageBuilder {
                 &file.name,
                 &build_file_record(
                     file.cnid,
-                    file.content.len() as u64,
+                    file.declared_size.unwrap_or(file.content.len() as u64),
                     start_block,
                     block_count,
                     0o100000 | file.mode,
@@ -504,6 +527,45 @@ mod tests {
 
         let data = vol.read_file("/test.pkg").unwrap();
         assert_eq!(data, b"FAKE_PKG_DATA");
+    }
+
+    #[test]
+    fn test_read_file_rejects_a_fork_that_ends_early() {
+        // The fork claims 1 MiB but only one block is allocated, as happens
+        // when an extent chain is damaged or its overflow records are lost.
+        // Returning the short buffer would be indistinguishable from a
+        // complete 1 MiB file that happens to end in zeros.
+        let mut builder = HfsPlusImageBuilder::new();
+        builder.add_file_with_declared_size("short.bin", b"only this much", 0o644, 1024 * 1024);
+        let cursor = Cursor::new(builder.build());
+        let mut vol = HfsVolume::open(cursor).unwrap();
+
+        let err = vol.read_file("/short.bin").unwrap_err();
+        assert!(
+            matches!(err, crate::HfsPlusError::CorruptedData(_)),
+            "expected CorruptedData, got {err:?}"
+        );
+        let message = err.to_string();
+        assert!(message.contains("1048576"), "got {message:?}");
+        assert!(message.contains("short.bin"), "got {message:?}");
+    }
+
+    #[test]
+    fn test_read_file_to_still_reports_the_partial_count() {
+        // read_file_to keeps the streaming contract: it hands back what it
+        // recovered plus the count, so a caller can compare against the
+        // declared size itself. Only read_file, whose Vec<u8> cannot express
+        // partiality, treats the shortfall as an error.
+        let mut builder = HfsPlusImageBuilder::new();
+        builder.add_file_with_declared_size("short.bin", b"only this much", 0o644, 1024 * 1024);
+        let cursor = Cursor::new(builder.build());
+        let mut vol = HfsVolume::open(cursor).unwrap();
+
+        let mut buf = Vec::new();
+        let bytes_read = vol.read_file_to("/short.bin", &mut buf).unwrap();
+        assert_eq!(bytes_read, buf.len() as u64);
+        assert!(bytes_read < 1024 * 1024);
+        assert!(buf.starts_with(b"only this much"));
     }
 
     #[test]

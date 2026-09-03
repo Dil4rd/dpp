@@ -44,7 +44,18 @@ degrade-and-report, not a new abort:
 
 ## Tier 1 remainder: defects returning wrong data
 
-**5. apfs reads are unverified** `[verified]` — high.
+**5. apfs reads are unverified** `[verified]` — high. **Measured; safe to
+proceed.** A tracing run over `appfs.raw` (`ApfsVolume::open` + `walk()`,
+302 entries) touched 61 distinct blocks through those six sites; all 61 pass
+`fletcher::verify_object`, so `fletcher.rs` is correct as written and the
+switch would not reject this healthy image. The only failures anywhere were
+4 all-zero blocks (197367-197370), unwritten slots in the checkpoint
+descriptor ring — their stored checksum is 0 and the Fletcher-64 of an
+all-zero buffer is `0xFFFF_FFFF_FFFF_FFFF`. Those are read by
+`find_latest_nxsb` (`superblock.rs:291`), which already calls
+`verify_object` and uses the failure to *identify* unused slots; it is not
+one of the six sites and is unaffected.
+
 `read_object` (`apfs/src/object.rs:73`) checks Fletcher-64 and is **never
 called**. Every b-tree, omap and volume read uses the non-verifying
 `read_block`: `btree.rs:375,486,514,581`, `omap.rs:20`, `lib.rs:109`.
@@ -53,7 +64,17 @@ so it is not total. Measure `appfs.raw` for Fletcher failures before switching
 — the same block-audit approach used for the DMGs — since this could reject
 real images.
 
-**6. apfs ignores each extent's logical address** `[verified]` — high.
+**6. apfs ignores each extent's logical address** — ~~open~~ **fixed**
+(`8d6019e`). `lookup_extents` (the TODO previously called it
+`lookup_file_extents`) now returns `FileExtentRecord`, pairing each value
+with the `logical_addr` from its key, and both readers place extents by it.
+Interior holes read as zeros; `ApfsForkReader` no longer fails with
+`UnexpectedEof` inside one. Overlapping extents and a trailing gap are
+marked `PROVISIONAL(anomaly-channel)` — the trailing case is ambiguous
+between a real hole and lost extent records, so it is left as a short count
+rather than zero-filled. Original finding follows.
+
+
 An APFS extent's logical offset lives in its *key*
 (`j_file_extent_key_t.logical_addr`); the value carries only length, physical
 block and crypto id. `lookup_file_extents` discards it — `for (_key, val) in
@@ -68,9 +89,26 @@ means preserving the key through `lookup_file_extents` and building the map
 from it — and deciding what a hole yields (zeros, and ideally a report).
 
 **7. hfsplus returns truncated files as complete** `[verified]` — high.
+**Half done** (`42ac895`); the rest is deliberately waiting on the anomaly
+channel.
+
 `read_fork_data` (`hfsplus/src/extents.rs:128`) ends `Ok(bytes_written)` with
-no check that it reached `total_bytes`, and `read_file` (`lib.rs:115`) discards
+no check that it reached `total_bytes`, and `read_file` (`lib.rs:115`) discarded
 the count entirely.
+
+`read_file` is fixed: it compares against the fork's declared `logical_size`
+and fails with `CorruptedData` rather than returning a short buffer. That
+strictness is *terminal, not provisional* — its return type is `Vec<u8>`,
+which cannot express "complete except for a hole", so it must be complete or
+fail whatever the reporting policy becomes. The channel would add a sibling
+API, not change this one.
+
+`read_fork_data` is untouched on purpose. It is the streaming primitive, a
+truncated fork is absolutely addressed, and its target state is
+degrade-and-report — so making it strict now would only have to be relaxed
+again. Do it once, with the channel. `read_file_to` still returns the
+recovered count, and a test pins that asymmetry so it is not "fixed" by
+symmetry.
 
 **8. hfsplus `ForkReader` cannot see overflow extents** `[verified]` — med.
 `ForkReader::new` (`hfsplus/src/extents.rs:18`) takes only `reader, fork,
@@ -145,6 +183,13 @@ One bad entry destroys the whole result.
   `6 passed; 0 failed`.
 - No real-image XAR coverage. The only XAR fixture has no symlinks and no
   `<ea>` blocks, so fixture tests are structurally blind to that bug class.
+- Two `hfsplus` ignored tests point at the wrong fixture — the same bug class
+  `53b6e10` fixed for `dpp`. `volume::tests::test_parse_kdk_volume_header`
+  asserts `hfsp.raw` is HFSX and `extents::tests::test_read_pkg_header_from_kdk`
+  looks for `KernelDebugKit.pkg` in its root, but `hfsp.raw` is the Google
+  Chrome volume and contains neither. `cargo test -p hfsplus -- --ignored` is
+  `3 passed; 2 failed` on a clean tree — pre-existing, not a regression.
+  Repoint them at the HFS+ partition inside `kdk.dmg`.
 - `rust-toolchain.toml` exists only on `dev`. Every PR targeting `main` hits
   phantom lints — this already cost an external contributor a wasted round.
   Add the pin to `main` or merge `dev`.

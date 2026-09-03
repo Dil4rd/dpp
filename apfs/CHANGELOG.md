@@ -11,6 +11,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `ApfsError::Unsupported` for images that use a feature the reader does not implement, keeping those cases distinct from `CorruptedData`
 - `catalog::lookup_xattr` and `catalog::SYMLINK_XATTR_NAME` for reading an inode's extended attribute by name. Attributes stored as a data stream rather than embedded in the record are reported as `ApfsError::Unsupported`
+- `catalog::FileExtentRecord`, pairing a file extent's value with the logical
+  address from its key
+
+### Fixed
+
+- Sparse files no longer read back scrambled. An extent's logical offset lives
+  in its key, and `catalog::lookup_extents` discarded it, so both readers
+  reconstructed positions by summing the lengths of preceding extents. Across
+  a hole that sum under-counts, placing every later extent at the wrong
+  logical offset and returning real data from the wrong part of the file with
+  no error. Extents are now placed at the address from their own record, and a
+  hole reads as zeros
+
+### Changed
+
+- **Breaking:** `catalog::lookup_extents` returns `Vec<FileExtentRecord>`
+  rather than `Vec<FileExtentVal>`, and `extents::read_file_data` and
+  `extents::ApfsForkReader::new` take the new type. `FileExtentVal` itself is
+  unchanged; it models the on-disk value, which does not contain the address
+- `ApfsForkReader` returns zeros when reading inside a hole instead of failing
+  with `UnexpectedEof`
 
 ### Changed
 

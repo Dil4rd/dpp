@@ -249,6 +249,40 @@ impl FileExtentVal {
     }
 }
 
+/// Byte offset of `logical_addr` within a `j_file_extent_key_t`, which is a
+/// `j_key_t` (one `u64` of packed OID and type) followed by the address.
+const FILE_EXTENT_KEY_LOGICAL_ADDR_OFFSET: usize = 8;
+
+/// A file extent record: the value paired with the logical address from its
+/// key.
+///
+/// The logical offset of an extent within its file lives *only* in the key.
+/// The value carries length, physical block and crypto id, so a reader that
+/// keeps values alone cannot place them and has to assume the file is dense
+/// and in order — which is wrong for every sparse file.
+#[derive(Debug, Clone)]
+pub struct FileExtentRecord {
+    /// Logical byte offset of this extent within the file, from the key.
+    pub logical_addr: u64,
+    /// The extent's on-disk value.
+    pub value: FileExtentVal,
+}
+
+/// Extract `logical_addr` from a file extent record's key.
+fn parse_file_extent_logical_addr(key: &[u8]) -> Result<u64> {
+    let bytes = key
+        .get(FILE_EXTENT_KEY_LOGICAL_ADDR_OFFSET..FILE_EXTENT_KEY_LOGICAL_ADDR_OFFSET + 8)
+        .ok_or_else(|| {
+            ApfsError::CorruptedData(format!(
+                "file extent key too short for a logical address: {} bytes",
+                key.len()
+            ))
+        })?;
+    Ok(u64::from_le_bytes(
+        bytes.try_into().expect("slice is exactly 8 bytes"),
+    ))
+}
+
 /// Decode a catalog key: extract obj_id and type from the combined j_key_t.
 fn decode_catalog_key(key_bytes: &[u8]) -> Result<(u64, u8)> {
     if key_bytes.len() < 8 {
@@ -401,7 +435,7 @@ pub fn lookup_extents<R: Read + Seek>(
     omap_root: u64,
     block_size: u32,
     file_oid: u64,
-) -> Result<Vec<FileExtentVal>> {
+) -> Result<Vec<FileExtentRecord>> {
     let compare_fn = catalog_key(file_oid, J_TYPE_FILE_EXTENT);
 
     let entries = btree::btree_scan(
@@ -415,8 +449,11 @@ pub fn lookup_extents<R: Read + Seek>(
     )?;
 
     let mut extents = Vec::new();
-    for (_key, val) in &entries {
-        extents.push(FileExtentVal::parse(val)?);
+    for (key, val) in &entries {
+        extents.push(FileExtentRecord {
+            logical_addr: parse_file_extent_logical_addr(key)?,
+            value: FileExtentVal::parse(val)?,
+        });
     }
 
     Ok(extents)
@@ -848,5 +885,29 @@ mod tests {
         assert_eq!(extent.length(), 0x1000);
         assert_eq!(extent.phys_block_num, 100);
         assert_eq!(extent.crypto_id, 0);
+    }
+
+    #[test]
+    fn test_file_extent_key_logical_address() {
+        // j_file_extent_key_t is a j_key_t (one u64 of packed OID and type)
+        // followed by the little-endian logical address, so the address
+        // starts at byte 8.
+        let mut key = Vec::new();
+        let obj_id_and_type = (u64::from(J_TYPE_FILE_EXTENT) << 60) | 42;
+        key.extend_from_slice(&obj_id_and_type.to_le_bytes());
+        key.extend_from_slice(&8192u64.to_le_bytes());
+
+        assert_eq!(parse_file_extent_logical_addr(&key).unwrap(), 8192);
+    }
+
+    #[test]
+    fn test_file_extent_key_too_short_is_rejected() {
+        // A key with the j_key_t but no address must not silently read as 0,
+        // which would stack every extent at the start of the file.
+        let key = [0u8; 8];
+        assert!(matches!(
+            parse_file_extent_logical_addr(&key),
+            Err(ApfsError::CorruptedData(_))
+        ));
     }
 }

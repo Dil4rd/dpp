@@ -9,7 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- No user-visible changes. Internal cleanup for the lints added in clippy 1.98
+- **Breaking behaviour:** `HfsVolume::read_file` now fails with
+  `CorruptedData` when a fork's extents end before its declared
+  `logical_size`, instead of returning the truncated bytes as a complete
+  file. `read_file_to` is unchanged and still returns the recovered byte
+  count, so callers that want the partial data can take it deliberately
+- Internal cleanup for the lints added in clippy 1.98
+
+### Added
+
+- `testutil::HfsPlusImageBuilder::add_file_with_declared_size` builds a volume
+  whose fork claims more bytes than it allocates, for testing short reads
 
 ## [0.2.4] - 2026-04-12
 

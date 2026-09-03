@@ -111,10 +111,35 @@ impl<R: Read + Seek> HfsVolume<R> {
         )
     }
 
-    /// Read an entire file into memory
+    /// Read an entire file into memory.
+    ///
+    /// Errors with [`HfsPlusError::CorruptedData`] if the fork's extents run
+    /// out before its declared `logical_size` is reached. `Vec<u8>` cannot
+    /// represent "complete except for a hole", so a short read has to be a
+    /// failure here rather than a quietly truncated buffer; use
+    /// [`HfsVolume::read_file_to`], which returns the byte count, to
+    /// recover as much as the volume can give.
     pub fn read_file(&mut self, path: &str) -> Result<Vec<u8>> {
+        let file_record = self.resolve_path_to_file(path)?;
+        let declared_size = file_record.data_fork.logical_size;
+
         let mut buf = Vec::new();
-        self.read_file_to(path, &mut buf)?;
+        let bytes_read = extents::read_fork_data(
+            &mut self.reader,
+            &self.header,
+            &self.extents_btree_header,
+            &file_record.data_fork,
+            file_record.file_id,
+            &mut buf,
+        )?;
+
+        if bytes_read != declared_size {
+            return Err(HfsPlusError::CorruptedData(format!(
+                "file {path:?} declares {declared_size} bytes but only {bytes_read} \
+                 could be read; its extent chain ends early"
+            )));
+        }
+
         Ok(buf)
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "xara"
-version = "0.4.0-dev"
+version = "0.4.0"
 edition = "2024"
 description = "Read-only XAR archive and macOS PKG package parser"
 license = "MIT"

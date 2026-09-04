@@ -299,9 +299,22 @@ mod tests {
     use super::*;
 
     /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
+    ///
+    /// Covers catalog lookup, extent-to-physical mapping and `ForkReader`
+    /// against a real volume. Previously looked for `KernelDebugKit.pkg`,
+    /// which is not on `hfsp.raw` — that is the Google Chrome volume and has
+    /// no `.pkg` at all.
+    ///
+    /// `.VolumeIcon.icns` is a better oracle than the pkg was: ICNS stores its
+    /// own total length big-endian at offset 4, so the fork can be
+    /// cross-checked against a value carried inside the file data rather than
+    /// against a magic alone. At 72059 bytes over 2048-byte blocks it spans
+    /// ~36 blocks, so the mapping is genuinely exercised.
     #[test]
     #[ignore]
-    fn test_read_pkg_header_from_kdk() {
+    fn test_read_file_header_through_fork_reader() {
+        const ICNS_MAGIC: &[u8; 4] = b"icns";
+
         let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
         let mut reader = std::io::BufReader::new(file);
         let vol = crate::volume::VolumeHeader::parse(&mut reader).unwrap();
@@ -315,7 +328,7 @@ mod tests {
             &vol,
             &catalog_header,
             crate::catalog::CNID_ROOT_FOLDER,
-            "KernelDebugKit.pkg",
+            ".VolumeIcon.icns",
         )
         .unwrap();
 
@@ -327,29 +340,33 @@ mod tests {
             ),
         };
 
+        // Raw read at the first extent's physical offset.
         let offset = file_rec.data_fork.extents[0].start_block as u64 * vol.block_size as u64;
         reader.seek(std::io::SeekFrom::Start(offset)).unwrap();
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic).unwrap();
         assert_eq!(
-            &magic, b"xar!",
-            "PKG file should start with XAR magic 'xar!'"
+            &magic, ICNS_MAGIC,
+            "first extent should hold the ICNS magic"
         );
 
         let mut fork_reader = ForkReader::new(&mut reader, &file_rec.data_fork, vol.block_size);
 
-        let mut xar_header = [0u8; 28];
-        fork_reader.read_exact(&mut xar_header).unwrap();
+        let mut header = [0u8; 8];
+        fork_reader.read_exact(&mut header).unwrap();
+        assert_eq!(&header[..4], ICNS_MAGIC, "ForkReader should read the magic");
+
+        // ICNS carries its own length; it must agree with the catalog.
+        let declared = u32::from_be_bytes(header[4..8].try_into().unwrap()) as u64;
         assert_eq!(
-            &xar_header[..4],
-            b"xar!",
-            "ForkReader should read XAR magic"
+            declared, file_rec.data_fork.logical_size,
+            "ICNS internal length should match the fork's logical size"
         );
 
         fork_reader.seek(SeekFrom::Start(0)).unwrap();
         let mut magic2 = [0u8; 4];
         fork_reader.read_exact(&mut magic2).unwrap();
-        assert_eq!(&magic2, b"xar!", "ForkReader seek+read should work");
+        assert_eq!(&magic2, ICNS_MAGIC, "ForkReader seek+read should work");
 
         let end = fork_reader.seek(SeekFrom::End(0)).unwrap();
         assert_eq!(

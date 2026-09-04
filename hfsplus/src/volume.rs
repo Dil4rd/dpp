@@ -173,16 +173,21 @@ mod tests {
     use super::*;
 
     /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
+    /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
+    ///
+    /// `hfsp.raw` is the Google Chrome volume: plain HFS+ (0x482B, version 4),
+    /// not HFSX. It was previously asserted to be HFSX, which it has never
+    /// been.
     #[test]
     #[ignore]
-    fn test_parse_kdk_volume_header() {
+    fn test_parse_hfs_plus_volume_header() {
         let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
         let mut reader = std::io::BufReader::new(file);
         let header = VolumeHeader::parse(&mut reader).unwrap();
 
-        assert!(header.is_hfsx, "hfsp.raw should be HFSX");
-        assert_eq!(header.signature, HFSX_SIGNATURE);
-        assert_eq!(header.version, HFSX_VERSION);
+        assert!(!header.is_hfsx, "hfsp.raw is HFS+, not HFSX");
+        assert_eq!(header.signature, HFS_PLUS_SIGNATURE);
+        assert_eq!(header.version, HFS_PLUS_VERSION);
         assert!(header.block_size > 0);
         assert!(header.total_blocks > 0);
         assert!(header.file_count > 0);

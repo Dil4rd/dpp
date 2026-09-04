@@ -404,7 +404,7 @@ mod tests {
     /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
     #[test]
     #[ignore]
-    fn test_read_btree_header_from_kdk() {
+    fn test_read_btree_header_from_real_volume() {
         let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
         let mut reader = std::io::BufReader::new(file);
         let vol = crate::volume::VolumeHeader::parse(&mut reader).unwrap();

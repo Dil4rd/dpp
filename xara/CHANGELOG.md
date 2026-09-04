@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] - 2026-09-04
 
 ### Added
 
@@ -14,16 +14,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - **Breaking:** downstream `XarFile` struct literals must initialize the new `link` field
+- **Breaking behaviour:** a `<file>` whose `id` attribute is not a valid integer
+  is now rejected. It was previously coerced to `0` via `unwrap_or(0)`, silently
+  merging unrelated entries under one id
+- **Breaking behaviour:** TOC tag and attribute text that is not valid UTF-8 is
+  now rejected instead of replaced lossily. A mangled name that still looked
+  plausible was indistinguishable from a real one
+- **Breaking behaviour:** an `application/octet-stream` entry whose declared
+  compressed length and uncompressed size disagree is rejected, as is any entry
+  that decodes to a different byte count than its declared `size` or emits bytes
+  beyond it
+- **Breaking behaviour:** the TOC header is validated before use — a declared
+  uncompressed length that is implausible or does not fit in memory, and a TOC
+  extent that overflows the archive address space, are rejected
+- Heap entries are decoded as a stream in 8 KiB chunks rather than read whole
+  into memory first, so a large entry no longer allocates its full compressed
+  size up front
 
 ### Fixed
 
 - Scope file metadata and payload descriptors to their exact TOC ancestry
 - Preserve complete file names and symlink targets across text, CDATA, and comments
-- Bound heap entry reads and reject offset or decoded-size inconsistencies
+- Bound heap entry reads and reject offset inconsistencies
 - Decode `<name enctype="base64">`, which macOS `xar` uses for names whose
   UTF-8 values aren't representable in ISO-8859-1 (for example, non-Latin
-  names); previously the
-  raw base64 text was surfaced as the entry's name and path
+  names); previously the raw base64 text was surfaced as the entry's name and
+  path
 
 ## [0.3.2] - 2026-04-12
 

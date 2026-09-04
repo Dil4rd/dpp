@@ -5,11 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0] - 2026-09-04
 
 ### Changed
 
-- Bumped `apfs` to 0.3.0 and `hfsplus` to 0.2.5. `ApfsError` gains an `Unsupported` variant, which `dpp` re-exports
+- Bumped `apfs` to 0.3.0, `hfsplus` to 0.3.0, `xara` to 0.4.0, `udif` to 0.4.0
+  and `pbzx` to 0.4.0. `ApfsError` gains an `Unsupported` variant, which `dpp`
+  re-exports
+- **Breaking behaviour, via `apfs` 0.3.0:** sparse APFS files now read back
+  correctly. Extents are placed at the logical address from their own record
+  instead of at the running sum of preceding lengths, so reads after a hole no
+  longer return data from the wrong offset
+- **Breaking behaviour, via `hfsplus` 0.3.0:** reading an HFS+ file whose
+  extents end before its declared size now fails instead of returning the
+  truncated bytes as a complete file
 
 ## [0.4.2] - 2026-04-12
 

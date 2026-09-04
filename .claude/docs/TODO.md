@@ -24,6 +24,9 @@ Tier 1 items 1-4 and 10-12, landed `7dbef09`..`e1ddf50`:
 
 ## Next: the anomaly channel
 
+Design options, prior art and a staged proposal are in
+[Anomaly Channel](ANOMALY-CHANNEL.md) — proposed, awaiting review.
+
 **This is the critical path, ahead of the remaining Tier 1 items.** Nearly
 everything below is "containable, needs reporting", and tightening those first
 just adds more `PROVISIONAL(anomaly-channel)` markers to unwind later.

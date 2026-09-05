@@ -67,6 +67,46 @@ jobs:
       - run: cargo test -p pbzx --features parallel
       - run: cargo test -p dpp --features parallel
 
+  python:
+    name: Python bindings (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor declared in pyproject.toml and a current release. The
+        # floor is what actually breaks; pyo3 and typing changes land there
+        # first.
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build and test tooling
+        run: python -m pip install --upgrade pip maturin pytest
+
+      # A debug wheel is enough to exercise the bindings and is far quicker
+      # than --release. The publish workflow is what builds release wheels.
+      - name: Build the extension module
+        run: maturin build --out dist --manifest-path dpp-python/Cargo.toml
+
+      - name: Install the built wheel
+        run: pip install --no-index --find-links dist dpp-py
+
+      - name: Run the Python test suite
+        run: pytest dpp-python/tests -v
+
+      # dpp-python is excluded from the workspace doc job because that job has
+      # no Python headers. It has them here, so the exclusion can be closed.
+      - name: Documentation
+        run: cargo doc -p dpp-python --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
   doc:
     name: Documentation
     runs-on: ubuntu-latest

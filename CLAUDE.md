@@ -36,7 +36,19 @@ If a change touches a format parser, also run the fixture tests. They are `#[ign
 cargo test -p apfs -- --ignored     # likewise hfsplus, udif, dpp
 ```
 
-`dpp-python` is excluded from checks 3 and 4 because it requires Python headers; it is validated separately by the PyPI publish workflow. It is **not** excluded from clippy — do not add `--exclude dpp-python` to check 2. Its exhaustive `ApfsError` match is what catches a new error variant that has no Python mapping.
+`dpp-python` is excluded from checks 3 and 4 because they run without Python headers. It is **not** excluded from clippy — do not add `--exclude dpp-python` to check 2. Its exhaustive `ApfsError` match is what catches a new error variant that has no Python mapping.
+
+The bindings are covered by the `python` CI job, which builds the extension module with maturin, installs the wheel and runs `dpp-python/tests` on the oldest and newest supported Python. To reproduce it locally:
+
+```bash
+python3 -m venv /tmp/dppvenv && /tmp/dppvenv/bin/pip install maturin pytest
+/tmp/dppvenv/bin/maturin build --out /tmp/dppdist --manifest-path dpp-python/Cargo.toml
+/tmp/dppvenv/bin/pip install --no-index --find-links /tmp/dppdist dpp-py
+/tmp/dppvenv/bin/pytest dpp-python/tests
+RUSTDOCFLAGS="-D warnings" cargo doc -p dpp-python --no-deps   # needs the headers
+```
+
+Do not rely on the PyPI publish workflow for verification. It builds wheels and publishes them; it runs no tests, only fires on push to `main`, and only when the version differs from what is on PyPI.
 
 The toolchain is pinned in `rust-toolchain.toml`, so these commands use the same compiler as CI.
 

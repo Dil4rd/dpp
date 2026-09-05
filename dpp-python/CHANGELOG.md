@@ -18,6 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - `FileEntry.mtime` no longer wraps for CPIO timestamps above 32 bits
+- Upgraded `pyo3` from 0.28.1 to 0.29, which patches two advisories against the
+  0.28 line. Neither is fixed anywhere in 0.28, so the upgrade is the only
+  remedy:
+  - [RUSTSEC-2026-0176](https://rustsec.org/advisories/RUSTSEC-2026-0176.html)
+    (high) — out-of-bounds read in `nth` / `nth_back` for `PyList` and
+    `PyTuple` iterators, from unchecked arithmetic ahead of the bounds check
+  - [GHSA-chgr-c6px-7xpp](https://github.com/advisories/GHSA-chgr-c6px-7xpp)
+    (moderate) — `PyCFunction::new_closure` did not require `Sync` on closures
+    that Python may call from any thread
+
+  These bindings use neither API, so the practical exposure was nil, but the
+  wheels statically link `pyo3` and 0.28.1 is additionally yanked on crates.io.
+  No binding code changed: none of the 0.28 to 0.29 breaking changes apply
+  here, and 0.29 keeps CPython 3.9 support and needs Rust 1.83, below the
+  pinned 1.98
 
 ## [0.2.1] - 2026-04-12
 

@@ -23,6 +23,25 @@ cargo test --workspace --exclude dpp-python                  # 3. Tests
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --exclude dpp-python  # 4. Docs
 ```
 
+A fifth check runs on every dependency change, and is worth running before any
+release:
+
+```bash
+cargo audit                          # 5. known advisories against Cargo.lock
+```
+
+`Cargo.lock` is committed, so this audits what is actually built. CI enforces
+it in the `audit` job and, separately, audits a freshly resolved dependency set
+in `audit-fresh` — five of the eight crates are libraries whose consumers never
+see our lockfile, so both questions matter. Both run on a daily schedule as
+well as on pull requests, because advisories are published against
+dependencies nobody touched: both `quick-xml` advisories affecting this
+workspace landed with no change on our side.
+
+Note that `cargo audit` reads the RustSec database directly. Dependabot only
+sees the GitHub Advisory Database, which had no `quick-xml` entries at all, so
+it is not a substitute.
+
 If a change touches `pbzx` or `dpp` with the `parallel` feature, also run:
 
 ```bash

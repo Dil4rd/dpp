@@ -5,6 +5,11 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  # Advisories are published against dependencies we did not touch, so a
+  # push-only trigger would never fire for them. Both quick-xml advisories
+  # affecting this workspace landed with no change on our side.
+  schedule:
+    - cron: "17 6 * * *"
 
 # Fork pull requests already run without secrets and with a read-only token.
 # State the token scope explicitly so it does not depend on the repository
@@ -41,7 +46,7 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
   test:
     name: Test (${{ matrix.os }})
@@ -54,7 +59,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace --exclude dpp-python
+      - run: cargo test --locked --workspace --exclude dpp-python
 
   test-features:
     name: Test (parallel feature)
@@ -64,8 +69,34 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p pbzx --features parallel
-      - run: cargo test -p dpp --features parallel
+      - run: cargo test --locked -p pbzx --features parallel
+      - run: cargo test --locked -p dpp --features parallel
+
+  audit:
+    name: Security advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # The committed Cargo.lock says what we build; this says what a fresh
+  # consumer of the published crates would resolve. Five of the eight crates
+  # are libraries, whose users never see our lockfile, so both matter.
+  audit-fresh:
+    name: Security advisories (latest deps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - run: cargo install cargo-audit --locked
+      - run: cargo update
+      - run: cargo audit
 
   python:
     name: Python bindings (${{ matrix.python-version }})
@@ -115,6 +146,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo doc --workspace --no-deps --exclude dpp-python
+      - run: cargo doc --locked --workspace --no-deps --exclude dpp-python
         env:
           RUSTDOCFLAGS: -D warnings

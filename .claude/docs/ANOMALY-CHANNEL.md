@@ -233,8 +233,8 @@ become thin wrappers over the new ones. Precedent: `str::from_utf8` vs
 Three conditions:
 
 - **Discard detail, never severity.** A wrapper that drops anomalies *and*
-  their fatality silently returns short buffers again, undoing `42ac895` and
-  every comparable fix while being advertised as non-breaking. The wrapper must
+  their fatality silently returns short buffers again, undoing the `read_file`
+  completeness check and every comparable fix while being advertised as non-breaking. The wrapper must
   still map anomalies at or above the fatal threshold back to `Err`.
 - **`#[deprecated]`, not prose.** API comments and README notes are what libyal
   relies on, and its users still hit the gap. `#[deprecated(since, note)]`
@@ -309,6 +309,6 @@ there and expensive to retrofit later.
   `io::Result<usize>` with no slot for a report. A design that only works for
   whole-operation calls leaves the largest data paths uncovered. Favours B.
 - **Whether a hole is an anomaly.** No. An APFS hole is genuinely zeros, not
-  missing data (`8d6019e`). *Absent by design* versus *absent because we
+  missing data. *Absent by design* versus *absent because we
   failed* is exactly what the coverage statuses encode; conflating them is a bug
   in either direction.

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-09-07
+
+### Security
+
+- Upgraded `quick-xml` from 0.37 to 0.42, which patches two advisories that
+  affect every version below 0.41:
+  - [RUSTSEC-2026-0194](https://rustsec.org/advisories/RUSTSEC-2026-0194)
+    (high) — quadratic run time when checking a start tag for duplicate
+    attribute names. Reachable here: the TOC is attacker-supplied and its
+    decompressed size is bounded only by the length its own header declares,
+    so a tag carrying a very large number of attributes could stall parsing
+  - [RUSTSEC-2026-0195](https://rustsec.org/advisories/RUSTSEC-2026-0195)
+    (high) — unbounded namespace-declaration allocation in `NsReader`. Not
+    reachable, since this crate uses `Reader` rather than `NsReader`
+
+### Fixed
+
+- Entity references in TOC text are still resolved. quick-xml 0.42 reports
+  `&amp;` and `&#65;` as their own event rather than folding them into the
+  surrounding text, which would otherwise have dropped them silently from a
+  name or symlink target. Unknown entities remain a parse error
+
 ## [0.4.0] - 2026-09-07
 
 ### Added

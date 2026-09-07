@@ -330,6 +330,18 @@ fn ensure_no_active_capture(stack: &[FileBuilder]) -> Result<()> {
 
 fn attribute_value(element: &BytesStart<'_>, name: &str) -> Result<Option<String>> {
     let mut value = None;
+    // PROVISIONAL(anomaly-channel): quick-xml checks that attribute names are
+    // unique within a start tag, and a violation aborts the whole TOC. That is
+    // disproportionate — a duplicate is absolutely addressed, affecting one
+    // element — so the eventual behaviour is to accept and report it.
+    //
+    // Do not simply disable the check with `with_checks(false)` in the
+    // meantime. Uniqueness is an XML *well-formedness* constraint, so ignoring
+    // it makes this parser accept documents that `xar` and libarchive reject,
+    // and a duplicate attribute is a tampering signal: no real `xar` emits
+    // one. The performance case is empty too — the hashed path quick-xml added
+    // for RUSTSEC-2026-0194 is `#[cold]` and only engages above a threshold,
+    // while real TOC elements carry at most one attribute.
     for attribute in element.attributes() {
         let attribute = attribute
             .map_err(|error| XarError::XmlParse(format!("invalid XML attribute: {error}")))?;
@@ -1041,6 +1053,23 @@ mod tests {
         for xml in cases {
             assert!(matches!(parse_toc_xml(xml), Err(XarError::XmlParse(_))));
         }
+    }
+
+    #[test]
+    fn duplicate_attribute_on_a_read_name_is_rejected() {
+        // A repeated attribute is not well-formed XML and must not be read as
+        // though one of the two values had been chosen. quick-xml reports it
+        // first; `attribute_value` is the backstop if that check is ever
+        // relaxed, so assert the outcome rather than which layer produced it.
+        let xml =
+            br#"<xar><toc><file id="1" id="2"><type>file</type><name>a</name></file></toc></xar>"#;
+        let Err(XarError::XmlParse(message)) = parse_toc_xml(xml) else {
+            panic!("expected a parse error");
+        };
+        assert!(
+            message.contains("duplicat"),
+            "error should name the duplication, got {message:?}"
+        );
     }
 
     #[test]

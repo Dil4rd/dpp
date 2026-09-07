@@ -5,25 +5,26 @@ on:
     branches:
       - main
 
-# Publishing needs the registry token, not repository write access. No
-# concurrency cancellation here: interrupting a partial publish would leave
-# some crates pushed and their version numbers permanently taken.
 permissions:
   contents: read
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
 jobs:
-  publish:
+  # Verification compiles every crate and its dependencies. That happens here,
+  # without the registry token in the environment.
+  package:
+    name: Package and verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.98.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
 
       - name: Refuse to publish a -dev version
         run: |
@@ -32,11 +33,41 @@ jobs:
             exit 1
           fi
 
+      # --exclude dpp-python: it ships via PyPI, not crates.io.
+      - run: cargo package --workspace --locked --exclude dpp-python
+
+      # Signed record of which commit and workflow produced each .crate.
+      # Verify with: gh attestation verify <file> --repo Dil4rd/dpp
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: target/package/*.crate
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: crates
+          path: target/package/*.crate
+
+  # No concurrency cancellation: interrupting a partial publish leaves some
+  # crates pushed and their version numbers permanently taken.
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+
+      # --no-verify: the package job already built and verified this commit,
+      # so the credentialed step only packages and uploads.
+      # Unpublished versions are the point; already-published ones are skipped.
+      # Sleeps let the index catch up before a dependent crate goes out.
       - name: Publish crates
         run: |
           try_publish() {
             local output
-            output=$(cargo publish -p "$1" 2>&1) && echo "$output" || {
+            output=$(cargo publish --locked --no-verify -p "$1" 2>&1) && echo "$output" || {
               echo "$output"
               echo "$output" | grep -q "already exists"
             }

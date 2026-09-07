@@ -328,11 +328,7 @@ fn ensure_no_active_capture(stack: &[FileBuilder]) -> Result<()> {
     Ok(())
 }
 
-fn attribute_value(
-    reader: &Reader<&[u8]>,
-    element: &BytesStart<'_>,
-    name: &[u8],
-) -> Result<Option<String>> {
+fn attribute_value(element: &BytesStart<'_>, name: &str) -> Result<Option<String>> {
     let mut value = None;
     for attribute in element.attributes() {
         let attribute = attribute
@@ -340,12 +336,11 @@ fn attribute_value(
         if attribute.key.as_ref() == name {
             if value.is_some() {
                 return Err(XarError::XmlParse(format!(
-                    "duplicate XML attribute {:?}",
-                    String::from_utf8_lossy(name)
+                    "duplicate XML attribute {name:?}"
                 )));
             }
             let decoded = attribute
-                .decode_and_unescape_value(reader.decoder())
+                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                 .map_err(|error| {
                     XarError::XmlParse(format!("invalid XML attribute value: {error}"))
                 })?;
@@ -381,23 +376,23 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                 let parent = element_stack.last().copied();
                 let depth = element_stack.len();
                 let context = match e.name().as_ref() {
-                    b"xar" if parent.is_none() && !seen_xar => {
+                    "xar" if parent.is_none() && !seen_xar => {
                         seen_xar = true;
                         ElementContext::Xar
                     }
-                    b"toc" if parent == Some(ElementContext::Xar) && !seen_toc => {
+                    "toc" if parent == Some(ElementContext::Xar) && !seen_toc => {
                         seen_toc = true;
                         ElementContext::Toc
                     }
-                    b"xar" | b"toc" => {
+                    "xar" | "toc" => {
                         return Err(XarError::XmlParse(
                             "duplicate or misplaced XAR document element".to_string(),
                         ));
                     }
-                    b"file"
+                    "file"
                         if matches!(parent, Some(ElementContext::Toc | ElementContext::File)) =>
                     {
-                        let id = match attribute_value(&reader, e, b"id")? {
+                        let id = match attribute_value(e, "id")? {
                             Some(value) => parse_u64_field("file id", &value)?,
                             None => 0,
                         };
@@ -415,7 +410,7 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         });
                         ElementContext::File
                     }
-                    b"data" if parent == Some(ElementContext::File) => {
+                    "data" if parent == Some(ElementContext::File) => {
                         let file = stack.last_mut().ok_or_else(|| {
                             XarError::XmlParse(
                                 "<data> appeared without a current <file>".to_string(),
@@ -429,45 +424,45 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                         file.data = Some(FileDataBuilder::default());
                         ElementContext::FileData
                     }
-                    b"name" if parent == Some(ElementContext::File) => {
-                        let enctype = attribute_value(&reader, e, b"enctype")?;
+                    "name" if parent == Some(ElementContext::File) => {
+                        let enctype = attribute_value(e, "enctype")?;
                         let file = current_file(&mut stack)?;
                         file.name_enctype = enctype;
                         file.begin_capture(CaptureField::Name, depth)?;
                         ElementContext::Other
                     }
-                    b"type" if parent == Some(ElementContext::File) => {
+                    "type" if parent == Some(ElementContext::File) => {
                         current_file(&mut stack)?.begin_capture(CaptureField::FileType, depth)?;
                         ElementContext::Other
                     }
-                    b"link" if parent == Some(ElementContext::File) => {
+                    "link" if parent == Some(ElementContext::File) => {
                         current_file(&mut stack)?.begin_capture(CaptureField::Link, depth)?;
                         ElementContext::Other
                     }
-                    b"offset" if parent == Some(ElementContext::FileData) => {
+                    "offset" if parent == Some(ElementContext::FileData) => {
                         current_file(&mut stack)?.begin_capture(CaptureField::DataOffset, depth)?;
                         ElementContext::Other
                     }
-                    b"length" if parent == Some(ElementContext::FileData) => {
+                    "length" if parent == Some(ElementContext::FileData) => {
                         current_file(&mut stack)?.begin_capture(CaptureField::DataLength, depth)?;
                         ElementContext::Other
                     }
-                    b"size" if parent == Some(ElementContext::FileData) => {
+                    "size" if parent == Some(ElementContext::FileData) => {
                         current_file(&mut stack)?.begin_capture(CaptureField::DataSize, depth)?;
                         ElementContext::Other
                     }
-                    b"extracted-checksum" if parent == Some(ElementContext::FileData) => {
+                    "extracted-checksum" if parent == Some(ElementContext::FileData) => {
                         current_file(&mut stack)?
                             .begin_capture(CaptureField::ExtractedChecksum, depth)?;
                         ElementContext::Other
                     }
-                    b"archived-checksum" if parent == Some(ElementContext::FileData) => {
+                    "archived-checksum" if parent == Some(ElementContext::FileData) => {
                         current_file(&mut stack)?
                             .begin_capture(CaptureField::ArchivedChecksum, depth)?;
                         ElementContext::Other
                     }
-                    b"encoding" if parent == Some(ElementContext::FileData) => {
-                        let style = attribute_value(&reader, e, b"style")?.ok_or_else(|| {
+                    "encoding" if parent == Some(ElementContext::FileData) => {
+                        let style = attribute_value(e, "style")?.ok_or_else(|| {
                             XarError::XmlParse(
                                 "file data <encoding> is missing its style attribute".to_string(),
                             )
@@ -488,55 +483,55 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                 ensure_no_active_capture(&stack)?;
                 let parent = element_stack.last().copied();
                 let field = match e.name().as_ref() {
-                    b"xar" if parent.is_none() && !seen_xar => {
+                    "xar" if parent.is_none() && !seen_xar => {
                         seen_xar = true;
                         None
                     }
-                    b"toc" if parent == Some(ElementContext::Xar) && !seen_toc => {
+                    "toc" if parent == Some(ElementContext::Xar) && !seen_toc => {
                         seen_toc = true;
                         None
                     }
-                    b"xar" | b"toc" => {
+                    "xar" | "toc" => {
                         return Err(XarError::XmlParse(
                             "duplicate or misplaced XAR document element".to_string(),
                         ));
                     }
-                    b"file"
+                    "file"
                         if matches!(parent, Some(ElementContext::Toc | ElementContext::File)) =>
                     {
                         return Err(XarError::XmlParse(
                             "empty <file> is missing required metadata".to_string(),
                         ));
                     }
-                    b"data" if parent == Some(ElementContext::File) => {
+                    "data" if parent == Some(ElementContext::File) => {
                         return Err(XarError::XmlParse(
                             "file <data> is missing <offset>, <length>, and <size>".to_string(),
                         ));
                     }
-                    b"name" if parent == Some(ElementContext::File) => {
-                        let enctype = attribute_value(&reader, e, b"enctype")?;
+                    "name" if parent == Some(ElementContext::File) => {
+                        let enctype = attribute_value(e, "enctype")?;
                         current_file(&mut stack)?.name_enctype = enctype;
                         Some(CaptureField::Name)
                     }
-                    b"type" if parent == Some(ElementContext::File) => Some(CaptureField::FileType),
-                    b"link" if parent == Some(ElementContext::File) => Some(CaptureField::Link),
-                    b"offset" if parent == Some(ElementContext::FileData) => {
+                    "type" if parent == Some(ElementContext::File) => Some(CaptureField::FileType),
+                    "link" if parent == Some(ElementContext::File) => Some(CaptureField::Link),
+                    "offset" if parent == Some(ElementContext::FileData) => {
                         Some(CaptureField::DataOffset)
                     }
-                    b"length" if parent == Some(ElementContext::FileData) => {
+                    "length" if parent == Some(ElementContext::FileData) => {
                         Some(CaptureField::DataLength)
                     }
-                    b"size" if parent == Some(ElementContext::FileData) => {
+                    "size" if parent == Some(ElementContext::FileData) => {
                         Some(CaptureField::DataSize)
                     }
-                    b"extracted-checksum" if parent == Some(ElementContext::FileData) => {
+                    "extracted-checksum" if parent == Some(ElementContext::FileData) => {
                         Some(CaptureField::ExtractedChecksum)
                     }
-                    b"archived-checksum" if parent == Some(ElementContext::FileData) => {
+                    "archived-checksum" if parent == Some(ElementContext::FileData) => {
                         Some(CaptureField::ArchivedChecksum)
                     }
-                    b"encoding" if parent == Some(ElementContext::FileData) => {
-                        let style = attribute_value(&reader, e, b"style")?.ok_or_else(|| {
+                    "encoding" if parent == Some(ElementContext::FileData) => {
+                        let style = attribute_value(e, "style")?.ok_or_else(|| {
                             XarError::XmlParse(
                                 "file data <encoding> is missing its style attribute".to_string(),
                             )
@@ -556,17 +551,25 @@ fn parse_toc_xml(xml: &[u8]) -> Result<Vec<XarFile>> {
                 }
             }
             Ok(Event::Text(ref e)) => {
-                let text = e
-                    .unescape()
-                    .map_err(|error| XarError::XmlParse(format!("invalid XML text: {error}")))?;
+                let text = e.xml10_content();
                 if let Some(file) = stack.last_mut() {
                     file.append_text(&text);
                 }
             }
             Ok(Event::CData(ref e)) => {
-                let text = e
-                    .decode()
-                    .map_err(|error| XarError::XmlParse(format!("invalid CDATA text: {error}")))?;
+                let text = e.xml10_content();
+                if let Some(file) = stack.last_mut() {
+                    file.append_text(&text);
+                }
+            }
+            // quick-xml reports `&amp;` and `&#65;` as their own event rather
+            // than folding them into the surrounding text, so an unresolved
+            // reference would silently vanish from a name or link.
+            Ok(Event::GeneralRef(ref e)) => {
+                let reference = format!("&{};", e.xml10_content());
+                let text = quick_xml::escape::unescape(&reference).map_err(|error| {
+                    XarError::XmlParse(format!("invalid XML entity {reference:?}: {error}"))
+                })?;
                 if let Some(file) = stack.last_mut() {
                     file.append_text(&text);
                 }

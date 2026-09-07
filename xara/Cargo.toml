@@ -1,6 +1,6 @@
 [package]
 name = "xara"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 description = "Read-only XAR archive and macOS PKG package parser"
 license = "MIT"
@@ -13,7 +13,7 @@ base64 = "0.22"
 byteorder = "1.5"
 thiserror = "2"
 flate2 = "1.0"
-quick-xml = "0.37"
+quick-xml = "0.42"
 
 [dev-dependencies]
 tempfile = "3"

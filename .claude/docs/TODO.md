@@ -3,9 +3,9 @@
 Findings from the Sep 2026 audit, ordered by what is safe to do next. Reasoning
 and criteria live in [Forensic Direction](FORENSIC-DIRECTION.md).
 
-Line numbers were correct at `e1ddf50`. Severity is about what reaches the
-caller: **high** = wrong data returned as if it were right; **med** = silent
-omission; **low** = cosmetic or unreachable.
+Line numbers were correct as of the Sep 2026 audit. Severity is about what
+reaches the caller: **high** = wrong data returned as if it were right;
+**med** = silent omission; **low** = cosmetic or unreachable.
 
 Provenance is marked. Items I verified by reading the code or measuring are
 `[verified]`; items reported by an audit agent and not independently checked
@@ -13,7 +13,7 @@ are `[unverified]` — confirm before acting.
 
 ## Done
 
-Tier 1 items 1-4 and 10-12, landed `7dbef09`..`e1ddf50`:
+Tier 1 items 1-4 and 10-12 have landed:
 
 - udif: short decodes rejected across all four codecs; writer pads the final
   chunk; raw remainder uses checked arithmetic
@@ -67,8 +67,8 @@ so it is not total. Measure `appfs.raw` for Fletcher failures before switching
 — the same block-audit approach used for the DMGs — since this could reject
 real images.
 
-**6. apfs ignores each extent's logical address** — ~~open~~ **fixed**
-(`8d6019e`). `lookup_extents` (the TODO previously called it
+**6. apfs ignores each extent's logical address** — ~~open~~ **fixed**.
+`lookup_extents` (the TODO previously called it
 `lookup_file_extents`) now returns `FileExtentRecord`, pairing each value
 with the `logical_addr` from its key, and both readers place extents by it.
 Interior holes read as zeros; `ApfsForkReader` no longer fails with
@@ -92,7 +92,7 @@ means preserving the key through `lookup_file_extents` and building the map
 from it — and deciding what a hole yields (zeros, and ideally a report).
 
 **7. hfsplus returns truncated files as complete** `[verified]` — high.
-**Half done** (`42ac895`); the rest is deliberately waiting on the anomaly
+**Half done**; the rest is deliberately waiting on the anomaly
 channel.
 
 `read_fork_data` (`hfsplus/src/extents.rs:128`) ends `Ok(bytes_written)` with
@@ -129,8 +129,7 @@ the extents B-tree into the constructor — closer to feature work than a fix.
 `apfs/src/catalog.rs:510`, `apfs/src/omap.rs:60`, `hfsplus/src/catalog.rs:278`,
 `hfsplus/src/extents.rs:240`. A malformed key steers the descent past itself,
 producing a false negative: a file that exists reports as not found. Touches
-the comparator contract reworked in `faaebeb` and `145c2fa`, so agree the
-approach first.
+the comparator contract, so agree the approach first.
 
 ## Tier 2: silent data modification
 
@@ -187,7 +186,7 @@ One bad entry destroys the whole result.
 - No real-image XAR coverage. The only XAR fixture has no symlinks and no
   `<ea>` blocks, so fixture tests are structurally blind to that bug class.
 - Two `hfsplus` ignored tests point at the wrong fixture — the same bug class
-  `53b6e10` fixed for `dpp`. `volume::tests::test_parse_kdk_volume_header`
+  already fixed for `dpp`. `volume::tests::test_parse_kdk_volume_header`
   asserts `hfsp.raw` is HFSX and `extents::tests::test_read_pkg_header_from_kdk`
   looks for `KernelDebugKit.pkg` in its root, but `hfsp.raw` is the Google
   Chrome volume and contains neither. `cargo test -p hfsplus -- --ignored` is
@@ -202,7 +201,7 @@ One bad entry destroys the whole result.
 
 ## Open with the contributor
 
-`xara` PR #5 landed (`834263d`). Four behaviour changes were agreed for a
+`xara` PR #5 landed. Four behaviour changes were agreed for a
 follow-up PR and are **not** yet done — do not start them without checking, he
 may be mid-flight:
 
@@ -222,7 +221,7 @@ may be mid-flight:
    kills the run and leaves a partial tree
 
 ~~His `xar-name-base64-enctype` branch decodes `enctype="base64"` on
-`<name>`.~~ Landed as PR #6 (`21d8fe8`). It needs no policy conversation
+`<name>`.~~ Landed as PR #6. It needs no policy conversation
 after all: `enctype` is `<name>`-only by construction, so it is not a general
 data-transformation question. Verified on both sides of the reference —
 `xar_prop_serialize` gates the base64 branch on `key == "name"`,

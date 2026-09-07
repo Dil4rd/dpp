@@ -13,7 +13,7 @@ are `[unverified]` — confirm before acting.
 
 ## Done
 
-Tier 1 items 1-4 and 10-12 have landed:
+Tier 1 items 1-4 and 10-12, in udif 0.4.0, pbzx 0.4.0 and apfs 0.3.0:
 
 - udif: short decodes rejected across all four codecs; writer pads the final
   chunk; raw remainder uses checked arithmetic
@@ -21,6 +21,15 @@ Tier 1 items 1-4 and 10-12 have landed:
   and mtime widened past 32 bits; zero chunk header with data behind it
   rejected
 - apfs: extent block numbers that overflow the address space rejected
+
+Item 6 in apfs 0.3.0: `lookup_extents` returns `FileExtentRecord`, so each
+extent is placed at the `logical_addr` from its own key rather than at the sum
+of preceding lengths. Interior holes read as zeros and `ApfsForkReader` reads
+through them. Overlapping extents and a gap after the final extent stay
+`PROVISIONAL(anomaly-channel)`: the trailing case cannot be told apart from
+lost extent records, so it is a short count rather than fabricated zeros.
+
+The `read_file` half of item 7 in hfsplus 0.3.0; see that entry for the rest.
 
 ## Next: the anomaly channel
 
@@ -67,46 +76,21 @@ so it is not total. Measure `appfs.raw` for Fletcher failures before switching
 — the same block-audit approach used for the DMGs — since this could reject
 real images.
 
-**6. apfs ignores each extent's logical address** — ~~open~~ **fixed**.
-`lookup_extents` (the TODO previously called it
-`lookup_file_extents`) now returns `FileExtentRecord`, pairing each value
-with the `logical_addr` from its key, and both readers place extents by it.
-Interior holes read as zeros; `ApfsForkReader` no longer fails with
-`UnexpectedEof` inside one. Overlapping extents and a trailing gap are
-marked `PROVISIONAL(anomaly-channel)` — the trailing case is ambiguous
-between a real hole and lost extent records, so it is left as a short count
-rather than zero-filled. Original finding follows.
-
-
-An APFS extent's logical offset lives in its *key*
-(`j_file_extent_key_t.logical_addr`); the value carries only length, physical
-block and crypto id. `lookup_file_extents` discards it — `for (_key, val) in
-&entries` at `apfs/src/catalog.rs:418` — so both readers reconstruct logical
-position by summing lengths: `ApfsForkReader::new` (`extents.rs:90-91`) and
-`read_file_data` (`extents.rs:33`).
-
-That is only correct for a dense, in-order file. Across a hole the running sum
-under-counts, so every extent after it is placed at the wrong logical offset
-and reads return data from elsewhere in the file, with no error. Fixing it
-means preserving the key through `lookup_file_extents` and building the map
-from it — and deciding what a hole yields (zeros, and ideally a report).
-
-**7. hfsplus returns truncated files as complete** `[verified]` — high.
-**Half done**; the rest is deliberately waiting on the anomaly
-channel.
+**7. hfsplus `read_fork_data` reports a short read as success** `[verified]`
+— med, and waiting on the anomaly channel by design.
 
 `read_fork_data` (`hfsplus/src/extents.rs:128`) ends `Ok(bytes_written)` with
-no check that it reached `total_bytes`, and `read_file` (`lib.rs:115`) discarded
-the count entirely.
+no check that it reached `total_bytes`, so a fork whose extents end early
+returns a byte count the caller must compare against `logical_size` itself.
 
-`read_file` is fixed: it compares against the fork's declared `logical_size`
-and fails with `CorruptedData` rather than returning a short buffer. That
-strictness is *terminal, not provisional* — its return type is `Vec<u8>`,
-which cannot express "complete except for a hole", so it must be complete or
-fail whatever the reporting policy becomes. The channel would add a sibling
-API, not change this one.
+As of hfsplus 0.3.0 `read_file` does that comparison and fails with
+`CorruptedData` rather than returning a short buffer, so the common path is
+covered. That strictness is *terminal, not provisional* — its return type is
+`Vec<u8>`, which cannot express "complete except for a hole", so it must be
+complete or fail whatever the reporting policy becomes. The channel would add
+a sibling API, not change this one.
 
-`read_fork_data` is untouched on purpose. It is the streaming primitive, a
+`read_fork_data` is left as it is on purpose. It is the streaming primitive, a
 truncated fork is absolutely addressed, and its target state is
 degrade-and-report — so making it strict now would only have to be relaxed
 again. Do it once, with the channel. `read_file_to` still returns the
@@ -180,18 +164,8 @@ One bad entry destroys the whole result.
 
 ## Tests and infrastructure
 
-- ~~`test_hfsplus_to_xar_to_pbzx` cannot pass~~ — fixed: repointed at the HFS+
-  partition inside `kdk.dmg`. `cargo test -p dpp -- --ignored` is now
-  `6 passed; 0 failed`.
 - No real-image XAR coverage. The only XAR fixture has no symlinks and no
   `<ea>` blocks, so fixture tests are structurally blind to that bug class.
-- Two `hfsplus` ignored tests point at the wrong fixture — the same bug class
-  already fixed for `dpp`. `volume::tests::test_parse_kdk_volume_header`
-  asserts `hfsp.raw` is HFSX and `extents::tests::test_read_pkg_header_from_kdk`
-  looks for `KernelDebugKit.pkg` in its root, but `hfsp.raw` is the Google
-  Chrome volume and contains neither. `cargo test -p hfsplus -- --ignored` is
-  `3 passed; 2 failed` on a clean tree — pre-existing, not a regression.
-  Repoint them at the HFS+ partition inside `kdk.dmg`.
 - `rust-toolchain.toml` exists only on `dev`. Every PR targeting `main` hits
   phantom lints — this already cost an external contributor a wasted round.
   Add the pin to `main` or merge `dev`.
@@ -199,37 +173,36 @@ One bad entry destroys the whole result.
   external dependent (`startup-disk`) that would break on a new variant.
 - `apfs` has no `docs/FORMATS.md`, unlike the other format crates.
 
-## Open with the contributor
+## Open in xara
 
-`xara` PR #5 landed. Four behaviour changes were agreed for a
-follow-up PR and are **not** yet done — do not start them without checking, he
-may be mid-flight:
+Four behaviours agreed for a follow-up and not yet done as of xara 0.4.0.
+Check with the contributor before starting any of them; he may be mid-flight.
 
 1. unrecognised or missing `<type>`, a symlink with no `<link>`, and a
-   malformed `id` should not be fatal, and should not be coerced to a default
-2. `<link>` is discarded on non-symlinks. **The stated reason was wrong** —
-   checked against `lib/stat.c`, xar does *not* write `<link>` for hardlinks.
-   Symlinks get `xar_prop_set(f, "link", target)`, a child element; hardlinks
-   get `xar_attr_set(f, "type", "link", ...)`, an attribute on `<type>` whose
-   value is `original` for the first occurrence and the original's id for the
-   rest. So the real gap is that `xara` reads only the *text* of `<type>` and
-   drops that attribute, losing hardlink identity entirely. Decide whether to
-   model it before touching `<link>` handling.
-3. `type` and both checksums still get `.trim()` while `name` and `link` are
+   malformed `id` are fatal, and are coerced to a default; neither should
+   happen
+2. `<link>` is discarded on non-symlinks. Note the format detail, since the
+   obvious assumption is wrong: xar writes `<link>` only for symlinks
+   (`xar_prop_set(f, "link", target)` in `lib/stat.c`). Hardlinks instead carry
+   `xar_attr_set(f, "type", "link", ...)` — an attribute on `<type>` valued
+   `original` for the first occurrence and the original's id for the rest.
+   `xara` reads only the *text* of `<type>` and drops that attribute, so
+   hardlink identity is lost entirely. Decide whether to model it before
+   touching `<link>` handling.
+3. `type` and both checksums get `.trim()` while `name` and `link` are
    verbatim
-4. `extract.rs` propagates the new decode-size errors, so one corrupt entry
-   kills the run and leaves a partial tree
+4. `extract.rs` propagates the decode-size errors, so one corrupt entry kills
+   the run and leaves a partial tree
 
-~~His `xar-name-base64-enctype` branch decodes `enctype="base64"` on
-`<name>`.~~ Landed as PR #6. It needs no policy conversation
-after all: `enctype` is `<name>`-only by construction, so it is not a general
-data-transformation question. Verified on both sides of the reference —
-`xar_prop_serialize` gates the base64 branch on `key == "name"`,
-`xar_prop_unserialize` honours the attribute only when `isname`, and
-libarchive sets `base64text` only in its `name` branch and decodes only in
-`case FILE_NAME`. Recorded in `xara/docs/FORMATS.md`.
+`enctype="base64"` on `<name>` is decoded as of xara 0.4.0, and needs no
+policy decision: it is `<name>`-only by construction, not a general data
+transformation. Both sides of the reference agree — `xar_prop_serialize` gates
+the base64 branch on `key == "name"`, `xar_prop_unserialize` honours the
+attribute only when `isname`, and libarchive sets `base64text` only in its
+`name` branch and decodes only in `case FILE_NAME`. Recorded in
+`xara/docs/FORMATS.md`.
 
-Do **not** extend the decode to `<link>` or other elements: no conforming
-writer emits them, no reference reader decodes them, and doing so would both
+Do **not** extend the decode to `<link>` or other elements. No conforming
+writer emits them and no reference reader decodes them, so doing so would
 reinterpret valid archives and add whole-TOC fatal paths for input that xar
-and libarchive read without complaint. This was attempted and reverted.
+and libarchive read without complaint.

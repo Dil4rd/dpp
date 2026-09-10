@@ -1,6 +1,6 @@
 [package]
 name = "pbzx"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 description = "A Rust library for parsing, extracting, and creating PBZX archives (Apple's payload format)"
 license = "MIT"
@@ -9,8 +9,8 @@ keywords = ["pbzx", "apple", "macos", "archive", "xz"]
 categories = ["compression", "parsing"]
 
 [dependencies]
-# XZ/LZMA decompression
-xz2 = "0.1"
+# XZ/LZMA compression (pure Rust, so no C toolchain is needed to build)
+lzma-rust2 = "0.20"
 
 # Error handling
 thiserror = "2"

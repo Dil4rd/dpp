@@ -53,17 +53,33 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    # Must match the environment named in each crate's crates.io trusted
+    # publisher config. Its deployment branch rule restricts it to main, in
+    # repository settings rather than in this file.
+    environment: publish
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+
+      # PREREQUISITE: every crate must have this repository, workflow and the
+      # environment name `publish` registered under Trusted Publishing on
+      # crates.io before this merges. A mismatch fails at auth, before
+      # anything is uploaded.
+      # Exchanges the OIDC token for a 30-minute credential, so no long-lived
+      # CARGO_REGISTRY_TOKEN secret is needed.
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1
+        id: auth
 
       # --no-verify: the package job already built and verified this commit,
       # so the credentialed step only packages and uploads.
       # Unpublished versions are the point; already-published ones are skipped.
       # Sleeps let the index catch up before a dependent crate goes out.
       - name: Publish crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
           try_publish() {
             local output

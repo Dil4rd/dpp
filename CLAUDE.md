@@ -42,6 +42,31 @@ Note that `cargo audit` reads the RustSec database directly. Dependabot only
 sees the GitHub Advisory Database, which had no `quick-xml` entries at all, so
 it is not a substitute.
 
+Any change that adds, removes or upgrades a dependency also needs checks 6 and
+7:
+
+```bash
+cargo machete                        # 6. dependencies nothing references
+cargo about generate dpp-python/about.hbs \
+  --manifest-path dpp-python/Cargo.toml \
+  -o dpp-python/THIRD-PARTY-LICENSES.md   # 7. wheel licence notices
+git diff --exit-code dpp-python/THIRD-PARTY-LICENSES.md
+```
+
+Both are enforced by `dependencies.yml` on pull requests. `cargo about` needs
+`cargo install cargo-about --features cli` — without that feature the crate
+builds as a library and installs no subcommand.
+
+Check 7 fails in two ways, and they mean different things. A licence not in
+`about.toml`'s `accepted` list stops generation: decide whether to accept it,
+because that list is what keeps an unreviewed licence out of the wheels.
+A changed file means the committed notices no longer match what the wheels
+link, and the regenerated file should be committed. Upgrading `bzip2` to 0.6
+tripped the first: its pure-Rust backend arrives under `bzip2-1.0.6`.
+
+The notice file only covers the wheels. The crates.io packages ship source, so
+their consumers resolve these dependencies themselves.
+
 If a change touches `pbzx` or `dpp` with the `parallel` feature, also run:
 
 ```bash

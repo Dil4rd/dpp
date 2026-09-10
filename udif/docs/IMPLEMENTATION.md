@@ -58,20 +58,25 @@ This extra 4-byte field is often undocumented but critical for correct parsing.
 
 ### 4. LZFSE Buffer Size Requirements
 
-The LZFSE decoder requires an output buffer **larger than the actual decompressed size**.
+**No longer applies.** The C LZFSE decoder needed a destination buffer *larger*
+than the decompressed size, so decoding into an exactly sized buffer could fail
+with `BufferTooSmall`, and this crate decoded into 2x scratch and copied back:
 
 ```rust
-// This may fail with BufferTooSmall
-let mut output = vec![0u8; expected_size];
-lzfse::decode_buffer(&compressed, &mut output)?;  // ❌
-
-// This works - allocate extra space
-let mut output = vec![0u8; expected_size * 2];
-let actual_size = lzfse::decode_buffer(&compressed, &mut output)?;
-output.truncate(actual_size);  // ✓
+// The old shape, against the C `lzfse` crate
+let mut scratch = vec![0u8; expected_size * 2];
+let actual_size = lzfse::decode_buffer(&compressed, &mut scratch)?;
 ```
 
-The library uses 2x the expected size to be safe.
+`lzfse_rust` decodes into a `Vec` that grows as needed, so there is no headroom
+rule and no scratch copy:
+
+```rust
+let mut decoded = Vec::with_capacity(expected_size);
+let actual_size = lzfse_rust::decode_bytes(&compressed, &mut decoded)?;
+```
+
+The length check against the block map stayed: see the next section.
 
 ### 5. A Compressed Run Decodes to Exactly Its Declared Length
 
@@ -211,7 +216,7 @@ All tricky pieces have dedicated tests:
 | `test_koly_magic_position` | Magic is at -512, not -4 |
 | `test_mish_block_count_at_offset_200` | Block count from offset 200, not 36 |
 | `test_mish_header_size_is_204` | Header is 204 bytes |
-| `test_lzfse_needs_larger_buffer` | LZFSE buffer sizing |
+| `test_lzfse_decodes_to_exactly_the_original_length` | LZFSE needs no output headroom |
 | `test_zlib_partial_sector` | Partial decompression handling |
 | `test_block_run_size` | Block runs are exactly 40 bytes |
 | `test_is_dmg_checks_correct_offset` | DMG detection uses correct offset |

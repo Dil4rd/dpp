@@ -9,7 +9,10 @@ requires-python = ">=3.9"
 description = "Python bindings for parsing Apple DMG disk images, HFS+/APFS filesystems, PKG installers, and PBZX/CPIO payloads"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE"]
+# The wheels statically link their Rust dependencies, whose licences require
+# their texts and copyright notices to travel with the binary.
+# THIRD-PARTY-LICENSES.md is generated; see about.toml.
+license-files = ["LICENSE", "THIRD-PARTY-LICENSES.md"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

@@ -1,0 +1,36 @@
+# Configuration for cargo-about, which generates THIRD-PARTY-LICENSES.md.
+#
+# The wheels statically link every crate in this tree, so their licences have
+# to travel with the binary. The crates.io packages do not: they ship source,
+# and each consumer resolves these dependencies itself.
+#
+# `accepted` doubles as an allow-list. A dependency arriving under a licence
+# not named here fails generation, which fails the pull request, rather than
+# reaching PyPI unnoticed.
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unlicense",
+    "Zlib",
+    "0BSD",
+    "Unicode-3.0",
+]
+
+# Wheels are built for these five targets; anything platform-gated away from
+# all of them is never linked in and does not belong in the notice file.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+
+# Neither kind ends up in the wheel. Without this, criterion's tree alone adds
+# a dozen crates the binary never contains.
+ignore-build-dependencies = true
+ignore-dev-dependencies = true

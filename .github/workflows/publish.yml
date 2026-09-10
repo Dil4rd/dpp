@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+  # Packaging is credential-free, so it runs on pull requests too: a crate
+  # that cannot be packaged then fails review rather than the release.
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -38,11 +43,14 @@ jobs:
 
       # Signed record of which commit and workflow produced each .crate.
       # Verify with: gh attestation verify <file> --repo Dil4rd/dpp
+      # Only for real releases; a pull request produces nothing to attest.
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        if: github.event_name == 'push'
         with:
           subject-path: target/package/*.crate
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.event_name == 'push'
         with:
           name: crates
           path: target/package/*.crate
@@ -51,6 +59,7 @@ jobs:
   # crates pushed and their version numbers permanently taken.
   publish:
     needs: package
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Must match the environment named in each crate's crates.io trusted

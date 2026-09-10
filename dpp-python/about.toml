@@ -18,6 +18,8 @@ accepted = [
     "Zlib",
     "0BSD",
     "Unicode-3.0",
+    # libbz2-rs-sys, the pure-Rust bzip2 backend. BSD-style and permissive.
+    "bzip2-1.0.6",
 ]
 
 # Wheels are built for these five targets; anything platform-gated away from

@@ -357,8 +357,7 @@ DEALINGS IN THE SOFTWARE.
 ## MIT License
 
 Used by:
-- [bzip2-sys 0.1.13+1.0.8](https://github.com/alexcrichton/bzip2-rs)
-- [bzip2 0.5.2](https://github.com/trifectatechfoundation/bzip2-rs)
+- [bzip2 0.6.1](https://github.com/trifectatechfoundation/bzip2-rs)
 
 ```
 Copyright (c) 2014-2025 Alex Crichton and Contributors
@@ -1116,13 +1115,43 @@ SOFTWARE.
 ## MIT License
 
 Used by:
+- [lzfse_rust 0.2.1](https://github.com/shampoofactory/lzfse_rust)
+
+```
+MIT License
+
+Copyright (c) 2020 Vin Singh Ghataore
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the &quot;Software&quot;), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+## MIT License
+
+Used by:
 - [apfs 0.3.0](https://github.com/Dil4rd/dpp)
 - [dpp 0.5.0](https://github.com/Dil4rd/dpp)
-- [dpp-python 0.3.0](https://crates.io/crates/dpp-python)
+- [dpp-python 0.3.1](https://crates.io/crates/dpp-python)
 - [hfsplus 0.3.0](https://github.com/Dil4rd/dpp)
 - [pbzx 0.4.1](https://github.com/Dil4rd/dpp)
 - [udif 0.4.1](https://github.com/Dil4rd/dpp)
-- [xara 0.4.1](https://github.com/Dil4rd/dpp)
+- [xara 0.4.2](https://github.com/Dil4rd/dpp)
 
 ```
 MIT License
@@ -1152,8 +1181,6 @@ SOFTWARE.
 ## MIT License
 
 Used by:
-- [lzfse-sys 2.0.0](https://github.com/citruz/lzfse-rs)
-- [lzfse 0.2.0](https://github.com/citruz/lzfse-rs)
 - [windows-link 0.2.1](https://github.com/microsoft/windows-rs)
 - [windows-sys 0.61.2](https://github.com/microsoft/windows-rs)
 
@@ -1527,6 +1554,63 @@ Except as contained in this notice, the name of a copyright holder shall
 not be used in advertising or otherwise to promote the sale, use or other
 dealings in these Data Files or Software without prior written
 authorization of the copyright holder.
+
+```
+
+## bzip2 and libbzip2 License v1.0.6
+
+Used by:
+- [libbz2-rs-sys 0.2.5](https://github.com/trifectatechfoundation/libbzip2-rs)
+
+```
+
+--------------------------------------------------------------------------
+
+The original program, &quot;bzip2&quot;, the associated library &quot;libbzip2&quot;, and all
+documentation, are
+
+Copyright (C) 1996-2021 Julian R Seward.
+Copyright (C) 2019-2020 Federico Mena Quintero
+Copyright (C) 2021 Micah Snyder
+
+This Rust translation, &quot;libbzip2-rs&quot; is a derived work based on &quot;bzip2&quot; and
+&quot;libbzip2&quot;, and is Copyright (C) 2024-2025 Trifecta Tech Foundation and contributors
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+
+2. The origin of this software must not be misrepresented; you must
+   not claim that you wrote the original software.  If you use this
+   software in a product, an acknowledgment in the product
+   documentation would be appreciated but is not required.
+
+3. Altered source versions must be plainly marked as such, and must
+   not be misrepresented as being the original software.
+
+4. The name of the author may not be used to endorse or promote
+   products derived from this software without specific prior written
+   permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR &#x60;&#x60;AS IS&#x27;&#x27; AND ANY EXPRESS
+OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Julian Seward, jseward@acm.org
+bzip2/libbzip2 version 1.1.0 of 6 September 2010
+
+--------------------------------------------------------------------------
 
 ```
 

@@ -5,7 +5,7 @@ use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use byteorder::{BigEndian, ReadBytesExt};
-use xz2::read::XzDecoder;
+use lzma_rust2::XzReader;
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -140,7 +140,10 @@ impl<R: Read> PbzxReader<R> {
                 total_written += chunk_data.len() as u64;
             } else {
                 // Decompress using XZ
-                let mut decoder = XzDecoder::new(&chunk_data[..]);
+                // Each chunk holds exactly one xz stream, so concatenated
+                // streams are not expected and should be treated as trailing
+                // garbage rather than silently decoded.
+                let mut decoder = XzReader::new(&chunk_data[..], false);
                 let mut decompressed = Vec::with_capacity(chunk.uncompressed_size as usize);
 
                 decoder.read_to_end(&mut decompressed).map_err(|e| {
@@ -266,7 +269,7 @@ fn decompress_chunk(chunk: ReadChunk) -> Result<Vec<u8>> {
         return Ok(chunk.data);
     }
 
-    let mut decoder = XzDecoder::new(&chunk.data[..]);
+    let mut decoder = XzReader::new(&chunk.data[..], false);
     let mut decompressed = Vec::with_capacity(chunk.header.uncompressed_size as usize);
 
     decoder.read_to_end(&mut decompressed).map_err(|e| {

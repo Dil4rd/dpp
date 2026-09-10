@@ -276,7 +276,7 @@ impl<R: Read + Seek> DmgReader<R> {
                     let mut compressed = vec![0u8; block_run.compressed_length as usize];
                     self.reader.read_exact(&mut compressed)?;
 
-                    let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
+                    let mut decoder = lzma_rust2::XzReader::new(&compressed[..], false);
                     let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
                     decode_exact(&mut decoder, slice, "xz")?;
                 }
@@ -404,7 +404,7 @@ impl<R: Read + Seek> DmgReader<R> {
                     let mut compressed = vec![0u8; block_run.compressed_length as usize];
                     self.reader.read_exact(&mut compressed)?;
 
-                    let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
+                    let mut decoder = lzma_rust2::XzReader::new(&compressed[..], false);
                     let mut decompressed = vec![0u8; out_size as usize];
                     decode_exact(&mut decoder, &mut decompressed, "xz")?;
                     writer.write_all(&decompressed)?;
@@ -543,7 +543,7 @@ impl<R: Read + Seek> DmgReader<R> {
                         let mut compressed = vec![0u8; block_run.compressed_length as usize];
                         self.reader.read_exact(&mut compressed)?;
 
-                        let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
+                        let mut decoder = lzma_rust2::XzReader::new(&compressed[..], false);
                         let slice =
                             &mut output[out_offset as usize..(out_offset + out_size) as usize];
                         decode_exact(&mut decoder, slice, "xz")?;
@@ -663,7 +663,7 @@ fn decompress_block(block: &ReadBlock, output: &mut [u8]) -> Result<()> {
             decode_lzfse_exact(&block.data, output)?;
         }
         BlockType::Xz => {
-            let mut decoder = xz2::read::XzDecoder::new(&block.data[..]);
+            let mut decoder = lzma_rust2::XzReader::new(&block.data[..], false);
             decode_exact(&mut decoder, output, "xz")?;
         }
         _ => {

@@ -844,14 +844,13 @@ mod tests {
 
     #[test]
     fn test_xz_roundtrip() {
+        use lzma_rust2::{XzOptions, XzReader, XzWriter};
         use std::io::Write;
-        use xz2::read::XzDecoder;
-        use xz2::write::XzEncoder;
 
         let original = b"XZ compression roundtrip test data. ".repeat(100);
 
         // Compress
-        let mut encoder = XzEncoder::new(Vec::new(), 6);
+        let mut encoder = XzWriter::new(Vec::new(), XzOptions::with_preset(6)).unwrap();
         encoder.write_all(&original).unwrap();
         let compressed = encoder.finish().unwrap();
 
@@ -859,7 +858,7 @@ mod tests {
         assert_eq!(&compressed[..6], &[0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]);
 
         // Decompress
-        let mut decoder = XzDecoder::new(&compressed[..]);
+        let mut decoder = XzReader::new(&compressed[..], false);
         let mut decompressed = vec![0u8; original.len()];
         let n = crate::reader::read_full(&mut decoder, &mut decompressed).unwrap();
 

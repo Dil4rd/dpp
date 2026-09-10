@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-09-10
+
+### Changed
+
+- Replaced `xz2` with `lzma-rust2` for XZ decoding. `xz2` has been unmaintained
+  since February 2024 and binds the C liblzma; `lzma-rust2` is pure Rust, so
+  decoding untrusted images no longer runs C on attacker-controlled input and
+  building no longer needs a C toolchain. Verified byte-identical behaviour on
+  the fixture DMGs
+
+### Fixed
+
+- Build the DMG plist through `plist` rather than string concatenation. A
+  partition name containing `&` or `<` reached the XML unescaped, producing an
+  image `DmgReader` could not open
+
+### Removed
+
+- `xml-rs`, which nothing in the crate referenced
+
+- `base64`, now that `plist` encodes the block map
+
 ## [0.4.0] - 2026-09-07
 
 ### Changed

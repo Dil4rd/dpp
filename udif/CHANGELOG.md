@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Upgraded `bzip2` from 0.5 to 0.6, whose default backend is now the pure-Rust
+  `libbz2-rs-sys` rather than the C `bzip2-sys`. No API change; Bzip2 block
+  runs decode as before
+
 - Replaced `xz2` with `lzma-rust2` for XZ decoding. `xz2` has been unmaintained
   since February 2024 and binds the C liblzma; `lzma-rust2` is pure Rust, so
   decoding untrusted images no longer runs C on attacker-controlled input and

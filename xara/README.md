@@ -35,7 +35,7 @@ Parse `.pkg` installer files and XAR archives on any platform — extract payloa
 
 > **Example:** To extract kernel debug symbols from a macOS `.pkg`, you need both XAR parsing
 > and PKG-specific logic (Distribution XML, component payloads). xara handles both in a single crate
-> with only 4 dependencies.
+> with minimal dependencies.
 
 ## Features
 

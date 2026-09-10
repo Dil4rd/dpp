@@ -205,15 +205,15 @@ dpp-tool  (CLI binary)          dpp-python  (Python bindings)
 
 Each crate is published independently and can be used on its own:
 
-| Crate | Description | Dependencies |
-|-------|-------------|:------------:|
-| [`udif`](udif/) | Apple DMG (UDIF) disk images — read & write with LZFSE/XZ/Zlib/Bzip2 | 10 |
-| [`hfsplus`](hfsplus/) | HFS+ and HFSX filesystem — B-tree traversal, extent overflow, Unicode | 2 |
-| [`xara`](xara/) | XAR archives and macOS PKG installers — TOC parsing, payload extraction | 4 |
-| [`pbzx`](pbzx/) | PBZX streaming archives — chunked XZ decompression, CPIO read/write | 3 |
-| [`apfs`](apfs/) | APFS containers and volumes — checksums, object maps, catalog B-trees | 2 |
-| [`dpp`](dpp/) | Pipeline library chaining all of the above | 7 |
-| [`dpp-python`](dpp-python/) | Python bindings via PyO3 + maturin | 2 |
+| Crate | Description |
+|-------|-------------|
+| [`udif`](udif/) | Apple DMG (UDIF) disk images — read & write with LZFSE/XZ/Zlib/Bzip2 |
+| [`hfsplus`](hfsplus/) | HFS+ and HFSX filesystem — B-tree traversal, extent overflow, Unicode |
+| [`xara`](xara/) | XAR archives and macOS PKG installers — TOC parsing, payload extraction |
+| [`pbzx`](pbzx/) | PBZX streaming archives — chunked XZ decompression, CPIO read/write |
+| [`apfs`](apfs/) | APFS containers and volumes — checksums, object maps, catalog B-trees |
+| [`dpp`](dpp/) | Pipeline library chaining all of the above |
+| [`dpp-python`](dpp-python/) | Python bindings via PyO3 + maturin |
 
 ## Building
 

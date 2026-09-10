@@ -608,6 +608,28 @@ mod tests {
     }
 
     #[test]
+    fn test_roundtrip_partition_name_needing_xml_escaping() {
+        // Names arrive unfiltered from add_partition. Before they were escaped,
+        // `&` and `<` produced a plist this reader could not parse.
+        for name in ["Foo & Bar", "<disk>", "a > b", "plain"] {
+            let original = vec![0x42u8; 1024];
+
+            let mut dmg_buf = Vec::new();
+            {
+                let mut writer = DmgWriter::new(Cursor::new(&mut dmg_buf));
+                writer.add_partition(name, &original).unwrap();
+                writer.finish().unwrap();
+            }
+
+            let mut reader = DmgReader::new(Cursor::new(&dmg_buf)).unwrap_or_else(|e| {
+                panic!("partition name {name:?} produced an unreadable DMG: {e}")
+            });
+            let extracted = reader.decompress_partition(0).unwrap();
+            assert_eq!(&extracted[..original.len()], &original[..]);
+        }
+    }
+
+    #[test]
     fn test_roundtrip_non_sector_aligned() {
         // Test with non-sector-aligned data (100 bytes)
         let original = b"Short test data that is not sector aligned".to_vec();

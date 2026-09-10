@@ -9,27 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Upgraded `bzip2` from 0.5 to 0.6, whose default backend is now the pure-Rust
-  `libbz2-rs-sys` rather than the C `bzip2-sys`. No API change; Bzip2 block
-  runs decode as before
-
-- Replaced `xz2` with `lzma-rust2` for XZ decoding. `xz2` has been unmaintained
-  since February 2024 and binds the C liblzma; `lzma-rust2` is pure Rust, so
-  decoding untrusted images no longer runs C on attacker-controlled input and
-  building no longer needs a C toolchain. Verified byte-identical behaviour on
-  the fixture DMGs
+- Every decoder is now pure Rust: `lzfse` → `lzfse_rust`, `xz2` → `lzma-rust2`,
+  `bzip2` 0.5 → 0.6 for its `libbz2-rs-sys` backend. The crate no longer builds
+  or calls C, and LZFSE no longer needs a 2x scratch buffer to decode
 
 ### Fixed
 
-- Build the DMG plist through `plist` rather than string concatenation. A
-  partition name containing `&` or `<` reached the XML unescaped, producing an
-  image `DmgReader` could not open
+- Build the DMG plist through `plist` rather than concatenating strings; a
+  partition name containing `&` or `<` produced an unreadable image
 
 ### Removed
 
-- `xml-rs`, which nothing in the crate referenced
-
-- `base64`, now that `plist` encodes the block map
+- `xml-rs`, unreferenced, and `base64`, now handled by `plist`
 
 ## [0.4.0] - 2026-09-07
 

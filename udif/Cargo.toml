@@ -13,7 +13,7 @@ thiserror = "2"
 byteorder = "1.5"
 flate2 = "1.0"
 bzip2 = "0.6"
-lzfse = "0.2"
+lzfse_rust = "0.2"
 lzma-rust2 = "0.20"
 rayon = { version = "1.10", optional = true }
 plist = "1"

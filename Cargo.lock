@@ -664,22 +664,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
-name = "lzfse"
-version = "0.2.0"
+name = "lzfse_rust"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21b45f9990844d28a06dc7b7a3ffe3657e5379c8e3c0d6ae43a22e98a2256a0b"
-dependencies = [
- "lzfse-sys",
-]
-
-[[package]]
-name = "lzfse-sys"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23c80418f1cfc4601f8ef2055dcea77eebea47d2edc74ee0dadb005dd3a9f604"
-dependencies = [
- "cc",
-]
+checksum = "5edeac3ec657925dececc672bdd58fa2212291886ddcb3e08aa46924c78340c6"
 
 [[package]]
 name = "lzma-rust2"
@@ -1196,7 +1184,7 @@ dependencies = [
  "bzip2",
  "crc32fast",
  "flate2",
- "lzfse",
+ "lzfse_rust",
  "lzma-rust2",
  "plist",
  "rayon",

@@ -48,20 +48,19 @@ pub(crate) fn decode_exact<R: Read>(reader: &mut R, buf: &mut [u8], format: &str
 }
 
 /// Decode an LZFSE block, failing if its length disagrees with the block map.
-/// Decodes into scratch first because the decoder needs headroom past `buf`.
 ///
 /// PROVISIONAL(anomaly-channel): should become a reported partial recovery.
 fn decode_lzfse_exact(compressed: &[u8], buf: &mut [u8]) -> Result<()> {
-    let mut scratch = vec![0u8; buf.len().saturating_mul(2).max(1)];
-    let decoded = lzfse::decode_buffer(compressed, &mut scratch)
+    let mut decoded = Vec::with_capacity(buf.len());
+    let n = lzfse_rust::decode_bytes(compressed, &mut decoded)
         .map_err(|e| DppError::Decompression(format!("LZFSE: {e:?}")))?;
-    if decoded != buf.len() {
+    if n as usize != buf.len() {
         return Err(DppError::Decompression(format!(
-            "lzfse decoded {decoded} bytes, expected {}",
+            "lzfse decoded {n} bytes, expected {}",
             buf.len()
         )));
     }
-    buf.copy_from_slice(&scratch[..decoded]);
+    buf.copy_from_slice(&decoded);
     Ok(())
 }
 
@@ -933,9 +932,8 @@ mod tests {
     }
 
     fn lzfse_compress(data: &[u8]) -> Vec<u8> {
-        let mut out = vec![0u8; data.len() * 2 + 4096];
-        let n = lzfse::encode_buffer(data, &mut out).unwrap();
-        out.truncate(n);
+        let mut out = Vec::new();
+        lzfse_rust::encode_bytes(data, &mut out).unwrap();
         out
     }
 

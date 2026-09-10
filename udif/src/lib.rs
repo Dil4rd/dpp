@@ -526,29 +526,23 @@ mod tests {
     }
 
     // =========================================================================
-    // TRICKY PIECE #3: LZFSE decoder needs buffer larger than output size
+    // FORMER TRICKY PIECE #3: the C LZFSE decoder needed a destination larger
+    // than the output, so decode_lzfse_exact decoded into double-sized scratch
+    // and copied back. lzfse_rust decodes into a Vec that grows as needed, so
+    // the headroom rule is gone; this pins the behaviour that replaced it.
     // =========================================================================
     #[test]
-    fn test_lzfse_needs_larger_buffer() {
-        // Compress some test data with LZFSE
+    fn test_lzfse_decodes_to_exactly_the_original_length() {
         let original = b"Hello, World! This is a test of LZFSE compression. ".repeat(10);
 
-        let mut compressed = vec![0u8; original.len() + 4096];
-        let compressed_len = lzfse::encode_buffer(&original, &mut compressed).unwrap();
-        compressed.truncate(compressed_len);
+        let mut compressed = Vec::new();
+        lzfse_rust::encode_bytes(&original, &mut compressed).unwrap();
 
-        // Try to decompress with exact-sized buffer - should fail
-        let mut exact_buf = vec![0u8; original.len()];
-        let result = lzfse::decode_buffer(&compressed, &mut exact_buf);
+        let mut decoded = Vec::new();
+        let n = lzfse_rust::decode_bytes(&compressed, &mut decoded).unwrap();
 
-        // This might fail with BufferTooSmall
-        if result.is_err() {
-            // Retry with 2x buffer - should work
-            let mut large_buf = vec![0u8; original.len() * 2];
-            let decoded_len = lzfse::decode_buffer(&compressed, &mut large_buf).unwrap();
-            assert_eq!(decoded_len, original.len());
-            assert_eq!(&large_buf[..decoded_len], &original[..]);
-        }
+        assert_eq!(n as usize, original.len());
+        assert_eq!(decoded, original);
     }
 
     // =========================================================================

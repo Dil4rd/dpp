@@ -9,12 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Replaced `xz2` with `lzma-rust2` for XZ compression and decompression. `xz2`
-  has been unmaintained since February 2024 and binds the C liblzma;
-  `lzma-rust2` is pure Rust, so decompressing untrusted payloads no longer runs
-  C on attacker-controlled input and building no longer needs a C toolchain.
-  Streams written by `pack` remain readable by the C liblzma, and Apple's own
-  payloads still decode unchanged
+- Replaced `xz2` with the pure-Rust `lzma-rust2`, so the crate no longer builds
+  or calls C. Streams written by `pack` stay readable by the C liblzma
 
 ## [0.4.0] - 2026-09-07
 

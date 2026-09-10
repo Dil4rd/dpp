@@ -1,0 +1,64 @@
+name: Dependencies
+
+# Deliberately a separate pipeline from ci.yml. Both jobs install a third-party
+# binary from crates.io at job time, so they run with no credentials and no
+# cache another job could consume: neither an unused-dependency report nor a
+# licence listing is worth widening the blast radius of a supply-chain
+# compromise.
+#
+# Pull-request only. Unlike the advisory scans in ci.yml, neither an unused
+# dependency nor a licence change can appear without someone editing a
+# Cargo.toml, so there is nothing for a scheduled run to discover.
+on:
+  pull_request:
+    branches: [main, dev]
+
+# No scopes at all. The jobs read the checked-out tree and nothing else.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  machete:
+    name: cargo-machete
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Keep the token off the runner disk; nothing here talks to git again.
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+      - run: cargo install cargo-machete --version 0.9.2 --locked
+      - run: cargo machete
+
+  licenses:
+    name: Third-party licences
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+
+      # --features cli is required: without it the crate builds as a library
+      # and no `cargo about` subcommand is installed.
+      - run: cargo install cargo-about --version 0.9.2 --locked --features cli
+
+      # Fails on its own if a dependency arrives under a licence that
+      # about.toml does not accept.
+      - run: |
+          cargo about generate dpp-python/about.hbs \
+            --manifest-path dpp-python/Cargo.toml \
+            -o dpp-python/THIRD-PARTY-LICENSES.md
+
+      # The wheels ship the committed copy, so a stale one would publish a
+      # notice file that does not match what is actually linked.
+      - name: Check the committed notice file is current
+        run: git diff --exit-code -- dpp-python/THIRD-PARTY-LICENSES.md

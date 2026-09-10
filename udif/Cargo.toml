@@ -18,7 +18,6 @@ xz2 = "0.1"
 rayon = { version = "1.10", optional = true }
 plist = "1"
 base64 = "0.22"
-xml-rs = "0.8"
 crc32fast = "1.4"
 
 [dev-dependencies]

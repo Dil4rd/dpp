@@ -236,11 +236,9 @@ impl<W: Write + Seek> DmgWriter<W> {
                     .map_err(|e| DppError::Compression(e.to_string()))
             }
             CompressionMethod::Lzfse => {
-                // Allocate output buffer with some extra space for overhead
-                let mut output = vec![0u8; data.len() + 4096];
-                let compressed_size = lzfse::encode_buffer(data, &mut output)
+                let mut output = Vec::with_capacity(data.len() + 4096);
+                lzfse_rust::encode_bytes(data, &mut output)
                     .map_err(|e| DppError::Compression(format!("LZFSE: {:?}", e)))?;
-                output.truncate(compressed_size);
                 Ok(output)
             }
         }

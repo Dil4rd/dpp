@@ -8,7 +8,7 @@ use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
 use byteorder::{BigEndian, WriteBytesExt};
-use xz2::write::XzEncoder;
+use lzma_rust2::{XzOptions, XzWriter};
 
 use crate::error::{PbzxError, Result};
 use crate::format::PBZX_MAGIC;
@@ -101,7 +101,10 @@ impl<W: Write> PbzxWriter<W> {
         // Compress the data
         let mut compressed = Vec::new();
         {
-            let mut encoder = XzEncoder::new(&mut compressed, self.compression_level);
+            let options = XzOptions::with_preset(self.compression_level);
+            let mut encoder = XzWriter::new(&mut compressed, options).map_err(|e| {
+                PbzxError::Compression(format!("Failed to start compression: {}", e))
+            })?;
             encoder
                 .write_all(data)
                 .map_err(|e| PbzxError::Compression(format!("Failed to compress chunk: {}", e)))?;

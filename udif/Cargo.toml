@@ -1,6 +1,6 @@
 [package]
 name = "udif"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 description = "cross-platform Apple disk image (aka DMG, UDIF) library"
 license = "MIT"
@@ -14,7 +14,7 @@ byteorder = "1.5"
 flate2 = "1.0"
 bzip2 = "0.5"
 lzfse = "0.2"
-xz2 = "0.1"
+lzma-rust2 = "0.20"
 rayon = { version = "1.10", optional = true }
 plist = "1"
 crc32fast = "1.4"

@@ -4,7 +4,7 @@
 
 ```bash
 cargo build --release              # Build all crates
-cargo build -p <crate>             # Build single crate (pbzx, udif, hfsplus, xara, apfs, dpp, dpp-tool)
+cargo build -p <crate>             # Build single crate (pbzx, udif, hfsplus, xara, apfs, cmpfs, dpp, dpp-tool)
 cargo test                         # Run all tests except the #[ignore]d fixture ones
 cargo test -p dpp                  # Run integration tests only
 cargo test <test_name>             # Run a single test by name

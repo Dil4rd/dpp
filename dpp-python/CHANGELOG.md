@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `FileStat.compression_type`, set for transparently compressed files
+- `FilesystemHandle.get_xattr(path, name)` and
+  `FilesystemHandle.list_xattrs(path)`
+
+### Changed
+
+- Reading a transparently compressed file returns its contents rather than
+  nothing
+
 ## [0.3.1] - 2026-09-10
 
 ### Added

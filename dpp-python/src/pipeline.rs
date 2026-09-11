@@ -187,6 +187,25 @@ impl PyFilesystemHandle {
         Ok(PyFileStat::from(&stat))
     }
 
+    /// Read one extended attribute, or None when there is no attribute of
+    /// that name.
+    fn get_xattr<'py>(
+        &mut self,
+        py: Python<'py>,
+        path: &str,
+        name: &str,
+    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        let handle = self.handle()?;
+        let value = handle.get_xattr(path, name).map_err(to_pyerr)?;
+        Ok(value.map(|v| PyBytes::new(py, &v)))
+    }
+
+    /// List a file's extended attribute names.
+    fn list_xattrs(&mut self, path: &str) -> PyResult<Vec<String>> {
+        let handle = self.handle()?;
+        handle.list_xattrs(path).map_err(to_pyerr)
+    }
+
     /// Walk all entries in the filesystem.
     fn walk(&mut self, py: Python<'_>) -> PyResult<Vec<PyWalkEntry>> {
         let mut handle = self.inner.take().ok_or_else(|| {

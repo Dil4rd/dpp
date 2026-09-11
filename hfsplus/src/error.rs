@@ -22,6 +22,9 @@ pub enum HfsPlusError {
 
     #[error("unsupported version: {0}")]
     UnsupportedVersion(u16),
+
+    #[error("decmpfs: {0}")]
+    Compression(#[from] cmpfs::CmpfsError),
 }
 
 pub type Result<T> = std::result::Result<T, HfsPlusError>;

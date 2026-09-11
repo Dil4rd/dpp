@@ -211,6 +211,16 @@ fn stat(
     kv("Permissions", &mode_string(stat.mode));
     kv("Owner", &format!("{}:{}", stat.uid, stat.gid));
     kv("Links", &stat.nlink.to_string());
+
+    if let Some(compression) = stat.compression {
+        kv(
+            "Compression",
+            &format!(
+                "decmpfs type {} {d}(size above is decompressed){r}",
+                compression.compression_type
+            ),
+        );
+    }
     kv(
         "Created",
         &format!("{} {d}(APFS nanosecond timestamp){r}", stat.create_time),

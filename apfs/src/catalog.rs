@@ -38,6 +38,9 @@ const XATTR_KEY_NAME_OFFSET: usize = 10;
 // Xattr record flags (j_xattr_flags)
 const XATTR_DATA_STREAM: u16 = 0x0001;
 
+/// `j_xattr_dstream_t`: `xattr_obj_id u64` plus a five-field `j_dstream_t`.
+const XATTR_DSTREAM_SIZE: usize = 8 + 40;
+
 // Extended field types (INO_EXT_TYPE_*)
 const INO_EXT_TYPE_DSTREAM: u8 = 8;
 
@@ -475,16 +478,24 @@ fn compare_xattr_key(key: &[u8], oid: u64, name_with_nul: &[u8]) -> std::cmp::Or
     }
 }
 
+/// Where an extended attribute keeps its value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum XattrValue {
+    /// The value is in the record itself.
+    Embedded(Vec<u8>),
+    /// The value is a data stream, addressed like file data. `obj_id` is the
+    /// id its file extents are keyed by. Resource forks always take this form.
+    DataStream { obj_id: u64, size: u64 },
+}
+
 /// Look up an extended attribute value for an inode.
 ///
 /// Xattr catalog keys are `[obj_id_and_type u64][name_len u16][name\0]`, so
 /// the lookup compares the OID/type first, then the NUL-terminated name.
 ///
-/// Returns the attribute data with its record header removed, or `None` when
-/// the inode carries no attribute of that name. Attributes stored as a data
-/// stream rather than embedded in the record are rejected with
-/// [`ApfsError::Unsupported`], since the record holds a dstream reference in
-/// place of the value.
+/// Returns `None` when the inode carries no attribute of that name. Attributes
+/// stored as a data stream are rejected with [`ApfsError::Unsupported`]; use
+/// [`lookup_xattr_value`] to handle both forms.
 pub fn lookup_xattr<R: Read + Seek>(
     reader: &mut R,
     catalog_root: u64,
@@ -493,6 +504,25 @@ pub fn lookup_xattr<R: Read + Seek>(
     oid: u64,
     name: &str,
 ) -> Result<Option<Vec<u8>>> {
+    match lookup_xattr_value(reader, catalog_root, omap_root, block_size, oid, name)? {
+        Some(XattrValue::Embedded(data)) => Ok(Some(data)),
+        Some(XattrValue::DataStream { .. }) => Err(ApfsError::Unsupported(
+            "xattr is stored as a data stream, not embedded in the record".into(),
+        )),
+        None => Ok(None),
+    }
+}
+
+/// Look up an extended attribute, reporting whether its value is embedded or
+/// held in a data stream.
+pub fn lookup_xattr_value<R: Read + Seek>(
+    reader: &mut R,
+    catalog_root: u64,
+    omap_root: u64,
+    block_size: u32,
+    oid: u64,
+    name: &str,
+) -> Result<Option<XattrValue>> {
     let mut search_name = Vec::with_capacity(name.len() + 1);
     search_name.extend_from_slice(name.as_bytes());
     search_name.push(0);
@@ -514,12 +544,46 @@ pub fn lookup_xattr<R: Read + Seek>(
     }
 }
 
+/// Names of every extended attribute on an inode, in on-disk order.
+pub fn list_xattr_names<R: Read + Seek>(
+    reader: &mut R,
+    catalog_root: u64,
+    omap_root: u64,
+    block_size: u32,
+    oid: u64,
+) -> Result<Vec<String>> {
+    let compare_fn = catalog_key(oid, J_TYPE_XATTR);
+    let records = btree::btree_scan(
+        reader,
+        catalog_root,
+        block_size,
+        0,
+        0,
+        &compare_fn,
+        Some(omap_root),
+    )?;
+
+    let mut names = Vec::with_capacity(records.len());
+    for (key, _) in records {
+        let raw = key.get(XATTR_KEY_NAME_OFFSET..).ok_or_else(|| {
+            ApfsError::CorruptedData(format!("xattr key for inode {oid} has no name field"))
+        })?;
+        let raw = raw.strip_suffix(&[0]).unwrap_or(raw);
+        names.push(String::from_utf8(raw.to_vec()).map_err(|e| {
+            ApfsError::CorruptedData(format!("xattr name for inode {oid} is not UTF-8: {e}"))
+        })?);
+    }
+    Ok(names)
+}
+
 /// Parse an xattr record value: `flags u16 | data_len u16 | data`.
 ///
-/// Only embedded attributes are supported. A record flagged `XATTR_DATA_STREAM`
-/// carries a dstream reference in place of the data, so returning its bytes
-/// would hand back the reference struct as though it were the value.
-fn parse_xattr_value(value: &[u8]) -> Result<Vec<u8>> {
+/// A record flagged `XATTR_DATA_STREAM` carries a `j_xattr_dstream_t` in place
+/// of the value — `xattr_obj_id u64` then a `j_dstream_t` opening with
+/// `size u64`, both little-endian (Apple File System Reference, 2020-06-22,
+/// "j_xattr_dstream_t" and "j_dstream_t"; same layout in apfs-fuse
+/// `DiskStruct.h`).
+fn parse_xattr_value(value: &[u8]) -> Result<XattrValue> {
     if value.len() < 4 {
         return Err(ApfsError::CorruptedData(format!(
             "xattr value too short: {} bytes",
@@ -527,14 +591,28 @@ fn parse_xattr_value(value: &[u8]) -> Result<Vec<u8>> {
         )));
     }
     let flags = u16::from_le_bytes([value[0], value[1]]);
-    if flags & XATTR_DATA_STREAM != 0 {
-        return Err(ApfsError::Unsupported(
-            "xattr is stored as a data stream, not embedded in the record".into(),
-        ));
-    }
     let data_len = u16::from_le_bytes([value[2], value[3]]) as usize;
+
+    if flags & XATTR_DATA_STREAM != 0 {
+        let xdata = value.get(4..4 + XATTR_DSTREAM_SIZE).ok_or_else(|| {
+            ApfsError::CorruptedData(format!(
+                "xattr data-stream reference truncated: {} bytes after the header",
+                value.len().saturating_sub(4)
+            ))
+        })?;
+        let field = |offset: usize| {
+            let mut bytes = [0u8; 8];
+            bytes.copy_from_slice(&xdata[offset..offset + 8]);
+            u64::from_le_bytes(bytes)
+        };
+        return Ok(XattrValue::DataStream {
+            obj_id: field(0),
+            size: field(8),
+        });
+    }
+
     let end = value.len().min(4 + data_len);
-    Ok(value[4..end].to_vec())
+    Ok(XattrValue::Embedded(value[4..end].to_vec()))
 }
 
 /// Order an on-disk catalog key against the `(oid, type)` being searched for.
@@ -691,16 +769,37 @@ mod tests {
         ];
         assert_eq!(
             parse_xattr_value(&value).unwrap(),
-            b"../README.txt\0".to_vec()
+            XattrValue::Embedded(b"../README.txt\0".to_vec())
         );
         // data_len larger than the record: clamp to the value length
         let short = [0x06, 0x00, 0xff, 0x00, b'a', b'b'];
-        assert_eq!(parse_xattr_value(&short).unwrap(), b"ab".to_vec());
+        assert_eq!(
+            parse_xattr_value(&short).unwrap(),
+            XattrValue::Embedded(b"ab".to_vec())
+        );
         // value shorter than the header: rejected rather than passed through
         assert!(parse_xattr_value(b"abc").is_err());
-        // data-stream attribute: rejected rather than returned as data
+        // data-stream reference shorter than a j_xattr_dstream_t
         let dstream = [0x01, 0x00, 0x10, 0x00, 0xAA, 0xBB, 0xCC, 0xDD];
         assert!(parse_xattr_value(&dstream).is_err());
+    }
+
+    #[test]
+    fn parses_xattr_data_stream_reference() {
+        // flags=XATTR_DATA_STREAM, then j_xattr_dstream_t: xattr_obj_id then a
+        // j_dstream_t whose first field is the size.
+        let mut value = vec![0x01, 0x00, 0x30, 0x00];
+        value.extend_from_slice(&0x1234_5678_u64.to_le_bytes());
+        value.extend_from_slice(&99_u64.to_le_bytes());
+        value.extend_from_slice(&[0u8; 32]);
+
+        assert_eq!(
+            parse_xattr_value(&value).unwrap(),
+            XattrValue::DataStream {
+                obj_id: 0x1234_5678,
+                size: 99,
+            }
+        );
     }
 
     /// Build an on-disk catalog key: `obj_id_and_type | name_len u16 | name | NUL`.

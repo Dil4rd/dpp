@@ -143,6 +143,52 @@ The catalog B-tree maps (parent CNID, name) → record.
 | 15 | Repair catalog | Repair data |
 | 16 | Bogus folder | First user CNID |
 
+## Attributes B-tree
+
+Extended attributes live in their own B-tree, in the fork the volume header
+calls `attributesFile`. Keys are `HFSPlusAttrKey` (`core/hfs_format.h`):
+
+| Offset | Size | Field |
+|-------:|-----:|-------|
+| 0 | 2 | `keyLength`, counting everything after itself |
+| 2 | 2 | `pad` |
+| 4 | 4 | `fileID` |
+| 8 | 4 | `startBlock` |
+| 12 | 2 | `attrNameLen`, in UTF-16 code units |
+| 14 | .. | `attrName`, UTF-16 big-endian |
+
+`kHFSPlusAttrKeyMinimumLength` is 12, so a key with an `n`-character name has
+`keyLength = 12 + 2n`. The value starts at `keyLength + 2`, padded to even
+alignment — the same rule the catalog uses.
+
+### Key ordering
+
+`fileID`, then the name, then `startBlock`. The name comparison is binary over
+UTF-16 code units, **not** the case-folding comparison the catalog uses on
+HFSX. From `hfs_attrkeycompare` (`core/hfs_xattr.c`): *"The name portion of the
+key is compared using a 16-bit binary comparison."*
+
+### Record types
+
+| Value | Name | Layout |
+|------:|------|--------|
+| `0x10` | `kHFSPlusAttrInlineData` | `recordType u32`, `reserved[2] u32`, `attrSize u32`, then the value |
+| `0x20` | `kHFSPlusAttrForkData` | `recordType u32`, `reserved u32`, then an `HFSPlusForkData` to read the value from |
+| `0x30` | `kHFSPlusAttrExtents` | overflow extents for a fork of more than eight |
+
+An attribute large enough for a fork record is read exactly like file data.
+
+## Transparent compression (decmpfs)
+
+A compressed file's data fork is empty and its catalog `logicalSize` is 0. The
+real bytes are reached through the `com.apple.decmpfs` attribute above, and —
+for the resource-fork compression types — through the file's **resource fork**
+from its catalog record. HFS+ has a real resource fork, so unlike APFS it does
+not need a `com.apple.ResourceFork` attribute.
+
+The attribute layout and the compression types are documented in
+[`cmpfs/docs/FORMATS.md`](../../cmpfs/docs/FORMATS.md).
+
 ## Unicode Handling
 
 HFS+ file names use a decomposed Unicode variant (similar to NFD but with Apple-specific rules). The catalog B-tree key contains the name length (u16) followed by UTF-16BE characters.

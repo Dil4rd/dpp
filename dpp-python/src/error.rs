@@ -110,6 +110,7 @@ fn hfs_to_pyerr(hfs_err: &dpp::hfsplus::HfsPlusError, top: &dpp::DppError) -> Py
             InvalidFormatError::new_err(top.to_string())
         }
         H::UnsupportedVersion(_) => UnsupportedError::new_err(top.to_string()),
+        H::Compression(e) => compression_to_pyerr(e, top),
     }
 }
 
@@ -125,6 +126,22 @@ fn apfs_to_pyerr(apfs_err: &dpp::apfs::ApfsError, top: &dpp::DppError) -> PyErr 
         | A::CorruptedData(_)
         | A::NoVolume => InvalidFormatError::new_err(top.to_string()),
         A::Unsupported(_) => UnsupportedError::new_err(top.to_string()),
+        A::Compression(e) => compression_to_pyerr(e, top),
+    }
+}
+
+/// decmpfs failures, reached through either filesystem crate — both re-export
+/// the same error type.
+fn compression_to_pyerr(err: &dpp::apfs::CompressionError, top: &dpp::DppError) -> PyErr {
+    use dpp::apfs::CompressionError as C;
+    match err {
+        C::InvalidMagic(_)
+        | C::Truncated { .. }
+        | C::TruncatedResourceFork { .. }
+        | C::MissingResourceFork(_)
+        | C::CorruptedData(_) => InvalidFormatError::new_err(top.to_string()),
+        C::Dataless(_) | C::Unsupported(_) => UnsupportedError::new_err(top.to_string()),
+        C::Decompression(_) => DecompressionError::new_err(top.to_string()),
     }
 }
 

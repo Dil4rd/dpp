@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `FilesystemHandle::get_xattr` and `FilesystemHandle::list_xattrs`, plus the
+  same pair on `HfsHandle` and `ApfsHandle`
+
+### Changed
+
+- **Breaking:** `FsFileStat` gains `compression_type`. Transparently
+  compressed files now read as their contents rather than as nothing, and
+  report their decompressed size
+
 ## [0.5.0] - 2026-09-07
 
 ### Changed

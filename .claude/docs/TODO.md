@@ -111,7 +111,9 @@ the extents B-tree into the constructor — closer to feature work than a fix.
 
 **9. Comparators return `Less` on undecodable keys** `[verified]` — high.
 `apfs/src/catalog.rs:510`, `apfs/src/omap.rs:60`, `hfsplus/src/catalog.rs:278`,
-`hfsplus/src/extents.rs:240`. A malformed key steers the descent past itself,
+`hfsplus/src/extents.rs:240`, and now `hfsplus/src/attributes.rs` — the
+attribute comparator follows the same convention deliberately, so fixing this
+means fixing all five together. A malformed key steers the descent past itself,
 producing a false negative: a file that exists reports as not found. Touches
 the comparator contract, so agree the approach first.
 
@@ -164,6 +166,14 @@ One bad entry destroys the whole result.
 
 ## Tests and infrastructure
 
+- **No real-image decmpfs coverage, and none possible from `tests/`.** Measured
+  Sep 2026 while adding it: `hfsp.raw` has `attributes_file.logical_size == 0`
+  — no attributes file at all, so the whole HFS+ Attributes B-tree path is
+  synthetic-only. `appfs.raw` has 126 of 129 files carrying attributes (610
+  values over seven names, all resolving) but **not one compressed file** on
+  either volume. So decompression itself is proved only by `cmpfs`'s unit tests
+  and the synthetic `hfsplus` ones. A fixture containing a macOS system volume
+  would close both gaps at once; nothing in `tests/` can.
 - No real-image XAR coverage. The only XAR fixture has no symlinks and no
   `<ea>` blocks, so fixture tests are structurally blind to that bug class.
 - `rust-toolchain.toml` exists only on `dev`. Every PR targeting `main` hits

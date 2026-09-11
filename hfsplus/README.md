@@ -29,11 +29,14 @@ Parse HFS+ / HFSX volumes from raw disk images on any platform — no kernel dri
 | Extent overflow | ✓ | ❌ | ❌ |
 | Streaming reads | ✓ | ❌ | ❌ |
 | Resource forks | ✓ | ❌ | ❌ |
+| Extended attributes | ✓ | ❌ | ❌ |
+| decmpfs compression | ✓ | ❌ | ❌ |
 | Unicode names | ✓ | ✓ | ❌ |
 | Generic `Read+Seek` | ✓ | ❌ | ❌ |
-| Zero dependencies\* | ✓ | ❌ | ❌ |
+| Minimal dependencies\* | ✓ | ❌ | ❌ |
 
-\* Only `byteorder` and `thiserror` — no compression, no FFI, no system libs.
+\* `byteorder`, `thiserror`, and [`cmpfs`](../cmpfs) for decmpfs — all pure
+Rust. No FFI, no system libs.
 
 > **Example:** macOS Kernel Debug Kit DMGs contain HFSX (case-sensitive HFS+) partitions.
 > Most Rust HFS libraries can't read case-sensitive volumes — hfsplus handles both.
@@ -46,6 +49,8 @@ Parse HFS+ / HFSX volumes from raw disk images on any platform — no kernel dri
 | **Read files** | Extract file contents into memory or stream to a writer |
 | **Streaming I/O** | `ForkReader` provides `Read+Seek` access without buffering |
 | **File metadata** | BSD permissions, creation/modification dates, fork info |
+| **Extended attributes** | Read one by name or list them all from the Attributes B-tree |
+| **decmpfs** | Transparently compressed files read as their contents, not as nothing |
 | **Recursive walk** | Walk entire filesystem tree with full paths |
 | **Path resolution** | Navigate by Unix-style paths (`/Library/Extensions/foo.kext`) |
 
@@ -179,8 +184,7 @@ $ dpp-tool hfs info Kernel_Debug_Kit.dmg
 
 **Choose hfsfuse if you need:**
 - FUSE mounting (kernel-level filesystem access)
-- HFS+ compression support (zlib, lzvn, lzfse)
-- Extended attributes and hard link support
+- Hard link support
 
 ## License
 

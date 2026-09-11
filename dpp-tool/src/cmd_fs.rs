@@ -1,4 +1,5 @@
 use std::io;
+use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
 
@@ -17,6 +18,7 @@ pub(crate) fn run(
         FsCommand::Tree { dmg, path, depth } => tree(&dmg, path.as_deref(), depth, mode),
         FsCommand::Cat { dmg, path } => cat(&dmg, &path, mode),
         FsCommand::Stat { dmg, path } => stat(&dmg, &path, mode),
+        FsCommand::Xattr { dmg, path, name } => xattr(&dmg, &path, name.as_deref(), mode),
         FsCommand::Find { dmg, args } => find(&dmg, args, mode),
         FsCommand::Extract { dmg, path, output } => {
             extract_cmd(&dmg, path.as_deref(), &output, mode)
@@ -214,6 +216,43 @@ fn cat(
     Ok(())
 }
 
+/// List a file's extended attributes, or write one to stdout.
+///
+/// Values are written raw, not decoded: many are binary plists or serialised
+/// structures, and guessing at a rendering would misreport them.
+fn xattr(
+    dmg_path: &Path,
+    path: &str,
+    name: Option<&str>,
+    mode: dpp::ExtractMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut pipeline = open_pipeline(dmg_path)?;
+    let mut fs = open_filesystem(&mut pipeline, mode)?;
+
+    let Some(name) = name else {
+        let names = fs.list_xattrs(path)?;
+        header(&format!("xattrs: {path}"));
+        if names.is_empty() {
+            println!();
+            println!("  {}no extended attributes{}", dim(), reset());
+        } else {
+            section("Attributes");
+            for name in &names {
+                let size = fs.get_xattr(path, name)?.map_or(0, |v| v.len());
+                kv(name, &format_size(size as u64));
+            }
+        }
+        println!();
+        return Ok(());
+    };
+
+    let value = fs
+        .get_xattr(path, name)?
+        .ok_or_else(|| format!("{path} has no extended attribute {name:?}"))?;
+    io::stdout().write_all(&value)?;
+    Ok(())
+}
+
 fn stat(
     dmg_path: &Path,
     path: &str,
@@ -249,6 +288,13 @@ fn stat(
     }
     if let Some(rsrc_size) = stat.resource_fork_size {
         kv("Resource fork", &format_size(rsrc_size));
+    }
+
+    if let Some(compression_type) = stat.compression_type {
+        kv(
+            "Compression",
+            &format!("decmpfs type {compression_type} {d}(size above is decompressed){r}"),
+        );
     }
 
     let time_label = match stat.fs_type {

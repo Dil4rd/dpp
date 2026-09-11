@@ -104,6 +104,10 @@ pub struct PyFileStat {
     pub data_fork_extents: Option<u32>,
     #[pyo3(get)]
     pub resource_fork_size: Option<u64>,
+    /// decmpfs compression type, when the file is transparently compressed.
+    /// `size` is then the decompressed size.
+    #[pyo3(get)]
+    pub compression_type: Option<u32>,
 }
 
 #[pymethods]
@@ -131,6 +135,7 @@ impl From<&dpp::FsFileStat> for PyFileStat {
             nlink: s.nlink,
             data_fork_extents: s.data_fork_extents,
             resource_fork_size: s.resource_fork_size,
+            compression_type: s.compression_type,
         }
     }
 }

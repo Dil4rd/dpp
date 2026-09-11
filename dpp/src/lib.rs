@@ -47,6 +47,7 @@ mod tests {
             },
             data_fork_extents: 3,
             resource_fork_size: 512,
+            compression: None,
         };
 
         let unified = FsFileStat::from(&hfs_stat);
@@ -62,6 +63,34 @@ mod tests {
         assert_eq!(unified.nlink, None);
         assert_eq!(unified.data_fork_extents, Some(3));
         assert_eq!(unified.resource_fork_size, Some(512));
+        assert_eq!(unified.compression_type, None);
+    }
+
+    #[test]
+    fn test_fs_file_stat_carries_compression() {
+        let hfs_stat = hfsplus::FileStat {
+            cnid: 7,
+            kind: hfsplus::EntryKind::File,
+            size: 4096,
+            create_date: 0,
+            modify_date: 0,
+            permissions: hfsplus::HfsPermissions {
+                owner_id: 0,
+                group_id: 0,
+                mode: 0o100644,
+            },
+            data_fork_extents: 0,
+            resource_fork_size: 0,
+            compression: Some(hfsplus::CompressionHeader {
+                compression_type: 4,
+                uncompressed_size: 4096,
+            }),
+        };
+
+        let unified = FsFileStat::from(&hfs_stat);
+        assert_eq!(unified.compression_type, Some(4));
+        // The reported size is the decompressed one, not the empty data fork.
+        assert_eq!(unified.size, 4096);
     }
 
     #[test]
@@ -79,6 +108,7 @@ mod tests {
             },
             data_fork_extents: 0,
             resource_fork_size: 0,
+            compression: None,
         };
 
         let unified = FsFileStat::from(&hfs_stat);
@@ -97,6 +127,7 @@ mod tests {
             gid: 80,
             mode: 0o120755,
             nlink: 2,
+            compression: None,
         };
 
         let unified = FsFileStat::from(&apfs_stat);

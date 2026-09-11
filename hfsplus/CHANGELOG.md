@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Extended attributes.** `attributes` module reads the Attributes B-tree;
+  `HfsVolume::get_xattr` and `HfsVolume::list_xattrs` expose it. The tree is
+  read on first use, so a damaged one fails only the calls that need it rather
+  than `HfsVolume::open`
+- `testutil::HfsPlusImageBuilder::add_file_with_xattrs` builds a file with
+  extended attributes and a resource fork
+- `ForkData` and `ExtentDescriptor` derive `PartialEq` and `Eq`
+
+### Changed
+
+- **Breaking behaviour:** `read_file` and `read_file_to` now decompress
+  transparently compressed (`decmpfs`) files. Their data fork is empty, so
+  these previously returned zero bytes for a file `stat` reported as
+  non-empty — most files on a macOS system volume are stored this way
+- **Breaking behaviour:** `open_file` fails on a compressed file instead of
+  returning a reader over the empty data fork, which would have reported a
+  successful read of nothing. Use `read_file`
+- **Breaking:** `FileStat` gains `compression`, and its `size` is the
+  decompressed size for a compressed file
+- `list_directory` still reports the data fork size, so a compressed file
+  lists as 0 bytes. `stat` is authoritative; resolving it during a listing
+  would cost an attribute lookup per entry
+
 ## [0.3.0] - 2026-09-07
 
 ### Changed

@@ -17,14 +17,14 @@ pub const HFS_PLUS_VERSION: u16 = 4;
 pub const HFSX_VERSION: u16 = 5;
 
 /// An extent descriptor: contiguous range of allocation blocks
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ExtentDescriptor {
     pub start_block: u32,
     pub block_count: u32,
 }
 
 /// Fork data: describes a data or resource fork
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ForkData {
     pub logical_size: u64,
     pub clump_size: u32,

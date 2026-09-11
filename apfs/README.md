@@ -33,7 +33,8 @@ Parse APFS volumes from raw disk images on any platform — no kernel drivers or
 | Checkpoint scanning | ✓ | partial | ✓ | ✓ |
 | Fletcher-64 checksums | ✓ | ✓ | ✓ | ✓ |
 | Encryption | ❌ | ❌ | ✓ | ✓ |
-| Compression | ❌ | ❌ | ✓ | ✓ |
+| Compression (decmpfs) | ✓ | ❌ | ✓ | ✓ |
+| Extended attributes | ✓ | ❌ | ✓ | ✓ |
 | Permissive license | MIT | MIT | GPL-2.0 | LGPL-3.0 |
 
 \* Only `byteorder` and `thiserror` — no compression, no FFI, no system libs.
@@ -46,6 +47,8 @@ Parse APFS volumes from raw disk images on any platform — no kernel drivers or
 | **Read files** | Extract file contents into memory or stream to a writer |
 | **Streaming I/O** | `ApfsForkReader` provides `Read+Seek` access without buffering |
 | **File metadata** | BSD permissions, creation/modification dates, inode info |
+| **Extended attributes** | Read one by name or list them all, embedded or data-stream |
+| **decmpfs** | Transparently compressed files read as their contents, not as nothing |
 | **Recursive walk** | Walk entire filesystem tree with full paths |
 | **Path resolution** | Navigate by Unix-style paths (`/Applications/Upscayl.app/Contents/Info.plist`) |
 | **Checksums** | Fletcher-64 verification on all on-disk objects |
@@ -57,6 +60,8 @@ Parse APFS volumes from raw disk images on any platform — no kernel drivers or
 |---------|:-------:|-------|
 | Read-only volumes | ✓ | Full directory listing, file reading, metadata |
 | Multiple volumes | First only | Reads the first non-empty volume in the container |
+| Extended attributes | ✓ | Embedded and data-stream values, including resource forks |
+| decmpfs compression | ✓ | Decompressed transparently by `read_file` |
 | Encryption | ❌ | Encrypted volumes not supported |
 | Snapshots | ❌ | Snapshot browsing not supported |
 | Clones | ❌ | Clone resolution not supported |

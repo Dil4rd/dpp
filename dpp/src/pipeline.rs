@@ -254,6 +254,16 @@ impl HfsHandle {
         Ok(dispatch!(self, stat, path)?)
     }
 
+    /// Read one extended attribute
+    pub fn get_xattr(&mut self, path: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        Ok(dispatch!(self, get_xattr, path, name)?)
+    }
+
+    /// List a file's extended attribute names
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<String>> {
+        Ok(dispatch!(self, list_xattrs, path)?)
+    }
+
     /// Walk all files
     pub fn walk(&mut self) -> Result<Vec<hfsplus::WalkEntry>> {
         Ok(dispatch!(self, walk)?)
@@ -338,6 +348,16 @@ impl ApfsHandle {
     /// Get file metadata
     pub fn stat(&mut self, path: &str) -> Result<apfs::FileStat> {
         Ok(dispatch_apfs!(self, stat, path)?)
+    }
+
+    /// Read one extended attribute
+    pub fn get_xattr(&mut self, path: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        Ok(dispatch_apfs!(self, get_xattr, path, name)?)
+    }
+
+    /// List a file's extended attribute names
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<String>> {
+        Ok(dispatch_apfs!(self, list_xattrs, path)?)
     }
 
     /// Walk all files
@@ -498,6 +518,9 @@ pub struct FsFileStat {
     pub data_fork_extents: Option<u32>,
     /// Resource fork size (HFS+ only, when > 0)
     pub resource_fork_size: Option<u64>,
+    /// decmpfs compression type, when the file is transparently compressed.
+    /// `size` above is then the decompressed size.
+    pub compression_type: Option<u32>,
 }
 
 impl From<&hfsplus::FileStat> for FsFileStat {
@@ -519,6 +542,7 @@ impl From<&hfsplus::FileStat> for FsFileStat {
             } else {
                 None
             },
+            compression_type: s.compression.map(|c| c.compression_type),
         }
     }
 }
@@ -538,6 +562,7 @@ impl From<&apfs::FileStat> for FsFileStat {
             nlink: Some(s.nlink),
             data_fork_extents: None,
             resource_fork_size: None,
+            compression_type: s.compression.map(|c| c.compression_type),
         }
     }
 }
@@ -588,6 +613,23 @@ impl FilesystemHandle {
         match self {
             FilesystemHandle::Hfs(h) => Ok(FsFileStat::from(&h.stat(path)?)),
             FilesystemHandle::Apfs(h) => Ok(FsFileStat::from(&h.stat(path)?)),
+        }
+    }
+
+    /// Read one extended attribute, or `None` when there is no attribute of
+    /// that name.
+    pub fn get_xattr(&mut self, path: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        match self {
+            FilesystemHandle::Hfs(h) => h.get_xattr(path, name),
+            FilesystemHandle::Apfs(h) => h.get_xattr(path, name),
+        }
+    }
+
+    /// List a file's extended attribute names
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<String>> {
+        match self {
+            FilesystemHandle::Hfs(h) => h.list_xattrs(path),
+            FilesystemHandle::Apfs(h) => h.list_xattrs(path),
         }
     }
 

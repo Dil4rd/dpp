@@ -189,6 +189,15 @@ enum FsCommand {
         /// Filesystem path to stat
         path: String,
     },
+    /// Extended attributes: list them, or dump one to stdout
+    Xattr {
+        /// Path to the DMG file
+        dmg: PathBuf,
+        /// Filesystem path
+        path: String,
+        /// Attribute name; omit to list every attribute on the file
+        name: Option<String>,
+    },
     /// Find files (default: *.pkg)
     Find {
         /// Path to the DMG file

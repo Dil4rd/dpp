@@ -169,7 +169,8 @@ same length handling. Both got smaller and correct at once.
 blocks** — so no fixture test can catch the XAR bug class at all, however many
 are added. Synthetic unit tests are the only coverage for those.
 
-`dpp/tests/integration.rs::test_hfsplus_to_xar_to_pbzx` has been failing for
+`dpp/tests/integration.rs::test_hfsplus_to_xar_to_pbzx` had been failing for
 some time: `hfsp.raw` is the Google Chrome volume and contains no `.pkg`.
-Because it is `#[ignore]`d, CI never sees it. Expect `5 passed; 1 failed` from
-`cargo test -p dpp -- --ignored` on a clean tree.
+Because it is `#[ignore]`d, CI never saw it. **Fixed since** — commit `6a2c293`
+repointed it at a volume that has one, and `cargo test -p dpp -- --ignored` is
+`6 passed` on a clean tree as of Sep 2026.

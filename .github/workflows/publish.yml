@@ -99,6 +99,8 @@ jobs:
           }
           try_publish pbzx
           try_publish xara
+          try_publish cmpfs
+          sleep 30
           try_publish hfsplus
           try_publish apfs
           try_publish udif

@@ -10,6 +10,10 @@ const HFSX_SIGNATURE: u16 = 0x4858;
 const HFSX_VERSION: u16 = 5;
 const CNID_FIRST_USER: u32 = 16;
 
+/// First block available for file data: blocks 0-5 hold the volume header and
+/// the extents, catalog and attributes B-trees.
+const FIRST_DATA_BLOCK: u32 = 6;
+
 // Catalog record types
 const RECORD_TYPE_FOLDER: u16 = 0x0001;
 const RECORD_TYPE_FILE: u16 = 0x0002;
@@ -28,6 +32,10 @@ struct FileEntry {
     /// Overrides the fork's declared `logical_size`. `None` means "state the
     /// truth", which is what a real volume does.
     declared_size: Option<u64>,
+    /// Resource fork contents, empty for a file without one.
+    resource_fork: Vec<u8>,
+    /// Extended attributes, written as inline Attributes B-tree records.
+    xattrs: Vec<(String, Vec<u8>)>,
 }
 
 /// Builds a minimal valid HFSX filesystem image in memory.
@@ -37,7 +45,9 @@ struct FileEntry {
 /// - Block 1: Extents overflow B-tree (header node, empty tree)
 /// - Block 2: Catalog B-tree header node
 /// - Block 3: Catalog B-tree leaf node (all catalog records)
-/// - Block 4+: File data blocks
+/// - Block 4: Attributes B-tree header node
+/// - Block 5: Attributes B-tree leaf node (all attribute records)
+/// - Block 6+: File data blocks, then resource fork blocks
 pub struct HfsPlusImageBuilder {
     volume_name: String,
     files: Vec<FileEntry>,
@@ -71,7 +81,33 @@ impl HfsPlusImageBuilder {
             mode,
             cnid,
             declared_size: None,
+            resource_fork: Vec::new(),
+            xattrs: Vec::new(),
         });
+        self
+    }
+
+    /// Add a file carrying extended attributes and, optionally, a resource
+    /// fork. Together these build a decmpfs-compressed file: the attribute
+    /// holds the `com.apple.decmpfs` header, the fork holds the blocks.
+    pub fn add_file_with_xattrs(
+        &mut self,
+        name: &str,
+        content: &[u8],
+        mode: u16,
+        xattrs: &[(&str, &[u8])],
+        resource_fork: &[u8],
+    ) -> &mut Self {
+        self.add_file(name, content, mode);
+        let entry = self
+            .files
+            .last_mut()
+            .expect("add_file just pushed an entry");
+        entry.resource_fork = resource_fork.to_vec();
+        entry.xattrs = xattrs
+            .iter()
+            .map(|(name, value)| ((*name).to_string(), value.to_vec()))
+            .collect();
         self
     }
 
@@ -96,18 +132,25 @@ impl HfsPlusImageBuilder {
 
     /// Build the HFSX image and return the raw bytes.
     pub fn build(&self) -> Vec<u8> {
-        // Calculate block allocation for file data
-        let mut data_block = 4u32; // first 4 blocks reserved for metadata
+        // Calculate block allocation for file data and resource forks
+        let mut data_block = FIRST_DATA_BLOCK;
         let mut file_blocks: Vec<(u32, u32)> = Vec::new();
+        let mut rsrc_blocks: Vec<(u32, u32)> = Vec::new();
 
-        for file in &self.files {
-            let blocks = if file.content.is_empty() {
+        let allocate = |content: &[u8], next: &mut u32| {
+            let blocks = if content.is_empty() {
                 0
             } else {
-                file.content.len().div_ceil(BLOCK_SIZE) as u32
+                content.len().div_ceil(BLOCK_SIZE) as u32
             };
-            file_blocks.push((data_block, blocks));
-            data_block += blocks;
+            let start = *next;
+            *next += blocks;
+            (start, blocks)
+        };
+
+        for file in &self.files {
+            file_blocks.push(allocate(&file.content, &mut data_block));
+            rsrc_blocks.push(allocate(&file.resource_fork, &mut data_block));
         }
 
         let total_blocks = data_block;
@@ -136,21 +179,61 @@ impl HfsPlusImageBuilder {
         );
 
         // Block 3: Catalog B-tree leaf node
-        self.write_catalog_leaf(&mut image, &file_blocks);
+        self.write_catalog_leaf(&mut image, &file_blocks, &rsrc_blocks);
 
-        // Block 4+: File data
+        // Blocks 4 and 5: Attributes B-tree
+        self.write_attributes_btree(&mut image);
+
+        // Block 6+: File data, then resource forks
         for (i, file) in self.files.iter().enumerate() {
-            if !file.content.is_empty() {
-                let (start_block, _) = file_blocks[i];
+            for (content, (start_block, _)) in [
+                (&file.content, file_blocks[i]),
+                (&file.resource_fork, rsrc_blocks[i]),
+            ] {
+                if content.is_empty() {
+                    continue;
+                }
                 let offset = start_block as usize * BLOCK_SIZE;
-                image[offset..offset + file.content.len()].copy_from_slice(&file.content);
+                image[offset..offset + content.len()].copy_from_slice(content);
             }
         }
 
         image
     }
 
-    fn write_catalog_leaf(&self, image: &mut [u8], file_blocks: &[(u32, u32)]) {
+    /// Write the Attributes B-tree header and its single leaf of inline
+    /// records, sorted by `(fileID, name)` as `hfs_attrkeycompare` requires.
+    fn write_attributes_btree(&self, image: &mut [u8]) {
+        let mut records: Vec<(u32, Vec<u16>, Vec<u8>)> = Vec::new();
+        for file in &self.files {
+            for (name, value) in &file.xattrs {
+                records.push((
+                    file.cnid,
+                    name.encode_utf16().collect(),
+                    build_inline_attribute(file.cnid, name, value),
+                ));
+            }
+        }
+        records.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+
+        let count = records.len() as u32;
+        // Node numbers are relative to the attributes fork, which starts at
+        // block 4, so the leaf in block 5 is node 1.
+        let root = if count == 0 { 0 } else { 1 };
+        write_btree_header_node(image, 4 * BLOCK_SIZE, root, count, 266, 0);
+
+        if count > 0 {
+            let records: Vec<Vec<u8>> = records.into_iter().map(|(_, _, r)| r).collect();
+            write_leaf_node(image, 5 * BLOCK_SIZE, &records);
+        }
+    }
+
+    fn write_catalog_leaf(
+        &self,
+        image: &mut [u8],
+        file_blocks: &[(u32, u32)],
+        rsrc_blocks: &[(u32, u32)],
+    ) {
         // Build all catalog records in sorted order: (parent_id, name)
         let mut records: Vec<Vec<u8>> = Vec::new();
 
@@ -178,6 +261,7 @@ impl HfsPlusImageBuilder {
 
         for &(orig_idx, file) in &sorted {
             let (start_block, block_count) = file_blocks[orig_idx];
+            let (rsrc_start, rsrc_count) = rsrc_blocks[orig_idx];
             records.push(build_catalog_entry(
                 CNID_ROOT_FOLDER,
                 &file.name,
@@ -187,6 +271,9 @@ impl HfsPlusImageBuilder {
                     start_block,
                     block_count,
                     0o100000 | file.mode,
+                    file.resource_fork.len() as u64,
+                    rsrc_start,
+                    rsrc_count,
                 ),
             ));
         }
@@ -240,8 +327,8 @@ fn write_volume_header(image: &mut [u8], total_blocks: u32, file_count: u32, nex
     push_fork_data(&mut buf, BLOCK_SIZE as u64, 1, 1, 1);
     // catalog_file: 2 blocks at blocks 2-3
     push_fork_data(&mut buf, 2 * BLOCK_SIZE as u64, 2, 2, 2);
-    // attributes_file (empty)
-    push_fork_data(&mut buf, 0, 0, 0, 0);
+    // attributes_file: 2 blocks at blocks 4-5
+    push_fork_data(&mut buf, 2 * BLOCK_SIZE as u64, 2, 4, 2);
     // startup_file (empty)
     push_fork_data(&mut buf, 0, 0, 0, 0);
 
@@ -370,12 +457,16 @@ fn build_folder_record(folder_id: u32, valence: u32, mode: u16) -> Vec<u8> {
     buf
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_file_record(
     file_id: u32,
     logical_size: u64,
     start_block: u32,
     block_count: u32,
     mode: u16,
+    rsrc_size: u64,
+    rsrc_start_block: u32,
+    rsrc_block_count: u32,
 ) -> Vec<u8> {
     let mut buf = Vec::new();
     push_u16(&mut buf, RECORD_TYPE_FILE);
@@ -396,7 +487,41 @@ fn build_file_record(
         start_block,
         block_count,
     );
-    push_fork_data(&mut buf, 0, 0, 0, 0); // resource fork (empty)
+    push_fork_data(
+        &mut buf,
+        rsrc_size,
+        rsrc_block_count,
+        rsrc_start_block,
+        rsrc_block_count,
+    );
+    buf
+}
+
+/// Build a `kHFSPlusAttrInlineData` record: the attribute key followed by
+/// `recordType u32 | reserved[2] u32 | attrSize u32 | attrData`.
+fn build_inline_attribute(file_id: u32, name: &str, value: &[u8]) -> Vec<u8> {
+    let name_bytes = encode_utf16be(name);
+    // keyLength counts everything after itself: pad(2), fileID(4),
+    // startBlock(4), attrNameLen(2), then the name — Apple's
+    // `kHFSPlusAttrKeyMinimumLength` of 12, plus the name.
+    let key_length = 12 + name_bytes.len();
+
+    let mut buf = Vec::new();
+    push_u16(&mut buf, key_length as u16);
+    push_u16(&mut buf, 0); // pad
+    push_u32(&mut buf, file_id);
+    push_u32(&mut buf, 0); // start_block
+    push_u16(&mut buf, (name_bytes.len() / 2) as u16);
+    buf.extend_from_slice(&name_bytes);
+    if !buf.len().is_multiple_of(2) {
+        buf.push(0);
+    }
+
+    push_u32(&mut buf, 0x10); // kHFSPlusAttrInlineData
+    push_u32(&mut buf, 0); // reserved[0]
+    push_u32(&mut buf, 0); // reserved[1]
+    push_u32(&mut buf, value.len() as u32);
+    buf.extend_from_slice(value);
     buf
 }
 
@@ -643,6 +768,202 @@ mod tests {
 
         let stat = vol.stat("/large.bin").unwrap();
         assert_eq!(stat.permissions.mode, 0o100755);
+    }
+
+    // -----------------------------------------------------------------
+    // decmpfs
+    //
+    // These use decmpfs's stored-block form (the `0xff` / `0x06` markers)
+    // rather than a real codec: what they exercise is the HFS+ plumbing —
+    // attribute lookup, resource-fork read, block table — while `cmpfs`
+    // covers the codecs against synthetic streams of its own. It also keeps
+    // hfsplus free of a compressor dependency.
+    // -----------------------------------------------------------------
+
+    /// A `com.apple.decmpfs` attribute: magic, type, uncompressed size.
+    fn decmpfs_attr(compression_type: u32, size: u64, payload: &[u8]) -> Vec<u8> {
+        let mut attr = 0x636d_7066u32.to_le_bytes().to_vec();
+        attr.extend_from_slice(&compression_type.to_le_bytes());
+        attr.extend_from_slice(&size.to_le_bytes());
+        attr.extend_from_slice(payload);
+        attr
+    }
+
+    /// A type 4 resource fork: 256-byte header holding the offset to the
+    /// resource data, its big-endian length, then the block table.
+    fn decmpfs_resource_fork(blocks: &[Vec<u8>]) -> Vec<u8> {
+        let table_len = 4 + blocks.len() * 8;
+        let mut table = (blocks.len() as u32).to_le_bytes().to_vec();
+        let mut body = Vec::new();
+        for block in blocks {
+            table.extend_from_slice(&((table_len + body.len()) as u32).to_le_bytes());
+            table.extend_from_slice(&(block.len() as u32).to_le_bytes());
+            body.extend_from_slice(block);
+        }
+
+        let mut fork = 256u32.to_be_bytes().to_vec();
+        fork.resize(256, 0);
+        fork.extend_from_slice(&((table_len + body.len()) as u32).to_be_bytes());
+        fork.extend_from_slice(&table);
+        fork.extend_from_slice(&body);
+        fork
+    }
+
+    #[test]
+    fn test_decmpfs_inline_is_decompressed() {
+        let content = b"contents of a compressed file";
+        let mut payload = vec![0xff];
+        payload.extend_from_slice(content);
+
+        let image = HfsPlusImageBuilder::new()
+            .add_file_with_xattrs(
+                "small.txt",
+                b"",
+                0o644,
+                &[(
+                    "com.apple.decmpfs",
+                    &decmpfs_attr(3, content.len() as u64, &payload),
+                )],
+                b"",
+            )
+            .build();
+
+        let mut vol = HfsVolume::open(Cursor::new(image)).unwrap();
+        assert_eq!(vol.read_file("/small.txt").unwrap(), content);
+
+        let mut streamed = Vec::new();
+        assert_eq!(
+            vol.read_file_to("/small.txt", &mut streamed).unwrap(),
+            content.len() as u64
+        );
+        assert_eq!(streamed, content);
+    }
+
+    #[test]
+    fn test_decmpfs_resource_fork_is_decompressed() {
+        // Two blocks, so the block table is actually walked.
+        let content: Vec<u8> = (0..70_000).map(|i| (i % 251) as u8).collect();
+        let blocks: Vec<Vec<u8>> = content
+            .chunks(0x1_0000)
+            .map(|chunk| {
+                let mut block = vec![0xff];
+                block.extend_from_slice(chunk);
+                block
+            })
+            .collect();
+        assert_eq!(blocks.len(), 2);
+
+        let image = HfsPlusImageBuilder::new()
+            .add_file_with_xattrs(
+                "big.bin",
+                b"",
+                0o644,
+                &[(
+                    "com.apple.decmpfs",
+                    &decmpfs_attr(4, content.len() as u64, &[]),
+                )],
+                &decmpfs_resource_fork(&blocks),
+            )
+            .build();
+
+        let mut vol = HfsVolume::open(Cursor::new(image)).unwrap();
+        assert_eq!(vol.read_file("/big.bin").unwrap(), content);
+    }
+
+    #[test]
+    fn test_stat_reports_the_decompressed_size() {
+        let content = b"nineteen characters";
+        let mut payload = vec![0xff];
+        payload.extend_from_slice(content);
+
+        let image = HfsPlusImageBuilder::new()
+            .add_file_with_xattrs(
+                "c.txt",
+                b"",
+                0o644,
+                &[(
+                    "com.apple.decmpfs",
+                    &decmpfs_attr(3, content.len() as u64, &payload),
+                )],
+                b"",
+            )
+            .add_file("plain.txt", b"plain", 0o644)
+            .build();
+
+        let mut vol = HfsVolume::open(Cursor::new(image)).unwrap();
+
+        // The data fork is empty, so an uncompressed read would report 0.
+        let stat = vol.stat("/c.txt").unwrap();
+        assert_eq!(stat.size, content.len() as u64);
+        let compression = stat.compression.expect("file is compressed");
+        assert_eq!(compression.compression_type, 3);
+        assert_eq!(compression.uncompressed_size, content.len() as u64);
+
+        let stat = vol.stat("/plain.txt").unwrap();
+        assert_eq!(stat.size, 5);
+        assert!(stat.compression.is_none());
+    }
+
+    #[test]
+    fn test_open_file_rejects_a_compressed_file() {
+        let image = HfsPlusImageBuilder::new()
+            .add_file_with_xattrs(
+                "c.txt",
+                b"",
+                0o644,
+                &[(
+                    "com.apple.decmpfs",
+                    &decmpfs_attr(3, 2, &[0xff, b'h', b'i']),
+                )],
+                b"",
+            )
+            .build();
+
+        let mut vol = HfsVolume::open(Cursor::new(image)).unwrap();
+        // Streaming the data fork would succeed and yield nothing.
+        assert!(vol.open_file("/c.txt").is_err());
+    }
+
+    #[test]
+    fn test_read_and_list_extended_attributes() {
+        let image = HfsPlusImageBuilder::new()
+            .add_file_with_xattrs(
+                "tagged.txt",
+                b"body",
+                0o644,
+                &[
+                    ("com.apple.quarantine", b"0081;deadbeef;Safari;"),
+                    ("com.apple.metadata:kMDItemWhereFroms", b"bplist00"),
+                ],
+                b"",
+            )
+            .add_file("bare.txt", b"body", 0o644)
+            .build();
+
+        let mut vol = HfsVolume::open(Cursor::new(image)).unwrap();
+
+        assert_eq!(
+            vol.get_xattr("/tagged.txt", "com.apple.quarantine")
+                .unwrap(),
+            Some(b"0081;deadbeef;Safari;".to_vec())
+        );
+        assert_eq!(
+            vol.get_xattr("/tagged.txt", "com.apple.absent").unwrap(),
+            None
+        );
+
+        // Sorted by the 16-bit binary name comparison, so "metadata:" first.
+        assert_eq!(
+            vol.list_xattrs("/tagged.txt").unwrap(),
+            vec![
+                "com.apple.metadata:kMDItemWhereFroms".to_string(),
+                "com.apple.quarantine".to_string(),
+            ]
+        );
+        assert!(vol.list_xattrs("/bare.txt").unwrap().is_empty());
+
+        // An uncompressed file is unaffected by any of this.
+        assert_eq!(vol.read_file("/tagged.txt").unwrap(), b"body");
     }
 
     #[test]

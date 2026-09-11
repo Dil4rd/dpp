@@ -1,6 +1,6 @@
 [package]
 name = "apfs"
-version = "0.3.0"
+version = "0.4.0-dev"
 edition = "2024"
 description = "Read-only APFS (Apple File System) parser"
 license = "MIT"
@@ -10,6 +10,7 @@ categories = ["parsing", "filesystem"]
 
 [dependencies]
 byteorder = "1.5"
+cmpfs = { version = "0.1.0-dev", path = "../cmpfs" }
 thiserror = "2"
 
 [dev-dependencies]

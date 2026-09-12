@@ -17,6 +17,8 @@ pub use cmpfs::CmpfsError as CompressionError;
 pub use cmpfs::Header as CompressionHeader;
 /// Where a compressed file's payload lives.
 pub use cmpfs::Storage as CompressionStorage;
+/// Whether an extended attribute is user data or compression machinery.
+pub use cmpfs::XattrKind;
 
 use std::io::{Read, Seek, Write};
 
@@ -53,7 +55,21 @@ pub struct FileStat {
     pub nlink: u32,
     /// Present when the file is transparently compressed. `size` above is then
     /// the decompressed size, which the inode does not record.
+    ///
+    /// Also the signal that the file's compression is already resolved: the
+    /// attributes listed as [`XattrKind::Compression`] must not be replicated
+    /// onto an extracted copy.
     pub compression: Option<CompressionHeader>,
+}
+
+/// An extended attribute name, classified so a caller replicating metadata can
+/// skip compression machinery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XattrEntry {
+    /// Attribute name.
+    pub name: String,
+    /// Whether this is user data or transparent-compression machinery.
+    pub kind: XattrKind,
 }
 
 /// Entry from walk() — includes full path
@@ -71,6 +87,23 @@ pub struct VolumeInfo {
     pub num_files: u64,
     pub num_directories: u64,
     pub num_symlinks: u64,
+}
+
+/// Pair each attribute name with its kind.
+///
+/// The file counts as compressed when the header attribute is present, which is
+/// the same condition `read_file` decompresses on. Deriving it from the listing
+/// keeps the two in step: if `read_file` treated the resource fork as a
+/// payload, this reports it as machinery.
+fn classify(names: Vec<String>) -> Vec<XattrEntry> {
+    let compressed = names.iter().any(|name| name == cmpfs::XATTR_NAME);
+    names
+        .into_iter()
+        .map(|name| XattrEntry {
+            kind: cmpfs::classify_xattr(&name, compressed),
+            name,
+        })
+        .collect()
 }
 
 /// High-level read-only APFS volume reader
@@ -230,8 +263,13 @@ impl<R: Read + Seek> ApfsVolume<R> {
         self.read_xattr(oid, name)
     }
 
-    /// Names of every extended attribute on a file or directory.
-    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<String>> {
+    /// Every extended attribute on a file or directory, classified.
+    ///
+    /// Nothing is filtered out: a caller inspecting the volume sees what the
+    /// volume holds. [`XattrKind::Compression`] marks the attributes macOS
+    /// hides, which [`Self::read_file`] has already resolved and which must
+    /// not be copied onto an extracted file.
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<XattrEntry>> {
         let (oid, _inode) = catalog::resolve_path(
             &mut self.reader,
             self.catalog_root_block,
@@ -239,13 +277,14 @@ impl<R: Read + Seek> ApfsVolume<R> {
             self.block_size,
             path,
         )?;
-        catalog::list_xattr_names(
+        let names = catalog::list_xattr_names(
             &mut self.reader,
             self.catalog_root_block,
             self.vol_omap_root_block,
             self.block_size,
             oid,
-        )
+        )?;
+        Ok(classify(names))
     }
 
     fn read_xattr(&mut self, oid: u64, name: &str) -> Result<Option<Vec<u8>>> {
@@ -627,14 +666,19 @@ mod tests {
         let mut fetched = 0usize;
 
         for entry in &entries {
-            for name in vol.list_xattrs(&entry.path).unwrap() {
+            for attr in vol.list_xattrs(&entry.path).unwrap() {
                 listed += 1;
-                let value = vol.get_xattr(&entry.path, &name).unwrap();
+                let value = vol.get_xattr(&entry.path, &attr.name).unwrap();
                 assert!(
                     value.is_some(),
-                    "{} listed {name} but it could not be read back",
-                    entry.path
+                    "{} listed {} but it could not be read back",
+                    entry.path,
+                    attr.name
                 );
+                // The fixture holds no compressed file, so every attribute on
+                // it is user data. A future fixture with one would trip this,
+                // which is the point.
+                assert_eq!(attr.kind, XattrKind::User, "{} {}", entry.path, attr.name);
                 fetched += 1;
             }
         }

@@ -59,6 +59,32 @@ LZBITMAP (types 13 and 14) has no Rust decoder and reports
 `CmpfsError::Unsupported`. Dataless placeholders (`0x80000001`, `0x80000002`)
 report `CmpfsError::Dataless` — their contents are not on the volume at all.
 
+## Telling machinery from user data
+
+macOS hides `com.apple.decmpfs` and a compressed file's resource fork from
+userspace, so a compressed file looks exactly like an ordinary one. A reader
+that works on a raw volume has no such filter, and a caller that copies every
+attribute onto an extracted file produces a file macOS reads as corrupt — the
+attribute declares a data fork that is no longer empty.
+
+`classify_xattr` draws the line without hiding anything:
+
+```rust
+use cmpfs::{classify_xattr, XattrKind};
+
+let compressed = true;
+assert_eq!(classify_xattr("com.apple.decmpfs", compressed), XattrKind::Compression);
+assert_eq!(classify_xattr("com.apple.quarantine", compressed), XattrKind::User);
+
+// A resource fork is user data on an uncompressed file — an icon, a classic
+// resource map — so the name alone cannot decide.
+assert_eq!(classify_xattr("com.apple.ResourceFork", true), XattrKind::Compression);
+assert_eq!(classify_xattr("com.apple.ResourceFork", false), XattrKind::User);
+```
+
+`hfsplus` and `apfs` apply this in `list_xattrs`, which reports every attribute
+and tags each one.
+
 ## Correctness
 
 Only type 1 is documented by Apple, in `bsd/sys/decmpfs.h`. Everything else

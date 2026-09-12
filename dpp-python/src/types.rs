@@ -140,6 +140,36 @@ impl From<&dpp::FsFileStat> for PyFileStat {
     }
 }
 
+// ── Extended Attribute ──────────────────────────────────────────────────
+
+#[pyclass(frozen, skip_from_py_object, name = "Xattr")]
+#[derive(Clone)]
+pub struct PyXattr {
+    #[pyo3(get)]
+    pub name: String,
+    /// "user" or "compression". A "compression" attribute is machinery macOS
+    /// hides from userspace: reading the file already applies it, and writing
+    /// it back onto an extracted file makes that file unreadable on macOS.
+    #[pyo3(get)]
+    pub kind: String,
+}
+
+#[pymethods]
+impl PyXattr {
+    fn __repr__(&self) -> String {
+        format!("Xattr(name={:?}, kind={:?})", self.name, self.kind)
+    }
+}
+
+impl From<&dpp::FsXattr> for PyXattr {
+    fn from(a: &dpp::FsXattr) -> Self {
+        PyXattr {
+            name: a.name.clone(),
+            kind: format!("{:?}", a.kind).to_lowercase(),
+        }
+    }
+}
+
 // ── Volume Info ─────────────────────────────────────────────────────────
 
 #[pyclass(frozen, skip_from_py_object, name = "VolumeInfo")]

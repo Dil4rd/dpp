@@ -113,6 +113,29 @@ each LZVN block's end-of-stream opcode, which the kernel and Apple's
 `lzvn_decode_buffer` ignore. A strict whole-stream decoder rejects them, so the
 LZVN decoder used here is deliberately length-tolerant.
 
+## Why these attributes are invisible on a live Mac
+
+macOS hides both from userspace, so a compressed file is indistinguishable from
+an ordinary one. `decmpfs_hides_xattr` (xnu `bsd/kern/decmpfs.c`) returns 1 for
+`com.apple.decmpfs` on a compressed file, and delegates the resource fork to
+`decmpfs_hides_rsrc`, whose comment is *"all compressed files hide their
+resource fork"*. HFS+ turns that into `ENOATTR` unless `getxattr` is passed
+`XATTR_SHOWCOMPRESSION` (`core/hfs_xattr.c`), and filters `listxattr` the same
+way.
+
+Two consequences:
+
+- `xattr(1)` cannot see either attribute, which is why the fixture script calls
+  `getxattr` directly.
+- A reader working on a raw volume has no such filter. Copying these attributes
+  onto an extracted file produces a file macOS reads as corrupt, because the
+  attribute declares a data fork that is no longer empty. `classify_xattr`
+  marks them so a caller can skip them without the reader hiding anything.
+
+The hiding is conditional, not a name blocklist: the same function returns 0 for
+the resource fork when `!decmpfs_fast_file_is_compressed(cp)`, since an
+uncompressed file's resource fork is real user data.
+
 ## Rejected input
 
 A block longer than 64 KiB + 1 cannot be valid: a stored block is one marker

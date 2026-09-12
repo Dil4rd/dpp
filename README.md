@@ -158,7 +158,7 @@ Global options: `--temp-file` (default, low memory), `--in-memory` (faster for s
 | `dpp-tool fs tree <dmg> [path]` | Browse filesystem tree |
 | `dpp-tool fs cat <dmg> <path>` | Extract file to stdout |
 | `dpp-tool fs stat <dmg> <path>` | File metadata |
-| `dpp-tool fs xattr <dmg> <path> [name]` | List extended attributes, or dump one |
+| `dpp-tool fs xattr <dmg> <path> [name]` | List extended attributes (marking compression machinery), or dump one |
 | `dpp-tool fs find <dmg> [opts]` | Find files by name/type |
 | `dpp-tool fs extract <dmg> [path] -o <dir>` | Extract files to directory |
 | **hfs** | |

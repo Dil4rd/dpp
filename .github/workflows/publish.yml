@@ -5,7 +5,9 @@ on:
     branches:
       - main
   # Packaging is credential-free, so it runs on pull requests too: a crate
-  # that cannot be packaged then fails review rather than the release.
+  # that cannot be packaged then fails review rather than the release. A
+  # release pull request still carries -dev versions, so the packaging must
+  # run despite them; only the publish path refuses.
   pull_request:
     branches:
       - main
@@ -31,15 +33,30 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
 
+      # --exclude dpp-python: it ships via PyPI, not crates.io.
+      - run: cargo package --workspace --locked --exclude dpp-python
+
+      # The -dev check sits after packaging, not before it. `cargo package`
+      # works fine on a -dev version — it builds a temporary registry from the
+      # workspace members, so even a crate that has never been published
+      # verifies — and running the check first meant the release pull request
+      # could never see whether its crates package at all. That is the one
+      # question it exists to answer, and the only chance to answer it is
+      # before the merge that publishes.
+      - name: Note that this branch still carries -dev versions
+        if: github.event_name == 'pull_request'
+        run: |
+          if git ls-files '*Cargo.toml' | xargs grep -nE 'version = "[^"]*-dev"'; then
+            echo "::notice::packaging verified; -dev versions are still present and the release commit must strip them before this merges"
+          fi
+
       - name: Refuse to publish a -dev version
+        if: github.event_name == 'push'
         run: |
           if git ls-files '*Cargo.toml' | xargs grep -nE 'version = "[^"]*-dev"'; then
             echo "::error::a -dev version reached main; the release commit must strip the suffix"
             exit 1
           fi
-
-      # --exclude dpp-python: it ships via PyPI, not crates.io.
-      - run: cargo package --workspace --locked --exclude dpp-python
 
       # Signed record of which commit and workflow produced each .crate.
       # Verify with: gh attestation verify <file> --repo Dil4rd/dpp
@@ -72,6 +89,17 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+
+      # Repeated from the package job on purpose. `needs: package` already
+      # blocks this, but a version number pushed to crates.io is taken
+      # permanently, and that is not a protection worth keeping in one place
+      # only.
+      - name: Refuse to publish a -dev version
+        run: |
+          if git ls-files '*Cargo.toml' | xargs grep -nE 'version = "[^"]*-dev"'; then
+            echo "::error::a -dev version reached the publish job"
+            exit 1
+          fi
 
       # PREREQUISITE: every crate must have this repository, workflow and the
       # environment name `publish` registered under Trusted Publishing on

@@ -297,10 +297,12 @@ def test_pipeline_xattrs_and_compression():
     """
     with dpp.open(DMG_FIXTURE) as dmg:
         with dmg.filesystem() as fs:
-            files = [e for e in fs.walk() if e.entry.kind == "file"]
+            files = [e for e in fs.walk() if e.kind == "file"]
             assert files, "fixture has no files"
 
-            for entry in files:
+            # Capped: a fixture can hold thousands of files, and each one costs
+            # a B-tree walk per attribute.
+            for entry in files[:50]:
                 attrs = fs.list_xattrs(entry.path)
                 for a in attrs:
                     assert isinstance(a, dpp.Xattr)

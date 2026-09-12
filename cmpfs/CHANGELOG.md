@@ -18,3 +18,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   4, 8, 10 and 12, across zlib, LZVN, LZFSE and stored blocks
 - LZBITMAP (types 13 and 14) and dataless files report distinct errors rather
   than being decoded wrongly
+- `tools/mint-fixtures.py` generates fixtures from a real macOS filesystem, and
+  ignored tests in `tests/real_fixtures.rs` decode them

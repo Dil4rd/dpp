@@ -61,4 +61,5 @@ Work lands on `dev`, which merges to `main` only when a release is intended.
 
 - Crates being changed carry a `-dev` suffix on `dev` (`0.3.0-dev`), so a tree that differs from what was published never claims the published version number. Internal dependency pins carry it too.
 - The release commit strips every `-dev` and dates the `[Unreleased]` changelog sections. It must be the **last** commit before merging to `main`, because the merge publishes immediately.
+- It must also regenerate `dpp-python/THIRD-PARTY-LICENSES.md`. That file names every crate **with its version**, workspace members included, so stripping a `-dev` changes it and `dependencies.yml` fails the pull request on the stale copy. Regenerate after the version bump, in the same commit.
 - `publish.yml` refuses to run if any `Cargo.toml` still contains a `-dev` version, so a mis-ordered merge fails instead of burning a version number on crates.io permanently.

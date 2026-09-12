@@ -599,7 +599,7 @@ fn write_u16_at(buf: &mut [u8], offset: usize, val: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{EntryKind, HfsVolume};
+    use crate::{EntryKind, HfsVolume, XattrEntry, XattrKind};
     use std::io::Cursor;
 
     fn make_test_image() -> Vec<u8> {
@@ -905,6 +905,46 @@ mod tests {
     }
 
     #[test]
+    fn test_compression_attributes_are_classified_apart() {
+        let content = b"compressed body";
+        let mut payload = vec![0xff];
+        payload.extend_from_slice(content);
+
+        let image = HfsPlusImageBuilder::new()
+            .add_file_with_xattrs(
+                "c.txt",
+                b"",
+                0o644,
+                &[
+                    (
+                        "com.apple.decmpfs",
+                        &decmpfs_attr(3, content.len() as u64, &payload),
+                    ),
+                    ("com.apple.quarantine", b"0081;deadbeef;Safari;"),
+                ],
+                b"",
+            )
+            .build();
+
+        let mut vol = HfsVolume::open(Cursor::new(image)).unwrap();
+        let attrs = vol.list_xattrs("/c.txt").unwrap();
+
+        // Nothing is hidden: both are still reported, but only one is
+        // machinery, and the user attribute is unaffected by the file being
+        // compressed.
+        assert_eq!(attrs.len(), 2);
+        let kind = |name: &str| {
+            attrs
+                .iter()
+                .find(|a| a.name == name)
+                .unwrap_or_else(|| panic!("{name} missing"))
+                .kind
+        };
+        assert_eq!(kind("com.apple.decmpfs"), XattrKind::Compression);
+        assert_eq!(kind("com.apple.quarantine"), XattrKind::User);
+    }
+
+    #[test]
     fn test_open_file_rejects_a_compressed_file() {
         let image = HfsPlusImageBuilder::new()
             .add_file_with_xattrs(
@@ -953,11 +993,18 @@ mod tests {
         );
 
         // Sorted by the 16-bit binary name comparison, so "metadata:" first.
+        // Neither attribute is compression machinery on an uncompressed file.
         assert_eq!(
             vol.list_xattrs("/tagged.txt").unwrap(),
             vec![
-                "com.apple.metadata:kMDItemWhereFroms".to_string(),
-                "com.apple.quarantine".to_string(),
+                XattrEntry {
+                    name: "com.apple.metadata:kMDItemWhereFroms".to_string(),
+                    kind: XattrKind::User,
+                },
+                XattrEntry {
+                    name: "com.apple.quarantine".to_string(),
+                    kind: XattrKind::User,
+                },
             ]
         );
         assert!(vol.list_xattrs("/bare.txt").unwrap().is_empty());

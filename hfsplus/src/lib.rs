@@ -18,6 +18,8 @@ pub use cmpfs::CmpfsError as CompressionError;
 pub use cmpfs::Header as CompressionHeader;
 /// Where a compressed file's payload lives.
 pub use cmpfs::Storage as CompressionStorage;
+/// Whether an extended attribute is user data or compression machinery.
+pub use cmpfs::XattrKind;
 
 use std::io::{Read, Seek, Write};
 
@@ -67,7 +69,21 @@ pub struct FileStat {
     pub resource_fork_size: u64,
     /// Present when the file is transparently compressed. `size` above is then
     /// the decompressed size; the data fork is empty.
+    ///
+    /// Also the signal that the file's compression is already resolved: the
+    /// attributes listed as [`XattrKind::Compression`] must not be replicated
+    /// onto an extracted copy.
     pub compression: Option<CompressionHeader>,
+}
+
+/// An extended attribute name, classified so a caller replicating metadata can
+/// skip compression machinery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XattrEntry {
+    /// Attribute name.
+    pub name: String,
+    /// Whether this is user data or transparent-compression machinery.
+    pub kind: XattrKind,
 }
 
 /// Entry from walk() — includes full path
@@ -75,6 +91,23 @@ pub struct FileStat {
 pub struct WalkEntry {
     pub path: String,
     pub entry: DirEntry,
+}
+
+/// Pair each attribute name with its kind.
+///
+/// The file counts as compressed when the header attribute is present, which is
+/// the same condition `read_file` decompresses on. Deriving it from the listing
+/// keeps the two in step: if `read_file` treated the resource fork as a
+/// payload, this reports it as machinery.
+fn classify(names: Vec<String>) -> Vec<XattrEntry> {
+    let compressed = names.iter().any(|name| name == cmpfs::XATTR_NAME);
+    names
+        .into_iter()
+        .map(|name| XattrEntry {
+            kind: cmpfs::classify_xattr(&name, compressed),
+            name,
+        })
+        .collect()
 }
 
 /// High-level HFS+/HFSX volume reader
@@ -153,16 +186,26 @@ impl<R: Read + Seek> HfsVolume<R> {
         self.read_xattr(file_id, name)
     }
 
-    /// Names of every extended attribute on a file or directory.
+    /// Every extended attribute on a file or directory, classified.
+    ///
+    /// Nothing is filtered out: a caller inspecting the volume sees what the
+    /// volume holds. [`XattrKind::Compression`] marks the attributes macOS
+    /// hides, which [`Self::read_file`] has already resolved and which must
+    /// not be copied onto an extracted file.
     ///
     /// Scans the Attributes B-tree, so it costs more than a single
     /// [`Self::get_xattr`]; prefer that when the name is known.
-    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<String>> {
+    ///
+    /// HFS+ keeps the resource fork in the catalog record rather than as an
+    /// attribute, so unlike APFS this never reports
+    /// `com.apple.ResourceFork`; see [`FileStat::resource_fork_size`].
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<XattrEntry>> {
         let file_id = self.resolve_path_to_cnid(path)?;
         let Some(attributes) = self.attributes_btree()? else {
             return Ok(Vec::new());
         };
-        attributes::list_names(&mut self.reader, &attributes, file_id)
+        let names = attributes::list_names(&mut self.reader, &attributes, file_id)?;
+        Ok(classify(names))
     }
 
     fn read_xattr(&mut self, file_id: u32, name: &str) -> Result<Option<Vec<u8>>> {

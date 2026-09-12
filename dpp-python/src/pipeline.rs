@@ -200,10 +200,14 @@ impl PyFilesystemHandle {
         Ok(value.map(|v| PyBytes::new(py, &v)))
     }
 
-    /// List a file's extended attribute names.
-    fn list_xattrs(&mut self, path: &str) -> PyResult<Vec<String>> {
+    /// List a file's extended attributes, classified.
+    ///
+    /// Nothing is filtered out; entries with kind "compression" are machinery
+    /// that reading the file has already applied.
+    fn list_xattrs(&mut self, path: &str) -> PyResult<Vec<PyXattr>> {
         let handle = self.handle()?;
-        handle.list_xattrs(path).map_err(to_pyerr)
+        let attrs = handle.list_xattrs(path).map_err(to_pyerr)?;
+        Ok(attrs.iter().map(PyXattr::from).collect())
     }
 
     /// Walk all entries in the filesystem.

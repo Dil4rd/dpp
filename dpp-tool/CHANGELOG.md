@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - `fs xattr <dmg> <path> [name]` lists a file's extended attributes, or writes
-  one to stdout raw
+  one to stdout raw. Compression machinery is listed but marked, since `cat`
+  has already applied it
 - `fs stat`, `hfs stat` and `apfs stat` report the decmpfs compression type of
   a transparently compressed file
 

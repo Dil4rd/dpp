@@ -33,6 +33,7 @@ def test_module_imports():
 
 def test_data_types_importable():
     """Data types should be importable."""
+    assert hasattr(dpp, "Xattr")
     assert hasattr(dpp, "PartitionInfo")
     assert hasattr(dpp, "DirEntry")
     assert hasattr(dpp, "FileStat")
@@ -285,3 +286,33 @@ def test_pipeline_walk():
             for e in entries:
                 assert isinstance(e, dpp.WalkEntry)
                 assert isinstance(e.path, str)
+
+
+@pytest.mark.skipif(DMG_FIXTURE is None, reason="DPP_TEST_DMG not set")
+def test_pipeline_xattrs_and_compression():
+    """List extended attributes and read one back.
+
+    Compression machinery is reported, not hidden, so a caller replicating
+    metadata can skip it: read_file has already applied it.
+    """
+    with dpp.open(DMG_FIXTURE) as dmg:
+        with dmg.filesystem() as fs:
+            files = [e for e in fs.walk() if e.entry.kind == "file"]
+            assert files, "fixture has no files"
+
+            for entry in files:
+                attrs = fs.list_xattrs(entry.path)
+                for a in attrs:
+                    assert isinstance(a, dpp.Xattr)
+                    assert isinstance(a.name, str)
+                    assert a.kind in ("user", "compression")
+                    assert fs.get_xattr(entry.path, a.name) is not None
+
+                stat = fs.stat(entry.path)
+                if stat.compression_type is not None:
+                    # A compressed file must advertise the header attribute as
+                    # machinery, since that is what resolved it.
+                    kinds = {a.name: a.kind for a in attrs}
+                    assert kinds.get("com.apple.decmpfs") == "compression"
+
+            assert fs.get_xattr(files[0].path, "com.apple.nonexistent") is None

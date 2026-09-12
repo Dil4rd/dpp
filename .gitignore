@@ -2,3 +2,4 @@ target/
 tests/
 !*/tests/
 demo/*.cast
+__pycache__/

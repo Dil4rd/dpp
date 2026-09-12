@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Reading a transparently compressed file returns its contents rather than
   nothing
+- Regenerated `THIRD-PARTY-LICENSES.md`: the wheels now link `cmpfs` and
+  `lzvn-core` (Apache-2.0)
 
 ## [0.3.1] - 2026-09-10
 

@@ -230,16 +230,25 @@ fn xattr(
     let mut fs = open_filesystem(&mut pipeline, mode)?;
 
     let Some(name) = name else {
-        let names = fs.list_xattrs(path)?;
+        let attrs = fs.list_xattrs(path)?;
         header(&format!("xattrs: {path}"));
-        if names.is_empty() {
+        if attrs.is_empty() {
             println!();
             println!("  {}no extended attributes{}", dim(), reset());
         } else {
+            let (d, r) = (dim(), reset());
             section("Attributes");
-            for name in &names {
-                let size = fs.get_xattr(path, name)?.map_or(0, |v| v.len());
-                kv(name, &format_size(size as u64));
+            for attr in &attrs {
+                let size = fs.get_xattr(path, &attr.name)?.map_or(0, |v| v.len());
+                // Compression machinery is reported, not hidden, but marked:
+                // `cat` already returns the decompressed file, so copying
+                // these onto it would make it unreadable on macOS.
+                let note = if attr.kind == dpp::XattrKind::Compression {
+                    format!(" {d}(compression — already applied by cat){r}")
+                } else {
+                    String::new()
+                };
+                kv(&attr.name, &format!("{}{note}", format_size(size as u64)));
             }
         }
         println!();

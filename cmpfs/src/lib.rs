@@ -53,6 +53,39 @@ pub const HEADER_SIZE: usize = 16;
 /// Uncompressed size of one compression block.
 pub const BLOCK_SIZE: usize = 0x1_0000;
 
+/// What an extended attribute is, once transparent compression is accounted
+/// for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XattrKind {
+    /// An ordinary attribute — a quarantine tag, Finder info, a code
+    /// signature. Part of the file as the user sees it.
+    User,
+    /// Machinery for transparent compression. macOS hides these from
+    /// userspace; a reader that resolves compression has already consumed
+    /// them, and writing one onto an extracted file makes that file
+    /// unreadable on macOS, because the attribute declares a data fork that
+    /// is no longer empty.
+    Compression,
+}
+
+/// Classify an extended attribute by name.
+///
+/// [`XATTR_NAME`] is always machinery. [`RESOURCE_FORK_XATTR_NAME`] is only
+/// machinery on a compressed file: on an uncompressed one it is user data — an
+/// icon, a classic resource map — so a name alone cannot decide. Darwin draws
+/// the same line in `decmpfs_hides_xattr` (xnu `bsd/kern/decmpfs.c`), which
+/// returns 0 for the resource fork when
+/// `!decmpfs_fast_file_is_compressed(cp)`.
+pub fn classify_xattr(name: &str, file_is_compressed: bool) -> XattrKind {
+    let is_machinery =
+        name == XATTR_NAME || (file_is_compressed && name == RESOURCE_FORK_XATTR_NAME);
+    if is_machinery {
+        XattrKind::Compression
+    } else {
+        XattrKind::User
+    }
+}
+
 /// Where a compression type keeps its payload.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Storage {
@@ -419,6 +452,30 @@ mod tests {
         (0..len)
             .map(|i| (i.wrapping_mul(37) ^ (i >> 3)) as u8)
             .collect()
+    }
+
+    #[test]
+    fn classifies_xattrs() {
+        // The header attribute is machinery whether or not the caller has
+        // established that the file is compressed.
+        assert_eq!(classify_xattr(XATTR_NAME, true), XattrKind::Compression);
+        assert_eq!(classify_xattr(XATTR_NAME, false), XattrKind::Compression);
+
+        // The resource fork is machinery only on a compressed file; on an
+        // uncompressed one it holds user data.
+        assert_eq!(
+            classify_xattr(RESOURCE_FORK_XATTR_NAME, true),
+            XattrKind::Compression
+        );
+        assert_eq!(
+            classify_xattr(RESOURCE_FORK_XATTR_NAME, false),
+            XattrKind::User
+        );
+
+        for name in ["com.apple.quarantine", "com.apple.FinderInfo", ""] {
+            assert_eq!(classify_xattr(name, true), XattrKind::User, "{name}");
+            assert_eq!(classify_xattr(name, false), XattrKind::User, "{name}");
+        }
     }
 
     #[test]

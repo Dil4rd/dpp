@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `FilesystemHandle::get_xattr` and `FilesystemHandle::list_xattrs`, plus the
   same pair on `HfsHandle` and `ApfsHandle`
+- `FsXattr` and the re-exported `XattrKind`: `list_xattrs` marks which
+  attributes are transparent-compression machinery rather than user data
 
 ### Changed
 

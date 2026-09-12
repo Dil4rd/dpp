@@ -2,6 +2,7 @@ use std::io::{BufReader, BufWriter, Cursor, Seek};
 use std::path::Path;
 
 use crate::error::Result;
+use apfs::XattrKind;
 
 /// Statistics returned after extraction.
 #[cfg(feature = "extract")]
@@ -259,8 +260,8 @@ impl HfsHandle {
         Ok(dispatch!(self, get_xattr, path, name)?)
     }
 
-    /// List a file's extended attribute names
-    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<String>> {
+    /// List a file's extended attributes, classified
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<hfsplus::XattrEntry>> {
         Ok(dispatch!(self, list_xattrs, path)?)
     }
 
@@ -355,8 +356,8 @@ impl ApfsHandle {
         Ok(dispatch_apfs!(self, get_xattr, path, name)?)
     }
 
-    /// List a file's extended attribute names
-    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<String>> {
+    /// List a file's extended attributes, classified
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<apfs::XattrEntry>> {
         Ok(dispatch_apfs!(self, list_xattrs, path)?)
     }
 
@@ -495,6 +496,17 @@ pub enum FsType {
     Apfs,
 }
 
+// ── Unified Extended Attribute ──────────────────────────────────────────
+
+/// An extended attribute name from either filesystem, classified.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FsXattr {
+    /// Attribute name.
+    pub name: String,
+    /// Whether this is user data or transparent-compression machinery.
+    pub kind: XattrKind,
+}
+
 // ── Unified File Stat ───────────────────────────────────────────────────
 
 /// Unified file metadata from either HFS+ or APFS
@@ -625,12 +637,32 @@ impl FilesystemHandle {
         }
     }
 
-    /// List a file's extended attribute names
-    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<String>> {
-        match self {
-            FilesystemHandle::Hfs(h) => h.list_xattrs(path),
-            FilesystemHandle::Apfs(h) => h.list_xattrs(path),
-        }
+    /// List a file's extended attributes, classified.
+    ///
+    /// Nothing is filtered out. [`XattrKind::Compression`] marks the
+    /// attributes macOS hides from userspace: `read_file` has already
+    /// resolved them, and writing one onto an extracted file makes that file
+    /// unreadable on macOS.
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<FsXattr>> {
+        let entries = match self {
+            FilesystemHandle::Hfs(h) => h
+                .list_xattrs(path)?
+                .into_iter()
+                .map(|a| FsXattr {
+                    name: a.name,
+                    kind: a.kind,
+                })
+                .collect(),
+            FilesystemHandle::Apfs(h) => h
+                .list_xattrs(path)?
+                .into_iter()
+                .map(|a| FsXattr {
+                    name: a.name,
+                    kind: a.kind,
+                })
+                .collect(),
+        };
+        Ok(entries)
     }
 
     /// Get unified volume information

@@ -18,5 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   4, 8, 10 and 12, across zlib, LZVN, LZFSE and stored blocks
 - LZBITMAP (types 13 and 14) and dataless files report distinct errors rather
   than being decoded wrongly
+- `XattrKind` and `classify_xattr` tell a compression attribute apart from a
+  user one. `com.apple.ResourceFork` is only machinery on a compressed file —
+  on an uncompressed one it is user data, which is why a name alone cannot
+  decide
 - `tools/mint-fixtures.py` generates fixtures from a real macOS filesystem, and
   ignored tests in `tests/real_fixtures.rs` decode them

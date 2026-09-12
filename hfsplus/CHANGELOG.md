@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   than `HfsVolume::open`
 - `testutil::HfsPlusImageBuilder::add_file_with_xattrs` builds a file with
   extended attributes and a resource fork
+- `XattrEntry` and the re-exported `XattrKind` classify each listed attribute
+  as user data or compression machinery. Nothing is filtered out, so a caller
+  reading the volume still sees everything on it, but one replicating metadata
+  onto an extracted file can skip the attributes that would break it —
+  `read_file` has already applied them
 - `ForkData` and `ExtentDescriptor` derive `PartialEq` and `Eq`
 
 ### Changed
@@ -28,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   successful read of nothing. Use `read_file`
 - **Breaking:** `FileStat` gains `compression`, and its `size` is the
   decompressed size for a compressed file
+- **Breaking:** `list_xattrs` returns `Vec<XattrEntry>` rather than
+  `Vec<String>`
 - `list_directory` still reports the data fork size, so a compressed file
   lists as 0 bytes. `stat` is authoritative; resolving it during a listing
   would cost an attribute lookup per entry

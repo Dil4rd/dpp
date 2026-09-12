@@ -45,6 +45,7 @@ fn _dpp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<types::PyPartitionInfo>()?;
     m.add_class::<types::PyDirEntry>()?;
     m.add_class::<types::PyFileStat>()?;
+    m.add_class::<types::PyXattr>()?;
     m.add_class::<types::PyVolumeInfo>()?;
     m.add_class::<types::PyWalkEntry>()?;
     m.add_class::<types::PyFileEntry>()?;

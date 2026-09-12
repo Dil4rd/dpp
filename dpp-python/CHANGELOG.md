@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `FileStat.compression_type`, set for transparently compressed files
 - `FilesystemHandle.get_xattr(path, name)` and
-  `FilesystemHandle.list_xattrs(path)`
+  `FilesystemHandle.list_xattrs(path)`, the latter returning `Xattr` objects
+  whose `kind` is `"user"` or `"compression"`
 
 ### Changed
 

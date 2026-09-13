@@ -44,6 +44,7 @@ This gap is why a comparator bug that broke 13 of 15 symlinks in `tests/appfs.ra
 - Each crate has its own `error.rs` with `thiserror`-derived error types.
 - Detailed format documentation lives in `<crate>/docs/FORMATS.md`.
 - Tests split by what they reach for, not by size. A test that needs a private item stays a `#[cfg(test)]` module in `src/`; one that only drives the public API belongs in `<crate>/tests/`, where the compiler enforces that. `tests/` links dev-dependencies only, so a crate moving tests out may need to repeat a normal dependency there.
+- A large `#[cfg(test)]` module goes in its own file as a plain submodule — `mod tests;` in `src/foo.rs` resolves to `src/foo/tests.rs`, and in `src/lib.rs` to `src/tests.rs`. It stays a unit test with `use super::*` and full private access. Do not use `#[path = "..."]` for this: it hard-codes a filename that a later rename leaves pointing at the wrong file, whereas a plain submodule follows the module it belongs to.
 
 ## Feature Flags
 

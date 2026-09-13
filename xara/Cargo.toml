@@ -16,6 +16,9 @@ flate2 = "1.0"
 quick-xml = "0.42"
 
 [dev-dependencies]
+# Also normal dependencies, but `tests/` links only dev-dependencies.
+base64 = "0.23"
+flate2 = "1.0"
 tempfile = "3"
 
 [features]

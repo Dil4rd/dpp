@@ -27,14 +27,14 @@ python -c "import dpp; print(dir(dpp))"      # Quick smoke test
 
 Test fixtures live in `tests/` (large binary files: DMGs, raw partitions, PBZX payloads). The directory is gitignored, so the fixtures exist only on a maintainer's machine.
 
-Every test that needs one is marked `#[ignore]` — around 25 across `apfs`, `hfsplus`, `udif` and `dpp`. That has two consequences worth knowing:
+Every test that needs one is marked `#[ignore]` — around 25 across `apfs`, `hfsplus`, `udif` and `dpp`. They live in `<crate>/tests/fixtures.rs`, not beside the code: driving a real image is integration testing, and keeping them in a separate target means the compiler rejects one that reaches for a private item instead of letting it pin an implementation detail. `dpp` keeps its own in `dpp/tests/integration.rs`. That has two consequences worth knowing:
 
 - **`cargo test` does not run them, and neither does CI.** The only tests that exercise the parsers against real images run locally, on request, via `cargo test -p <crate> -- --ignored`. Run them before calling parser work finished; a green CI says nothing about whether an image still parses.
 - **They fail rather than skip when fixtures are absent.** They `.unwrap()` on `File::open`, so `--ignored` on a machine without `tests/` panics. Do not add `--include-ignored` to CI without changing that.
 
 `tests/decmpfs/` is different from the rest: it is **generated, not collected**. `cmpfs/tools/mint-fixtures.py`, run on a Mac, writes the `com.apple.decmpfs` attribute and resource fork of files it has just had macOS compress, plus a TSV manifest. That is the only coverage checking `cmpfs` against bytes Apple wrote — resource-fork types 8, 10 and 12 rest on one third-party reader that marks two of them assumptions. Reading those bytes needs `getxattr` with `XATTR_SHOWCOMPRESSION`; the kernel hides them from ordinary reads, so `xattr(1)` cannot see them.
 
-This gap is why a comparator bug that broke 13 of 15 symlinks in `tests/appfs.raw` passed every check. Synthetic tests that construct their own input are the only kind CI rewards, so prefer adding both: a unit test CI can run, and an `#[ignore]`d one that proves the behaviour against a real image.
+This gap is why a comparator bug that broke 13 of 15 symlinks in `tests/appfs.raw` passed every check. Synthetic tests that construct their own input are the only kind CI rewards, so prefer adding both: a unit test CI can run, beside the code in `src/`, and an `#[ignore]`d one in `<crate>/tests/fixtures.rs` that proves the behaviour against a real image.
 
 ## Workspace Conventions
 
@@ -43,6 +43,7 @@ This gap is why a comparator bug that broke 13 of 15 symlinks in `tests/appfs.ra
 - Apple formats are **big-endian** — `byteorder` is used throughout.
 - Each crate has its own `error.rs` with `thiserror`-derived error types.
 - Detailed format documentation lives in `<crate>/docs/FORMATS.md`.
+- Tests split by what they reach for, not by size. A test that needs a private item stays a `#[cfg(test)]` module in `src/`; one that only drives the public API belongs in `<crate>/tests/`, where the compiler enforces that. `tests/` links dev-dependencies only, so a crate moving tests out may need to repeat a normal dependency there.
 
 ## Feature Flags
 

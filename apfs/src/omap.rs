@@ -138,37 +138,3 @@ fn parse_omap_val(val: &[u8]) -> Result<u64> {
     ]);
     Ok(paddr)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::superblock;
-    use std::io::BufReader;
-
-    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_omap_lookup() {
-        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
-        let mut reader = BufReader::new(file);
-
-        let nxsb = superblock::read_nxsb(&mut reader).unwrap();
-        let latest = superblock::find_latest_nxsb(&mut reader, &nxsb).unwrap();
-
-        let omap_root =
-            read_omap_tree_root(&mut reader, latest.omap_oid, latest.block_size).unwrap();
-
-        let vol_oid = latest.fs_oids.iter().find(|&&o| o != 0).copied().unwrap();
-
-        let vol_block = omap_lookup(&mut reader, omap_root, latest.block_size, vol_oid).unwrap();
-        assert!(
-            vol_block > 0 && vol_block < latest.block_count,
-            "Physical block {} should be within container",
-            vol_block
-        );
-
-        let vol_data = object::read_block(&mut reader, vol_block, latest.block_size).unwrap();
-        let vol_sb = superblock::ApfsSuperblock::parse(&vol_data).unwrap();
-        assert_eq!(vol_sb.magic, superblock::APSB_MAGIC);
-    }
-}

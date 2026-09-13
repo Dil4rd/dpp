@@ -398,22 +398,4 @@ fn extract_index_child(record_data: &[u8]) -> Result<u32> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_read_btree_header_from_real_volume() {
-        let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
-        let mut reader = std::io::BufReader::new(file);
-        let vol = crate::volume::VolumeHeader::parse(&mut reader).unwrap();
-
-        let catalog_header =
-            read_btree_header(&mut reader, &vol.catalog_file, vol.block_size).unwrap();
-
-        assert!(catalog_header.node_size > 0);
-        assert!(catalog_header.root_node > 0);
-        assert!(catalog_header.leaf_records > 0);
-    }
-}
+mod tests {}

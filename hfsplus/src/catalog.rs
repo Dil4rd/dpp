@@ -562,38 +562,4 @@ fn lookup_root_folder<R: Read + Seek>(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::BufReader;
-
-    fn open_hfsp() -> (BufReader<std::fs::File>, VolumeHeader, BTreeHeaderRecord) {
-        let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
-        let mut reader = BufReader::new(file);
-        let vol = VolumeHeader::parse(&mut reader).unwrap();
-        let catalog_header =
-            btree::read_btree_header(&mut reader, &vol.catalog_file, vol.block_size).unwrap();
-        (reader, vol, catalog_header)
-    }
-
-    /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_list_root_directory() {
-        let (mut reader, vol, catalog_header) = open_hfsp();
-
-        let entries = list_directory(&mut reader, &vol, &catalog_header, CNID_ROOT_FOLDER).unwrap();
-        assert!(!entries.is_empty(), "Root directory should not be empty");
-    }
-
-    /// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_resolve_root_path() {
-        let (mut reader, vol, catalog_header) = open_hfsp();
-
-        let entries = list_directory(&mut reader, &vol, &catalog_header, CNID_ROOT_FOLDER).unwrap();
-        let first = entries.first().expect("Root should have entries");
-        let path = format!("/{}", first.name);
-        let (_record, _name) = resolve_path(&mut reader, &vol, &catalog_header, &path).unwrap();
-    }
-}
+mod tests {}

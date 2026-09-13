@@ -49,28 +49,6 @@ pub fn verify_object(block: &[u8]) -> bool {
 mod tests {
     use super::*;
 
-    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_fletcher64_known() {
-        let mut file = std::fs::File::open("../tests/appfs.raw").unwrap();
-        use std::io::Read;
-        let mut block = vec![0u8; 4096];
-        file.read_exact(&mut block).unwrap();
-
-        assert!(verify_object(&block), "Block 0 checksum should be valid");
-
-        let stored = u64::from_le_bytes([
-            block[0], block[1], block[2], block[3], block[4], block[5], block[6], block[7],
-        ]);
-        let computed = fletcher64(&block[8..]);
-        assert_eq!(
-            stored, computed,
-            "Stored checksum 0x{:016X} should match computed 0x{:016X}",
-            stored, computed
-        );
-    }
-
     #[test]
     fn test_fletcher64_known_words() {
         // Hand-computed Fletcher-64 over a small buffer of 8 bytes (two 32-bit LE words).

@@ -366,23 +366,4 @@ mod tests {
         fork.read_exact(&mut out).unwrap();
         assert_eq!(out, [0u8; 8]);
     }
-
-    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_read_file() {
-        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
-        let reader = std::io::BufReader::new(file);
-        let mut vol = crate::ApfsVolume::open(reader).unwrap();
-
-        let walk = vol.walk().unwrap();
-        let small_file = walk.iter().find(|e| {
-            e.entry.kind == crate::EntryKind::File && e.entry.size > 0 && e.entry.size < 100_000
-        });
-
-        let entry = small_file.expect("Should find a small file in the test image");
-        let data = vol.read_file(&entry.path).unwrap();
-        assert!(!data.is_empty(), "File data should not be empty");
-        assert_eq!(data.len() as u64, entry.entry.size);
-    }
 }

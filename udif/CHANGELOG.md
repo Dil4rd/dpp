@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-09-10
+
+### Changed
+
+- Every decoder is now pure Rust: `lzfse` → `lzfse_rust`, `xz2` → `lzma-rust2`,
+  `bzip2` 0.5 → 0.6 for its `libbz2-rs-sys` backend. The crate no longer builds
+  or calls C, and LZFSE no longer needs a 2x scratch buffer to decode
+
+### Fixed
+
+- Build the DMG plist through `plist` rather than concatenating strings; a
+  partition name containing `&` or `<` produced an unreadable image
+
+### Removed
+
+- `xml-rs`, unreferenced, and `base64`, now handled by `plist`
+
 ## [0.4.0] - 2026-09-07
 
 ### Changed

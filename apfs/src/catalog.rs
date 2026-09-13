@@ -38,6 +38,9 @@ const XATTR_KEY_NAME_OFFSET: usize = 10;
 // Xattr record flags (j_xattr_flags)
 const XATTR_DATA_STREAM: u16 = 0x0001;
 
+/// `j_xattr_dstream_t`: `xattr_obj_id u64` plus a five-field `j_dstream_t`.
+const XATTR_DSTREAM_SIZE: usize = 8 + 40;
+
 // Extended field types (INO_EXT_TYPE_*)
 const INO_EXT_TYPE_DSTREAM: u8 = 8;
 
@@ -475,16 +478,24 @@ fn compare_xattr_key(key: &[u8], oid: u64, name_with_nul: &[u8]) -> std::cmp::Or
     }
 }
 
+/// Where an extended attribute keeps its value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum XattrValue {
+    /// The value is in the record itself.
+    Embedded(Vec<u8>),
+    /// The value is a data stream, addressed like file data. `obj_id` is the
+    /// id its file extents are keyed by. Resource forks always take this form.
+    DataStream { obj_id: u64, size: u64 },
+}
+
 /// Look up an extended attribute value for an inode.
 ///
 /// Xattr catalog keys are `[obj_id_and_type u64][name_len u16][name\0]`, so
 /// the lookup compares the OID/type first, then the NUL-terminated name.
 ///
-/// Returns the attribute data with its record header removed, or `None` when
-/// the inode carries no attribute of that name. Attributes stored as a data
-/// stream rather than embedded in the record are rejected with
-/// [`ApfsError::Unsupported`], since the record holds a dstream reference in
-/// place of the value.
+/// Returns `None` when the inode carries no attribute of that name. Attributes
+/// stored as a data stream are rejected with [`ApfsError::Unsupported`]; use
+/// [`lookup_xattr_value`] to handle both forms.
 pub fn lookup_xattr<R: Read + Seek>(
     reader: &mut R,
     catalog_root: u64,
@@ -493,6 +504,25 @@ pub fn lookup_xattr<R: Read + Seek>(
     oid: u64,
     name: &str,
 ) -> Result<Option<Vec<u8>>> {
+    match lookup_xattr_value(reader, catalog_root, omap_root, block_size, oid, name)? {
+        Some(XattrValue::Embedded(data)) => Ok(Some(data)),
+        Some(XattrValue::DataStream { .. }) => Err(ApfsError::Unsupported(
+            "xattr is stored as a data stream, not embedded in the record".into(),
+        )),
+        None => Ok(None),
+    }
+}
+
+/// Look up an extended attribute, reporting whether its value is embedded or
+/// held in a data stream.
+pub fn lookup_xattr_value<R: Read + Seek>(
+    reader: &mut R,
+    catalog_root: u64,
+    omap_root: u64,
+    block_size: u32,
+    oid: u64,
+    name: &str,
+) -> Result<Option<XattrValue>> {
     let mut search_name = Vec::with_capacity(name.len() + 1);
     search_name.extend_from_slice(name.as_bytes());
     search_name.push(0);
@@ -514,12 +544,46 @@ pub fn lookup_xattr<R: Read + Seek>(
     }
 }
 
+/// Names of every extended attribute on an inode, in on-disk order.
+pub fn list_xattr_names<R: Read + Seek>(
+    reader: &mut R,
+    catalog_root: u64,
+    omap_root: u64,
+    block_size: u32,
+    oid: u64,
+) -> Result<Vec<String>> {
+    let compare_fn = catalog_key(oid, J_TYPE_XATTR);
+    let records = btree::btree_scan(
+        reader,
+        catalog_root,
+        block_size,
+        0,
+        0,
+        &compare_fn,
+        Some(omap_root),
+    )?;
+
+    let mut names = Vec::with_capacity(records.len());
+    for (key, _) in records {
+        let raw = key.get(XATTR_KEY_NAME_OFFSET..).ok_or_else(|| {
+            ApfsError::CorruptedData(format!("xattr key for inode {oid} has no name field"))
+        })?;
+        let raw = raw.strip_suffix(&[0]).unwrap_or(raw);
+        names.push(String::from_utf8(raw.to_vec()).map_err(|e| {
+            ApfsError::CorruptedData(format!("xattr name for inode {oid} is not UTF-8: {e}"))
+        })?);
+    }
+    Ok(names)
+}
+
 /// Parse an xattr record value: `flags u16 | data_len u16 | data`.
 ///
-/// Only embedded attributes are supported. A record flagged `XATTR_DATA_STREAM`
-/// carries a dstream reference in place of the data, so returning its bytes
-/// would hand back the reference struct as though it were the value.
-fn parse_xattr_value(value: &[u8]) -> Result<Vec<u8>> {
+/// A record flagged `XATTR_DATA_STREAM` carries a `j_xattr_dstream_t` in place
+/// of the value — `xattr_obj_id u64` then a `j_dstream_t` opening with
+/// `size u64`, both little-endian (Apple File System Reference, 2020-06-22,
+/// "j_xattr_dstream_t" and "j_dstream_t"; same layout in apfs-fuse
+/// `DiskStruct.h`).
+fn parse_xattr_value(value: &[u8]) -> Result<XattrValue> {
     if value.len() < 4 {
         return Err(ApfsError::CorruptedData(format!(
             "xattr value too short: {} bytes",
@@ -527,14 +591,28 @@ fn parse_xattr_value(value: &[u8]) -> Result<Vec<u8>> {
         )));
     }
     let flags = u16::from_le_bytes([value[0], value[1]]);
-    if flags & XATTR_DATA_STREAM != 0 {
-        return Err(ApfsError::Unsupported(
-            "xattr is stored as a data stream, not embedded in the record".into(),
-        ));
-    }
     let data_len = u16::from_le_bytes([value[2], value[3]]) as usize;
+
+    if flags & XATTR_DATA_STREAM != 0 {
+        let xdata = value.get(4..4 + XATTR_DSTREAM_SIZE).ok_or_else(|| {
+            ApfsError::CorruptedData(format!(
+                "xattr data-stream reference truncated: {} bytes after the header",
+                value.len().saturating_sub(4)
+            ))
+        })?;
+        let field = |offset: usize| {
+            let mut bytes = [0u8; 8];
+            bytes.copy_from_slice(&xdata[offset..offset + 8]);
+            u64::from_le_bytes(bytes)
+        };
+        return Ok(XattrValue::DataStream {
+            obj_id: field(0),
+            size: field(8),
+        });
+    }
+
     let end = value.len().min(4 + data_len);
-    Ok(value[4..end].to_vec())
+    Ok(XattrValue::Embedded(value[4..end].to_vec()))
 }
 
 /// Order an on-disk catalog key against the `(oid, type)` being searched for.
@@ -654,260 +732,4 @@ fn compare_catalog_keys(oid_a: u64, type_a: u8, oid_b: u64, type_b: u8) -> std::
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::omap as omap_mod;
-    use crate::superblock;
-    use std::io::BufReader;
-
-    #[test]
-    fn catalog_keys_compare_equal_only_when_oid_and_type_match() {
-        // The scan predicates depend on this: a record is in range exactly when
-        // the comparison is Equal, so they need no separate oid/type equality
-        // check alongside the ordering.
-        for oid_a in 0..4u64 {
-            for type_a in 0..4u8 {
-                for oid_b in 0..4u64 {
-                    for type_b in 0..4u8 {
-                        let equal = compare_catalog_keys(oid_a, type_a, oid_b, type_b)
-                            == std::cmp::Ordering::Equal;
-                        assert_eq!(
-                            equal,
-                            oid_a == oid_b && type_a == type_b,
-                            "({oid_a},{type_a}) vs ({oid_b},{type_b})"
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn parses_xattr_value_header() {
-        // flags=0x0006 (embedded), data_len=0x000e, data = "../README.txt\0"
-        let value = [
-            0x06, 0x00, 0x0e, 0x00, b'.', b'.', b'/', b'R', b'E', b'A', b'D', b'M', b'E', b'.',
-            b't', b'x', b't', b'\0',
-        ];
-        assert_eq!(
-            parse_xattr_value(&value).unwrap(),
-            b"../README.txt\0".to_vec()
-        );
-        // data_len larger than the record: clamp to the value length
-        let short = [0x06, 0x00, 0xff, 0x00, b'a', b'b'];
-        assert_eq!(parse_xattr_value(&short).unwrap(), b"ab".to_vec());
-        // value shorter than the header: rejected rather than passed through
-        assert!(parse_xattr_value(b"abc").is_err());
-        // data-stream attribute: rejected rather than returned as data
-        let dstream = [0x01, 0x00, 0x10, 0x00, 0xAA, 0xBB, 0xCC, 0xDD];
-        assert!(parse_xattr_value(&dstream).is_err());
-    }
-
-    /// Build an on-disk catalog key: `obj_id_and_type | name_len u16 | name | NUL`.
-    fn xattr_key(oid: u64, j_type: u8, name: &str) -> Vec<u8> {
-        let mut key = Vec::with_capacity(8 + 2 + name.len() + 1);
-        let obj_id_and_type = (oid & 0x0FFFFFFFFFFFFFFF) | ((j_type as u64) << 60);
-        key.extend_from_slice(&obj_id_and_type.to_le_bytes());
-        key.extend_from_slice(&((name.len() + 1) as u16).to_le_bytes());
-        key.extend_from_slice(name.as_bytes());
-        key.push(0);
-        key
-    }
-
-    #[test]
-    fn xattr_key_layout_matches_on_disk_format() {
-        let key = xattr_key(25, J_TYPE_XATTR, SYMLINK_XATTR_NAME);
-        assert_eq!(key.len(), 31);
-        assert_eq!(key[0], 0x19); // oid 25, low byte
-        assert_eq!(key[7], 0x40); // J_TYPE_XATTR nibble
-        assert_eq!(&key[8..10], &[0x15, 0x00]); // name_len 21, incl. NUL
-        assert_eq!(&key[XATTR_KEY_NAME_OFFSET..], b"com.apple.fs.symlink\0");
-    }
-
-    #[test]
-    fn compares_xattr_keys_by_oid_then_type_then_name() {
-        use std::cmp::Ordering;
-        // The comparator matches against the NUL-terminated attribute name.
-        let mut want = SYMLINK_XATTR_NAME.as_bytes().to_vec();
-        want.push(0);
-
-        // Exact match.
-        assert_eq!(
-            compare_xattr_key(&xattr_key(25, J_TYPE_XATTR, SYMLINK_XATTR_NAME), 25, &want),
-            Ordering::Equal
-        );
-
-        // OID dominates, and is compared numerically -- not as little-endian
-        // bytes, which would order 0x100 before 0x02.
-        assert_eq!(
-            compare_xattr_key(
-                &xattr_key(0x100, J_TYPE_XATTR, SYMLINK_XATTR_NAME),
-                0x02,
-                &want
-            ),
-            Ordering::Greater
-        );
-        assert_eq!(
-            compare_xattr_key(
-                &xattr_key(0x02, J_TYPE_XATTR, SYMLINK_XATTR_NAME),
-                0x100,
-                &want
-            ),
-            Ordering::Less
-        );
-
-        // Same OID: the record type breaks the tie, even though it is packed
-        // into the high nibble of obj_id_and_type.
-        assert_eq!(
-            compare_xattr_key(&xattr_key(25, J_TYPE_INODE, ""), 25, &want),
-            Ordering::Less
-        );
-        assert_eq!(
-            compare_xattr_key(&xattr_key(25, J_TYPE_DIR_REC, ""), 25, &want),
-            Ordering::Greater
-        );
-
-        // Same OID and type: names order by bytes, ignoring the name_len field
-        // that precedes them -- a longer name can still sort first.
-        assert_eq!(
-            compare_xattr_key(
-                &xattr_key(25, J_TYPE_XATTR, "com.apple.diskimages.recentcksum"),
-                25,
-                &want
-            ),
-            Ordering::Less
-        );
-        assert_eq!(
-            compare_xattr_key(
-                &xattr_key(25, J_TYPE_XATTR, "com.apple.quarantine"),
-                25,
-                &want
-            ),
-            Ordering::Greater
-        );
-
-        // Undecodable keys are treated as "before the target" so the scan
-        // keeps going rather than terminating early.
-        assert_eq!(compare_xattr_key(b"short", 25, &want), Ordering::Less);
-    }
-
-    fn open_volume() -> (BufReader<std::fs::File>, u64, u64, u32) {
-        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
-        let mut reader = BufReader::new(file);
-
-        let nxsb = superblock::read_nxsb(&mut reader).unwrap();
-        let latest = superblock::find_latest_nxsb(&mut reader, &nxsb).unwrap();
-        let block_size = latest.block_size;
-
-        let container_omap_root =
-            omap_mod::read_omap_tree_root(&mut reader, latest.omap_oid, block_size).unwrap();
-
-        let vol_oid = latest.fs_oids.iter().find(|&&o| o != 0).copied().unwrap();
-        let vol_block =
-            omap_mod::omap_lookup(&mut reader, container_omap_root, block_size, vol_oid).unwrap();
-
-        let vol_data = crate::object::read_block(&mut reader, vol_block, block_size).unwrap();
-        let vol_sb = superblock::ApfsSuperblock::parse(&vol_data).unwrap();
-
-        let vol_omap_root =
-            omap_mod::read_omap_tree_root(&mut reader, vol_sb.omap_oid, block_size).unwrap();
-        let catalog_root =
-            omap_mod::omap_lookup(&mut reader, vol_omap_root, block_size, vol_sb.root_tree_oid)
-                .unwrap();
-
-        (reader, catalog_root, vol_omap_root, block_size)
-    }
-
-    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_list_root() {
-        let (mut reader, catalog_root, omap_root, block_size) = open_volume();
-
-        let entries = list_directory(
-            &mut reader,
-            catalog_root,
-            omap_root,
-            block_size,
-            ROOT_DIR_RECORD,
-        )
-        .unwrap();
-        assert!(!entries.is_empty(), "Root directory should have entries");
-    }
-
-    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_resolve_path() {
-        let (mut reader, catalog_root, omap_root, block_size) = open_volume();
-
-        let entries = list_directory(
-            &mut reader,
-            catalog_root,
-            omap_root,
-            block_size,
-            ROOT_DIR_RECORD,
-        )
-        .unwrap();
-        let first = entries.first().expect("Root should have entries");
-        let path = format!("/{}", first.name);
-        let (oid, inode) =
-            resolve_path(&mut reader, catalog_root, omap_root, block_size, &path).unwrap();
-        assert!(oid > 0);
-        assert!(inode.kind() != 0);
-    }
-
-    #[test]
-    fn test_drec_val_parse() {
-        // Construct DrecVal bytes: file_id(u64) + date_added(i64) + flags(u16)
-        let mut data = Vec::new();
-        data.extend_from_slice(&42u64.to_le_bytes()); // file_id = 42
-        data.extend_from_slice(&1000i64.to_le_bytes()); // date_added = 1000
-        data.extend_from_slice(&DT_DIR.to_le_bytes()); // flags = DT_DIR (4)
-
-        let drec = DrecVal::parse(&data).unwrap();
-        assert_eq!(drec.file_id, 42);
-        assert_eq!(drec.date_added, 1000);
-        assert_eq!(drec.file_type(), DT_DIR);
-    }
-
-    #[test]
-    fn test_file_extent_val_parse() {
-        // Construct FileExtentVal bytes: flags_and_length(u64) + phys_block_num(u64) + crypto_id(u64)
-        // length() masks with lower 56 bits (0x00FFFFFFFFFFFFFF)
-        let flags_and_length: u64 = 0xAB00_0000_0000_1000; // upper byte = flags 0xAB, lower 56 = 0x1000
-        let mut data = Vec::new();
-        data.extend_from_slice(&flags_and_length.to_le_bytes());
-        data.extend_from_slice(&100u64.to_le_bytes()); // phys_block_num = 100
-        data.extend_from_slice(&0u64.to_le_bytes()); // crypto_id = 0
-
-        let extent = FileExtentVal::parse(&data).unwrap();
-        assert_eq!(extent.length(), 0x1000);
-        assert_eq!(extent.phys_block_num, 100);
-        assert_eq!(extent.crypto_id, 0);
-    }
-
-    #[test]
-    fn test_file_extent_key_logical_address() {
-        // j_file_extent_key_t is a j_key_t (one u64 of packed OID and type)
-        // followed by the little-endian logical address, so the address
-        // starts at byte 8.
-        let mut key = Vec::new();
-        let obj_id_and_type = (u64::from(J_TYPE_FILE_EXTENT) << 60) | 42;
-        key.extend_from_slice(&obj_id_and_type.to_le_bytes());
-        key.extend_from_slice(&8192u64.to_le_bytes());
-
-        assert_eq!(parse_file_extent_logical_addr(&key).unwrap(), 8192);
-    }
-
-    #[test]
-    fn test_file_extent_key_too_short_is_rejected() {
-        // A key with the j_key_t but no address must not silently read as 0,
-        // which would stack every extent at the start of the file.
-        let key = [0u8; 8];
-        assert!(matches!(
-            parse_file_extent_logical_addr(&key),
-            Err(ApfsError::CorruptedData(_))
-        ));
-    }
-}
+mod tests;

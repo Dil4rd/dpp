@@ -1,0 +1,34 @@
+# Dependabot complements, rather than replaces, the `audit` CI jobs.
+#
+# It reads the GitHub Advisory Database, which does not mirror every RustSec
+# advisory — it carried no `quick-xml` entries at all while two high-severity
+# ones were open against this workspace. `cargo audit` reads RustSec directly
+# and is the authority for advisories; Dependabot's job here is keeping
+# versions current so the gap is smaller when one is missed.
+#
+# Grouping keeps routine bumps to one pull request per ecosystem per week;
+# security updates are opened individually and immediately regardless.
+version: 2
+updates:
+  # Cargo.lock is committed, so transitive dependencies are visible. Without
+  # it Dependabot sees only the direct requirements in each Cargo.toml.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        update-types:
+          - minor
+          - patch

@@ -1,0 +1,19 @@
+[package]
+name = "cmpfs"
+version = "0.1.0-dev"
+edition = "2024"
+description = "Read-only decoder for Apple decmpfs transparent filesystem compression"
+license = "MIT"
+repository = "https://github.com/Dil4rd/dpp"
+keywords = ["decmpfs", "apple", "macos", "compression", "hfs"]
+categories = ["compression", "parsing"]
+
+[dependencies]
+flate2 = "1.0"
+lzfse_rust = "0.2"
+# Declared under its lib name rather than its package name. The package is
+# `lzvn-core` but it builds a lib called `lzvn`, so source reads `lzvn::`;
+# renaming the key keeps that matchable, which cargo-machete's textual scan
+# needs to see the dependency as used.
+lzvn = { package = "lzvn-core", version = "0.1" }
+thiserror = "2"

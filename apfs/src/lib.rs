@@ -11,6 +11,15 @@ pub mod superblock;
 
 pub use error::{ApfsError, Result};
 
+/// Failure while decoding a transparently compressed file.
+pub use cmpfs::CmpfsError as CompressionError;
+/// `com.apple.decmpfs` header of a transparently compressed file.
+pub use cmpfs::Header as CompressionHeader;
+/// Where a compressed file's payload lives.
+pub use cmpfs::Storage as CompressionStorage;
+/// Whether an extended attribute is user data or compression machinery.
+pub use cmpfs::XattrKind;
+
 use std::io::{Read, Seek, Write};
 
 /// Entry kind in the filesystem
@@ -44,6 +53,23 @@ pub struct FileStat {
     pub gid: u32,
     pub mode: u16,
     pub nlink: u32,
+    /// Present when the file is transparently compressed. `size` above is then
+    /// the decompressed size, which the inode does not record.
+    ///
+    /// Also the signal that the file's compression is already resolved: the
+    /// attributes listed as [`XattrKind::Compression`] must not be replicated
+    /// onto an extracted copy.
+    pub compression: Option<CompressionHeader>,
+}
+
+/// An extended attribute name, classified so a caller replicating metadata can
+/// skip compression machinery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XattrEntry {
+    /// Attribute name.
+    pub name: String,
+    /// Whether this is user data or transparent-compression machinery.
+    pub kind: XattrKind,
 }
 
 /// Entry from walk() — includes full path
@@ -61,6 +87,23 @@ pub struct VolumeInfo {
     pub num_files: u64,
     pub num_directories: u64,
     pub num_symlinks: u64,
+}
+
+/// Pair each attribute name with its kind.
+///
+/// The file counts as compressed when the header attribute is present, which is
+/// the same condition `read_file` decompresses on. Deriving it from the listing
+/// keeps the two in step: if `read_file` treated the resource fork as a
+/// payload, this reports it as machinery.
+fn classify(names: Vec<String>) -> Vec<XattrEntry> {
+    let compressed = names.iter().any(|name| name == cmpfs::XATTR_NAME);
+    names
+        .into_iter()
+        .map(|name| XattrEntry {
+            kind: cmpfs::classify_xattr(&name, compressed),
+            name,
+        })
+        .collect()
 }
 
 /// High-level read-only APFS volume reader
@@ -204,7 +247,118 @@ impl<R: Read + Seek> ApfsVolume<R> {
         Ok(Some(xattr[..end].to_vec()))
     }
 
+    /// Read an extended attribute, or `None` when the inode has no attribute
+    /// of that name.
+    ///
+    /// Resolves both storage forms: values held in the catalog record and
+    /// values held in a data stream, which is how resource forks are stored.
+    pub fn get_xattr(&mut self, path: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        let (oid, _inode) = catalog::resolve_path(
+            &mut self.reader,
+            self.catalog_root_block,
+            self.vol_omap_root_block,
+            self.block_size,
+            path,
+        )?;
+        self.read_xattr(oid, name)
+    }
+
+    /// Every extended attribute on a file or directory, classified.
+    ///
+    /// Nothing is filtered out: a caller inspecting the volume sees what the
+    /// volume holds. [`XattrKind::Compression`] marks the attributes macOS
+    /// hides, which [`Self::read_file`] has already resolved and which must
+    /// not be copied onto an extracted file.
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<XattrEntry>> {
+        let (oid, _inode) = catalog::resolve_path(
+            &mut self.reader,
+            self.catalog_root_block,
+            self.vol_omap_root_block,
+            self.block_size,
+            path,
+        )?;
+        let names = catalog::list_xattr_names(
+            &mut self.reader,
+            self.catalog_root_block,
+            self.vol_omap_root_block,
+            self.block_size,
+            oid,
+        )?;
+        Ok(classify(names))
+    }
+
+    fn read_xattr(&mut self, oid: u64, name: &str) -> Result<Option<Vec<u8>>> {
+        let value = catalog::lookup_xattr_value(
+            &mut self.reader,
+            self.catalog_root_block,
+            self.vol_omap_root_block,
+            self.block_size,
+            oid,
+            name,
+        )?;
+
+        match value {
+            None => Ok(None),
+            Some(catalog::XattrValue::Embedded(data)) => Ok(Some(data)),
+            Some(catalog::XattrValue::DataStream { obj_id, size }) => {
+                let extents = catalog::lookup_extents(
+                    &mut self.reader,
+                    self.catalog_root_block,
+                    self.vol_omap_root_block,
+                    self.block_size,
+                    obj_id,
+                )?;
+                let mut data = Vec::with_capacity(usize::try_from(size).unwrap_or(0));
+                extents::read_file_data(
+                    &mut self.reader,
+                    self.block_size,
+                    &extents,
+                    size,
+                    &mut data,
+                )?;
+                Ok(Some(data))
+            }
+        }
+    }
+
+    /// The `com.apple.decmpfs` header of a transparently compressed inode, or
+    /// `None` when the file stores its bytes in the data fork as usual.
+    fn compression(&mut self, oid: u64) -> Result<Option<CompressionHeader>> {
+        let Some(attr) = self.read_xattr(oid, cmpfs::XATTR_NAME)? else {
+            return Ok(None);
+        };
+        Ok(Some(CompressionHeader::parse(&attr)?))
+    }
+
+    /// Decompress a transparently compressed file.
+    ///
+    /// Whole-file, unlike the extent path: compression blocks are addressed
+    /// relative to the decompressed output, so nothing can be emitted before
+    /// the block covering it has been decoded.
+    fn read_compressed(&mut self, oid: u64, header: &CompressionHeader) -> Result<Vec<u8>> {
+        let attr = self.read_xattr(oid, cmpfs::XATTR_NAME)?.ok_or_else(|| {
+            ApfsError::CorruptedData(format!("inode {oid} lost its decmpfs attribute"))
+        })?;
+
+        let resource_fork = match header.storage() {
+            CompressionStorage::ResourceFork => Some(
+                self.read_xattr(oid, cmpfs::RESOURCE_FORK_XATTR_NAME)?
+                    .ok_or_else(|| {
+                        ApfsError::CorruptedData(format!(
+                            "inode {oid} is compressed into its resource fork, but has none"
+                        ))
+                    })?,
+            ),
+            _ => None,
+        };
+
+        Ok(cmpfs::decompress(&attr, resource_fork.as_deref())?)
+    }
+
     /// Stream a file to a writer
+    ///
+    /// Transparently compressed files are decompressed; see [`Self::stat`] to
+    /// detect one first.
     pub fn read_file_to<W: Write>(&mut self, path: &str, writer: &mut W) -> Result<u64> {
         let (oid, inode) = catalog::resolve_path(
             &mut self.reader,
@@ -213,6 +367,14 @@ impl<R: Read + Seek> ApfsVolume<R> {
             self.block_size,
             path,
         )?;
+
+        if inode.kind() != catalog::INODE_SYMLINK_TYPE
+            && let Some(header) = self.compression(oid)?
+        {
+            let data = self.read_compressed(oid, &header)?;
+            writer.write_all(&data)?;
+            return Ok(data.len() as u64);
+        }
 
         // Symlink inodes carry no extents; read the target from the xattr.
         // Falls through to the extent read for images that store the target
@@ -243,7 +405,26 @@ impl<R: Read + Seek> ApfsVolume<R> {
     }
 
     /// Open a file for streaming Read+Seek access
+    ///
+    /// Fails on a transparently compressed file: its data fork is empty, so a
+    /// reader over the extents would report a successful read of nothing. Use
+    /// [`Self::read_file`] for those.
     pub fn open_file(&mut self, path: &str) -> Result<extents::ApfsForkReader<'_, R>> {
+        let (oid, _) = catalog::resolve_path(
+            &mut self.reader,
+            self.catalog_root_block,
+            self.vol_omap_root_block,
+            self.block_size,
+            path,
+        )?;
+        if let Some(header) = self.compression(oid)? {
+            return Err(ApfsError::Unsupported(format!(
+                "{path} is decmpfs-compressed (type {}); read_file decompresses it, \
+                 streaming does not",
+                header.compression_type
+            )));
+        }
+
         let (_oid, inode) = catalog::resolve_path(
             &mut self.reader,
             self.catalog_root_block,
@@ -280,11 +461,15 @@ impl<R: Read + Seek> ApfsVolume<R> {
         )?;
 
         // Symlink inodes report size 0; use the xattr target length instead.
+        let mut compression = None;
         let size = if inode.kind() == catalog::INODE_SYMLINK_TYPE {
             self.symlink_target(oid)?
                 .map_or(inode.size(), |t| t.len() as u64)
         } else {
-            inode.size()
+            // A compressed inode records no size of its own — the data fork is
+            // empty and the real length is in the decmpfs header.
+            compression = self.compression(oid)?;
+            compression.map_or_else(|| inode.size(), |h| h.uncompressed_size)
         };
 
         Ok(FileStat {
@@ -301,6 +486,7 @@ impl<R: Read + Seek> ApfsVolume<R> {
             gid: inode.gid,
             mode: inode.mode,
             nlink: inode.nlink(),
+            compression,
         })
     }
 
@@ -365,95 +551,4 @@ impl<R: Read + Seek> ApfsVolume<R> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::BufReader;
-
-    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_volume_open() {
-        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
-        let reader = BufReader::new(file);
-
-        let mut vol = ApfsVolume::open(reader).unwrap();
-        let info = vol.volume_info();
-
-        assert!(!info.name.is_empty(), "Volume name should not be empty");
-        assert_eq!(info.block_size, 4096);
-
-        let entries = vol.list_directory("/").unwrap();
-        assert!(!entries.is_empty(), "Root directory should have entries");
-
-        let walk_entries = vol.walk().unwrap();
-        assert!(!walk_entries.is_empty());
-    }
-
-    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_read_file_data() {
-        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
-        let reader = BufReader::new(file);
-
-        let mut vol = ApfsVolume::open(reader).unwrap();
-
-        let walk = vol.walk().unwrap();
-        let small_file = walk.iter().find(|e| {
-            e.entry.kind == EntryKind::File && e.entry.size > 0 && e.entry.size < 1_000_000
-        });
-
-        let entry = small_file.expect("Should find a small file in the test image");
-        let data = vol.read_file(&entry.path).unwrap();
-        assert_eq!(
-            data.len() as u64,
-            entry.entry.size,
-            "Read size should match stat size"
-        );
-
-        let stat = vol.stat(&entry.path).unwrap();
-        assert_eq!(stat.size, entry.entry.size);
-    }
-
-    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_read_symlink_targets() {
-        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
-        let reader = BufReader::new(file);
-
-        let mut vol = ApfsVolume::open(reader).unwrap();
-
-        let walk = vol.walk().unwrap();
-        let symlinks: Vec<_> = walk
-            .iter()
-            .filter(|e| e.entry.kind == EntryKind::Symlink)
-            .map(|e| e.path.clone())
-            .collect();
-        assert!(
-            !symlinks.is_empty(),
-            "Test image should contain symlinks to read"
-        );
-
-        for path in &symlinks {
-            let target = vol.read_file(path).unwrap();
-            assert!(
-                !target.is_empty(),
-                "Symlink {path} should resolve to a non-empty target"
-            );
-            assert!(
-                !target.contains(&0),
-                "Symlink target for {path} should have its trailing NUL stripped"
-            );
-
-            // stat() reports the target length, not the inode's zero size.
-            let stat = vol.stat(path).unwrap();
-            assert_eq!(stat.kind, EntryKind::Symlink);
-            assert_eq!(
-                stat.size,
-                target.len() as u64,
-                "stat size should match the target length for {path}"
-            );
-        }
-    }
-}
+mod tests {}

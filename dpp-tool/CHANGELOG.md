@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `fs xattr <dmg> <path> [name]` lists a file's extended attributes, or writes
+  one to stdout raw. Compression machinery is listed but marked, since `cat`
+  has already applied it
+- `fs stat`, `hfs stat` and `apfs stat` report the decmpfs compression type of
+  a transparently compressed file
+
+### Changed
+
+- `cat` and `extract` recover transparently compressed files, which previously
+  came out empty
+
 ## [0.5.4] - 2026-09-07
 
 ### Changed

@@ -4,45 +4,131 @@ on:
   push:
     branches:
       - main
+  # Packaging is credential-free, so it runs on pull requests too: a crate
+  # that cannot be packaged then fails review rather than the release. A
+  # release pull request still carries -dev versions, so the packaging must
+  # run despite them; only the publish path refuses.
+  pull_request:
+    branches:
+      - main
 
-# Publishing needs the registry token, not repository write access. No
-# concurrency cancellation here: interrupting a partial publish would leave
-# some crates pushed and their version numbers permanently taken.
 permissions:
   contents: read
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
 jobs:
-  publish:
+  # Verification compiles every crate and its dependencies. That happens here,
+  # without the registry token in the environment.
+  package:
+    name: Package and verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.98.0
+      # --exclude dpp-python: it ships via PyPI, not crates.io.
+      - run: cargo package --workspace --locked --exclude dpp-python
+
+      # The -dev check sits after packaging, not before it. `cargo package`
+      # works fine on a -dev version — it builds a temporary registry from the
+      # workspace members, so even a crate that has never been published
+      # verifies — and running the check first meant the release pull request
+      # could never see whether its crates package at all. That is the one
+      # question it exists to answer, and the only chance to answer it is
+      # before the merge that publishes.
+      - name: Note that this branch still carries -dev versions
+        if: github.event_name == 'pull_request'
+        run: |
+          if git ls-files '*Cargo.toml' | xargs grep -nE 'version = "[^"]*-dev"'; then
+            echo "::notice::packaging verified; -dev versions are still present and the release commit must strip them before this merges"
+          fi
 
       - name: Refuse to publish a -dev version
+        if: github.event_name == 'push'
         run: |
           if git ls-files '*Cargo.toml' | xargs grep -nE 'version = "[^"]*-dev"'; then
             echo "::error::a -dev version reached main; the release commit must strip the suffix"
             exit 1
           fi
 
+      # Signed record of which commit and workflow produced each .crate.
+      # Verify with: gh attestation verify <file> --repo Dil4rd/dpp
+      # Only for real releases; a pull request produces nothing to attest.
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        if: github.event_name == 'push'
+        with:
+          subject-path: target/package/*.crate
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.event_name == 'push'
+        with:
+          name: crates
+          path: target/package/*.crate
+
+  # No concurrency cancellation: interrupting a partial publish leaves some
+  # crates pushed and their version numbers permanently taken.
+  publish:
+    needs: package
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Must match the environment named in each crate's crates.io trusted
+    # publisher config. Its deployment branch rule restricts it to main, in
+    # repository settings rather than in this file.
+    environment: publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+
+      # Repeated from the package job on purpose. `needs: package` already
+      # blocks this, but a version number pushed to crates.io is taken
+      # permanently, and that is not a protection worth keeping in one place
+      # only.
+      - name: Refuse to publish a -dev version
+        run: |
+          if git ls-files '*Cargo.toml' | xargs grep -nE 'version = "[^"]*-dev"'; then
+            echo "::error::a -dev version reached the publish job"
+            exit 1
+          fi
+
+      # PREREQUISITE: every crate must have this repository, workflow and the
+      # environment name `publish` registered under Trusted Publishing on
+      # crates.io before this merges. A mismatch fails at auth, before
+      # anything is uploaded.
+      # Exchanges the OIDC token for a 30-minute credential, so no long-lived
+      # CARGO_REGISTRY_TOKEN secret is needed.
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1
+        id: auth
+
+      # --no-verify: the package job already built and verified this commit,
+      # so the credentialed step only packages and uploads.
+      # Unpublished versions are the point; already-published ones are skipped.
+      # Sleeps let the index catch up before a dependent crate goes out.
       - name: Publish crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
           try_publish() {
             local output
-            output=$(cargo publish -p "$1" 2>&1) && echo "$output" || {
+            output=$(cargo publish --locked --no-verify -p "$1" 2>&1) && echo "$output" || {
               echo "$output"
               echo "$output" | grep -q "already exists"
             }
           }
           try_publish pbzx
           try_publish xara
+          try_publish cmpfs
+          sleep 30
           try_publish hfsplus
           try_publish apfs
           try_publish udif

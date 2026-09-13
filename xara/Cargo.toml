@@ -1,6 +1,6 @@
 [package]
 name = "xara"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 description = "Read-only XAR archive and macOS PKG package parser"
 license = "MIT"
@@ -9,13 +9,16 @@ keywords = ["xar", "pkg", "apple", "macos", "archive"]
 categories = ["parsing", "compression"]
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 byteorder = "1.5"
 thiserror = "2"
 flate2 = "1.0"
 quick-xml = "0.42"
 
 [dev-dependencies]
+# Also normal dependencies, but `tests/` links only dev-dependencies.
+base64 = "0.23"
+flate2 = "1.0"
 tempfile = "3"
 
 [features]

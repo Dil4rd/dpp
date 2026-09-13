@@ -104,6 +104,10 @@ pub struct PyFileStat {
     pub data_fork_extents: Option<u32>,
     #[pyo3(get)]
     pub resource_fork_size: Option<u64>,
+    /// decmpfs compression type, when the file is transparently compressed.
+    /// `size` is then the decompressed size.
+    #[pyo3(get)]
+    pub compression_type: Option<u32>,
 }
 
 #[pymethods]
@@ -131,6 +135,37 @@ impl From<&dpp::FsFileStat> for PyFileStat {
             nlink: s.nlink,
             data_fork_extents: s.data_fork_extents,
             resource_fork_size: s.resource_fork_size,
+            compression_type: s.compression_type,
+        }
+    }
+}
+
+// ── Extended Attribute ──────────────────────────────────────────────────
+
+#[pyclass(frozen, skip_from_py_object, name = "Xattr")]
+#[derive(Clone)]
+pub struct PyXattr {
+    #[pyo3(get)]
+    pub name: String,
+    /// "user" or "compression". A "compression" attribute is machinery macOS
+    /// hides from userspace: reading the file already applies it, and writing
+    /// it back onto an extracted file makes that file unreadable on macOS.
+    #[pyo3(get)]
+    pub kind: String,
+}
+
+#[pymethods]
+impl PyXattr {
+    fn __repr__(&self) -> String {
+        format!("Xattr(name={:?}, kind={:?})", self.name, self.kind)
+    }
+}
+
+impl From<&dpp::FsXattr> for PyXattr {
+    fn from(a: &dpp::FsXattr) -> Self {
+        PyXattr {
+            name: a.name.clone(),
+            kind: format!("{:?}", a.kind).to_lowercase(),
         }
     }
 }

@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Extended attributes.** `ApfsVolume::get_xattr` and
+  `ApfsVolume::list_xattrs`, resolving both embedded values and values held in
+  a data stream — the form resource forks always take
+- `XattrEntry` and the re-exported `XattrKind` classify each listed attribute
+  as user data or compression machinery. Nothing is filtered out, so a caller
+  reading the volume still sees everything on it, but one replicating metadata
+  onto an extracted file can skip the attributes that would break it —
+  `read_file` has already applied them
+- `catalog::lookup_xattr_value` returns the new `catalog::XattrValue`, which
+  distinguishes the two storage forms; `catalog::list_xattr_names` scans an
+  inode's attribute records
+
+### Changed
+
+- **Breaking behaviour:** `read_file` and `read_file_to` now decompress
+  transparently compressed (`decmpfs`) files, which previously read as empty
+- **Breaking behaviour:** `open_file` fails on a compressed file instead of
+  returning a reader over the empty data fork. Use `read_file`
+- **Breaking:** `FileStat` gains `compression`, and its `size` is the
+  decompressed size for a compressed file
+- **Breaking:** `ApfsError` gains a `Compression` variant
+- **Breaking:** `list_xattrs` returns `Vec<XattrEntry>` rather than
+  `Vec<String>`
+- `catalog::lookup_xattr` keeps its signature and still rejects data-stream
+  attributes; it is now a wrapper over `lookup_xattr_value`
+
 ## [0.3.0] - 2026-09-07
 
 ### Added

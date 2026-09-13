@@ -18,7 +18,8 @@ DMG (UDIF) → HFS+ or APFS filesystem → PKG installer (XAR) → Payload (PBZX
 
 - **Full pipeline** — single API call goes from `.dmg` file to extracted files
 - **Cross-platform** — works on Linux, macOS, and Windows
-- **All Apple compression formats** — LZFSE, XZ, Zlib, Bzip2
+- **All Apple compression formats** — LZFSE, LZVN, XZ, Zlib, Bzip2
+- **Transparent compression** — `decmpfs` files on HFS+ and APFS read as their contents, not as nothing
 - **Memory efficient** — streams through temp files by default (~4KB resident memory)
 - **Pure Rust** — zero `unsafe` in filesystem crates, minimal dependencies
 - **Modular** — use the full pipeline or individual crates standalone
@@ -157,6 +158,7 @@ Global options: `--temp-file` (default, low memory), `--in-memory` (faster for s
 | `dpp-tool fs tree <dmg> [path]` | Browse filesystem tree |
 | `dpp-tool fs cat <dmg> <path>` | Extract file to stdout |
 | `dpp-tool fs stat <dmg> <path>` | File metadata |
+| `dpp-tool fs xattr <dmg> <path> [name]` | List extended attributes (marking compression machinery), or dump one |
 | `dpp-tool fs find <dmg> [opts]` | Find files by name/type |
 | `dpp-tool fs extract <dmg> [path] -o <dir>` | Extract files to directory |
 | **hfs** | |
@@ -199,21 +201,23 @@ dpp-tool  (CLI binary)          dpp-python  (Python bindings)
     ├── udif      DMG / UDIF disk image reader & writer
     ├── hfsplus   HFS+ / HFSX filesystem parser
     ├── apfs      APFS filesystem parser
+    ├── cmpfs     decmpfs transparent compression decoder
     ├── xara      XAR archive & macOS PKG parser
     └── pbzx      PBZX streaming archive & CPIO parser
 ```
 
 Each crate is published independently and can be used on its own:
 
-| Crate | Description | Dependencies |
-|-------|-------------|:------------:|
-| [`udif`](udif/) | Apple DMG (UDIF) disk images — read & write with LZFSE/XZ/Zlib/Bzip2 | 10 |
-| [`hfsplus`](hfsplus/) | HFS+ and HFSX filesystem — B-tree traversal, extent overflow, Unicode | 2 |
-| [`xara`](xara/) | XAR archives and macOS PKG installers — TOC parsing, payload extraction | 4 |
-| [`pbzx`](pbzx/) | PBZX streaming archives — chunked XZ decompression, CPIO read/write | 3 |
-| [`apfs`](apfs/) | APFS containers and volumes — checksums, object maps, catalog B-trees | 2 |
-| [`dpp`](dpp/) | Pipeline library chaining all of the above | 7 |
-| [`dpp-python`](dpp-python/) | Python bindings via PyO3 + maturin | 2 |
+| Crate | Description |
+|-------|-------------|
+| [`udif`](udif/) | Apple DMG (UDIF) disk images — read & write with LZFSE/XZ/Zlib/Bzip2 |
+| [`hfsplus`](hfsplus/) | HFS+ and HFSX filesystem — B-tree traversal, extent overflow, Unicode, xattrs |
+| [`xara`](xara/) | XAR archives and macOS PKG installers — TOC parsing, payload extraction |
+| [`pbzx`](pbzx/) | PBZX streaming archives — chunked XZ decompression, CPIO read/write |
+| [`apfs`](apfs/) | APFS containers and volumes — checksums, object maps, catalog B-trees, xattrs |
+| [`cmpfs`](cmpfs/) | decmpfs transparent compression — zlib, LZVN, LZFSE, stored blocks |
+| [`dpp`](dpp/) | Pipeline library chaining all of the above |
+| [`dpp-python`](dpp-python/) | Python bindings via PyO3 + maturin |
 
 ## Building
 

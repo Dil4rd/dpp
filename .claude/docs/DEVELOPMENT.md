@@ -4,7 +4,7 @@
 
 ```bash
 cargo build --release              # Build all crates
-cargo build -p <crate>             # Build single crate (pbzx, udif, hfsplus, xara, apfs, dpp, dpp-tool)
+cargo build -p <crate>             # Build single crate (pbzx, udif, hfsplus, xara, apfs, cmpfs, dpp, dpp-tool)
 cargo test                         # Run all tests except the #[ignore]d fixture ones
 cargo test -p dpp                  # Run integration tests only
 cargo test <test_name>             # Run a single test by name
@@ -27,12 +27,14 @@ python -c "import dpp; print(dir(dpp))"      # Quick smoke test
 
 Test fixtures live in `tests/` (large binary files: DMGs, raw partitions, PBZX payloads). The directory is gitignored, so the fixtures exist only on a maintainer's machine.
 
-Every test that needs one is marked `#[ignore]` — around 25 across `apfs`, `hfsplus`, `udif` and `dpp`. That has two consequences worth knowing:
+Every test that needs one is marked `#[ignore]` — around 25 across `apfs`, `hfsplus`, `udif` and `dpp`. They live in `<crate>/tests/fixtures.rs`, not beside the code: driving a real image is integration testing, and keeping them in a separate target means the compiler rejects one that reaches for a private item instead of letting it pin an implementation detail. `dpp` keeps its own in `dpp/tests/integration.rs`. That has two consequences worth knowing:
 
 - **`cargo test` does not run them, and neither does CI.** The only tests that exercise the parsers against real images run locally, on request, via `cargo test -p <crate> -- --ignored`. Run them before calling parser work finished; a green CI says nothing about whether an image still parses.
 - **They fail rather than skip when fixtures are absent.** They `.unwrap()` on `File::open`, so `--ignored` on a machine without `tests/` panics. Do not add `--include-ignored` to CI without changing that.
 
-This gap is why a comparator bug that broke 13 of 15 symlinks in `tests/appfs.raw` passed every check. Synthetic tests that construct their own input are the only kind CI rewards, so prefer adding both: a unit test CI can run, and an `#[ignore]`d one that proves the behaviour against a real image.
+`tests/decmpfs/` is different from the rest: it is **generated, not collected**. `cmpfs/tools/mint-fixtures.py`, run on a Mac, writes the `com.apple.decmpfs` attribute and resource fork of files it has just had macOS compress, plus a TSV manifest. That is the only coverage checking `cmpfs` against bytes Apple wrote — resource-fork types 8, 10 and 12 rest on one third-party reader that marks two of them assumptions. Reading those bytes needs `getxattr` with `XATTR_SHOWCOMPRESSION`; the kernel hides them from ordinary reads, so `xattr(1)` cannot see them.
+
+This gap is why a comparator bug that broke 13 of 15 symlinks in `tests/appfs.raw` passed every check. Synthetic tests that construct their own input are the only kind CI rewards, so prefer adding both: a unit test CI can run, beside the code in `src/`, and an `#[ignore]`d one in `<crate>/tests/fixtures.rs` that proves the behaviour against a real image.
 
 ## Workspace Conventions
 
@@ -41,6 +43,8 @@ This gap is why a comparator bug that broke 13 of 15 symlinks in `tests/appfs.ra
 - Apple formats are **big-endian** — `byteorder` is used throughout.
 - Each crate has its own `error.rs` with `thiserror`-derived error types.
 - Detailed format documentation lives in `<crate>/docs/FORMATS.md`.
+- Tests split by what they reach for, not by size. A test that needs a private item stays a `#[cfg(test)]` module in `src/`; one that only drives the public API belongs in `<crate>/tests/`, where the compiler enforces that. `tests/` links dev-dependencies only, so a crate moving tests out may need to repeat a normal dependency there.
+- A large `#[cfg(test)]` module goes in its own file as a plain submodule — `mod tests;` in `src/foo.rs` resolves to `src/foo/tests.rs`, and in `src/lib.rs` to `src/tests.rs`. It stays a unit test with `use super::*` and full private access. Do not use `#[path = "..."]` for this: it hard-codes a filename that a later rename leaves pointing at the wrong file, whereas a plain submodule follows the module it belongs to.
 
 ## Feature Flags
 
@@ -59,4 +63,5 @@ Work lands on `dev`, which merges to `main` only when a release is intended.
 
 - Crates being changed carry a `-dev` suffix on `dev` (`0.3.0-dev`), so a tree that differs from what was published never claims the published version number. Internal dependency pins carry it too.
 - The release commit strips every `-dev` and dates the `[Unreleased]` changelog sections. It must be the **last** commit before merging to `main`, because the merge publishes immediately.
-- `publish.yml` refuses to run if any `Cargo.toml` still contains a `-dev` version, so a mis-ordered merge fails instead of burning a version number on crates.io permanently.
+- It must also regenerate `dpp-python/THIRD-PARTY-LICENSES.md`. That file names every crate **with its version**, workspace members included, so stripping a `-dev` changes it and `dependencies.yml` fails the pull request on the stale copy. Regenerate after the version bump, in the same commit.
+- `publish.yml` refuses to **publish** if any `Cargo.toml` still contains a `-dev` version, so a mis-ordered merge fails instead of burning a version number on crates.io permanently. It still **packages** on the release pull request, `-dev` and all — `cargo package` builds a temporary registry from the workspace members, so even an unpublished crate verifies. Checking first would have meant the release pull request could never answer the one question it is for, since the merge that strips `-dev` is also the merge that publishes. On a pull request the leftover suffixes are a notice; on push to `main` they are an error.

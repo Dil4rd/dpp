@@ -48,20 +48,19 @@ pub(crate) fn decode_exact<R: Read>(reader: &mut R, buf: &mut [u8], format: &str
 }
 
 /// Decode an LZFSE block, failing if its length disagrees with the block map.
-/// Decodes into scratch first because the decoder needs headroom past `buf`.
 ///
 /// PROVISIONAL(anomaly-channel): should become a reported partial recovery.
 fn decode_lzfse_exact(compressed: &[u8], buf: &mut [u8]) -> Result<()> {
-    let mut scratch = vec![0u8; buf.len().saturating_mul(2).max(1)];
-    let decoded = lzfse::decode_buffer(compressed, &mut scratch)
+    let mut decoded = Vec::with_capacity(buf.len());
+    let n = lzfse_rust::decode_bytes(compressed, &mut decoded)
         .map_err(|e| DppError::Decompression(format!("LZFSE: {e:?}")))?;
-    if decoded != buf.len() {
+    if n as usize != buf.len() {
         return Err(DppError::Decompression(format!(
-            "lzfse decoded {decoded} bytes, expected {}",
+            "lzfse decoded {n} bytes, expected {}",
             buf.len()
         )));
     }
-    buf.copy_from_slice(&scratch[..decoded]);
+    buf.copy_from_slice(&decoded);
     Ok(())
 }
 
@@ -276,7 +275,7 @@ impl<R: Read + Seek> DmgReader<R> {
                     let mut compressed = vec![0u8; block_run.compressed_length as usize];
                     self.reader.read_exact(&mut compressed)?;
 
-                    let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
+                    let mut decoder = lzma_rust2::XzReader::new(&compressed[..], false);
                     let slice = &mut output[out_offset as usize..(out_offset + out_size) as usize];
                     decode_exact(&mut decoder, slice, "xz")?;
                 }
@@ -404,7 +403,7 @@ impl<R: Read + Seek> DmgReader<R> {
                     let mut compressed = vec![0u8; block_run.compressed_length as usize];
                     self.reader.read_exact(&mut compressed)?;
 
-                    let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
+                    let mut decoder = lzma_rust2::XzReader::new(&compressed[..], false);
                     let mut decompressed = vec![0u8; out_size as usize];
                     decode_exact(&mut decoder, &mut decompressed, "xz")?;
                     writer.write_all(&decompressed)?;
@@ -543,7 +542,7 @@ impl<R: Read + Seek> DmgReader<R> {
                         let mut compressed = vec![0u8; block_run.compressed_length as usize];
                         self.reader.read_exact(&mut compressed)?;
 
-                        let mut decoder = xz2::read::XzDecoder::new(&compressed[..]);
+                        let mut decoder = lzma_rust2::XzReader::new(&compressed[..], false);
                         let slice =
                             &mut output[out_offset as usize..(out_offset + out_size) as usize];
                         decode_exact(&mut decoder, slice, "xz")?;
@@ -663,7 +662,7 @@ fn decompress_block(block: &ReadBlock, output: &mut [u8]) -> Result<()> {
             decode_lzfse_exact(&block.data, output)?;
         }
         BlockType::Xz => {
-            let mut decoder = xz2::read::XzDecoder::new(&block.data[..]);
+            let mut decoder = lzma_rust2::XzReader::new(&block.data[..], false);
             decode_exact(&mut decoder, output, "xz")?;
         }
         _ => {
@@ -933,9 +932,8 @@ mod tests {
     }
 
     fn lzfse_compress(data: &[u8]) -> Vec<u8> {
-        let mut out = vec![0u8; data.len() * 2 + 4096];
-        let n = lzfse::encode_buffer(data, &mut out).unwrap();
-        out.truncate(n);
+        let mut out = Vec::new();
+        lzfse_rust::encode_bytes(data, &mut out).unwrap();
         out
     }
 

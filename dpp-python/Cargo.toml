@@ -1,6 +1,6 @@
 [package]
 name = "dpp-python"
-version = "0.3.0"
+version = "0.4.0-dev"
 edition = "2024"
 license = "MIT"
 description = "Python bindings for the dpp Apple disk image and package toolkit"
@@ -10,5 +10,5 @@ name = "dpp"
 crate-type = ["cdylib"]
 
 [dependencies]
-dpp = { version = "0.5.0", path = "../dpp", features = ["parallel"] }
+dpp = { version = "0.6.0-dev", path = "../dpp", features = ["parallel"] }
 pyo3 = { version = "0.29", features = ["extension-module"] }

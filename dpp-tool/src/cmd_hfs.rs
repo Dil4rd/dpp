@@ -230,6 +230,16 @@ fn stat(
         kv("Resource fork", &format_size(stat.resource_fork_size));
     }
 
+    if let Some(compression) = stat.compression {
+        kv(
+            "Compression",
+            &format!(
+                "decmpfs type {} {d}(size above is decompressed){r}",
+                compression.compression_type
+            ),
+        );
+    }
+
     kv(
         "Created",
         &format!("{} {d}(HFS+ timestamp){r}", stat.create_date),

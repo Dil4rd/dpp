@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-09-10
+
+### Changed
+
+- Replaced `xz2` with the pure-Rust `lzma-rust2`, so the crate no longer builds
+  or calls C. Streams written by `pack` stay readable by the C liblzma
+
 ## [0.4.0] - 2026-09-07
 
 ### Changed

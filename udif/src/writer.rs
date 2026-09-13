@@ -7,7 +7,6 @@ use std::fs::File;
 use std::io::{BufWriter, Seek, Write};
 use std::path::Path;
 
-use base64::Engine;
 use byteorder::{BigEndian, WriteBytesExt};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
@@ -237,11 +236,9 @@ impl<W: Write + Seek> DmgWriter<W> {
                     .map_err(|e| DppError::Compression(e.to_string()))
             }
             CompressionMethod::Lzfse => {
-                // Allocate output buffer with some extra space for overhead
-                let mut output = vec![0u8; data.len() + 4096];
-                let compressed_size = lzfse::encode_buffer(data, &mut output)
+                let mut output = Vec::with_capacity(data.len() + 4096);
+                lzfse_rust::encode_bytes(data, &mut output)
                     .map_err(|e| DppError::Compression(format!("LZFSE: {:?}", e)))?;
-                output.truncate(compressed_size);
                 Ok(output)
             }
         }
@@ -318,59 +315,54 @@ impl<W: Write + Seek> DmgWriter<W> {
     }
 
     /// Generate the XML plist for the DMG
+    ///
+    /// Built as a `plist::Value` and serialized, rather than concatenated, so
+    /// that escaping and base64 line-wrapping are the serializer's job. Keys
+    /// are inserted in the order Apple emits them, which `plist::Dictionary`
+    /// preserves.
     fn generate_plist(&self) -> Result<String> {
-        let mut plist = String::new();
-        plist.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        plist.push_str("<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n");
-        plist.push_str("<plist version=\"1.0\">\n");
-        plist.push_str("<dict>\n");
-        plist.push_str("\t<key>resource-fork</key>\n");
-        plist.push_str("\t<dict>\n");
-        plist.push_str("\t\t<key>blkx</key>\n");
-        plist.push_str("\t\t<array>\n");
+        let mut blkx = Vec::with_capacity(self.partitions.len());
 
         for partition in &self.partitions {
-            plist.push_str("\t\t\t<dict>\n");
-            plist.push_str(&format!(
-                "\t\t\t\t<key>Attributes</key>\n\t\t\t\t<string>{:#06x}</string>\n",
-                partition.attributes
-            ));
-            plist.push_str(&format!(
-                "\t\t\t\t<key>CFName</key>\n\t\t\t\t<string>{}</string>\n",
-                partition.name
-            ));
-
-            // Generate mish data
-            let mish_data = self.generate_mish(partition)?;
-            let base64_data = base64::engine::general_purpose::STANDARD.encode(&mish_data);
-            plist.push_str("\t\t\t\t<key>Data</key>\n");
-            plist.push_str("\t\t\t\t<data>\n");
-
-            // Split base64 into lines
-            for chunk in base64_data.as_bytes().chunks(64) {
-                plist.push_str("\t\t\t\t");
-                plist.push_str(std::str::from_utf8(chunk).unwrap());
-                plist.push('\n');
-            }
-            plist.push_str("\t\t\t\t</data>\n");
-
-            plist.push_str(&format!(
-                "\t\t\t\t<key>ID</key>\n\t\t\t\t<string>{}</string>\n",
-                partition.id
-            ));
-            plist.push_str(&format!(
-                "\t\t\t\t<key>Name</key>\n\t\t\t\t<string>{}</string>\n",
-                partition.name
-            ));
-            plist.push_str("\t\t\t</dict>\n");
+            let mut entry = plist::Dictionary::new();
+            entry.insert(
+                "Attributes".to_string(),
+                plist::Value::String(format!("{:#06x}", partition.attributes)),
+            );
+            entry.insert(
+                "CFName".to_string(),
+                plist::Value::String(partition.name.clone()),
+            );
+            entry.insert(
+                "Data".to_string(),
+                plist::Value::Data(self.generate_mish(partition)?),
+            );
+            entry.insert(
+                "ID".to_string(),
+                plist::Value::String(partition.id.to_string()),
+            );
+            entry.insert(
+                "Name".to_string(),
+                plist::Value::String(partition.name.clone()),
+            );
+            blkx.push(plist::Value::Dictionary(entry));
         }
 
-        plist.push_str("\t\t</array>\n");
-        plist.push_str("\t</dict>\n");
-        plist.push_str("</dict>\n");
-        plist.push_str("</plist>\n");
+        let mut resource_fork = plist::Dictionary::new();
+        resource_fork.insert("blkx".to_string(), plist::Value::Array(blkx));
 
-        Ok(plist)
+        let mut root = plist::Dictionary::new();
+        root.insert(
+            "resource-fork".to_string(),
+            plist::Value::Dictionary(resource_fork),
+        );
+
+        let mut buf = Vec::new();
+        plist::to_writer_xml(&mut buf, &plist::Value::Dictionary(root))
+            .map_err(|e| DppError::XmlError(format!("failed to serialize plist: {e}")))?;
+
+        String::from_utf8(buf)
+            .map_err(|e| DppError::XmlError(format!("plist is not valid UTF-8: {e}")))
     }
 
     /// Generate mish (block map) data for a partition

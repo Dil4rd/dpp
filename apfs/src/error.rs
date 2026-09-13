@@ -28,6 +28,9 @@ pub enum ApfsError {
 
     #[error("no volume found in container")]
     NoVolume,
+
+    #[error("decmpfs: {0}")]
+    Compression(#[from] cmpfs::CmpfsError),
 }
 
 pub type Result<T> = std::result::Result<T, ApfsError>;

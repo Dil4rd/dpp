@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `FileStat.compression_type`, set for transparently compressed files
+- `FilesystemHandle.get_xattr(path, name)` and
+  `FilesystemHandle.list_xattrs(path)`, the latter returning `Xattr` objects
+  whose `kind` is `"user"` or `"compression"`
+
+### Changed
+
+- Reading a transparently compressed file returns its contents rather than
+  nothing
+- Regenerated `THIRD-PARTY-LICENSES.md`: the wheels now link `cmpfs` and
+  `lzvn-core` (Apache-2.0)
+
+## [0.3.1] - 2026-09-10
+
+### Added
+
+- `THIRD-PARTY-LICENSES.md` in the wheels, carrying the licences and copyright
+  notices of the Rust crates they statically link
+
+### Changed
+
+- Every decoder behind the bindings is now pure Rust, so the wheels no longer
+  contain compiled C
+
 ## [0.3.0] - 2026-09-07
 
 ### Added

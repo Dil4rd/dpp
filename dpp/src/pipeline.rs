@@ -2,6 +2,7 @@ use std::io::{BufReader, BufWriter, Cursor, Seek};
 use std::path::Path;
 
 use crate::error::Result;
+use apfs::XattrKind;
 
 /// Statistics returned after extraction.
 #[cfg(feature = "extract")]
@@ -254,6 +255,16 @@ impl HfsHandle {
         Ok(dispatch!(self, stat, path)?)
     }
 
+    /// Read one extended attribute
+    pub fn get_xattr(&mut self, path: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        Ok(dispatch!(self, get_xattr, path, name)?)
+    }
+
+    /// List a file's extended attributes, classified
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<hfsplus::XattrEntry>> {
+        Ok(dispatch!(self, list_xattrs, path)?)
+    }
+
     /// Walk all files
     pub fn walk(&mut self) -> Result<Vec<hfsplus::WalkEntry>> {
         Ok(dispatch!(self, walk)?)
@@ -338,6 +349,16 @@ impl ApfsHandle {
     /// Get file metadata
     pub fn stat(&mut self, path: &str) -> Result<apfs::FileStat> {
         Ok(dispatch_apfs!(self, stat, path)?)
+    }
+
+    /// Read one extended attribute
+    pub fn get_xattr(&mut self, path: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        Ok(dispatch_apfs!(self, get_xattr, path, name)?)
+    }
+
+    /// List a file's extended attributes, classified
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<apfs::XattrEntry>> {
+        Ok(dispatch_apfs!(self, list_xattrs, path)?)
     }
 
     /// Walk all files
@@ -475,6 +496,17 @@ pub enum FsType {
     Apfs,
 }
 
+// ── Unified Extended Attribute ──────────────────────────────────────────
+
+/// An extended attribute name from either filesystem, classified.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FsXattr {
+    /// Attribute name.
+    pub name: String,
+    /// Whether this is user data or transparent-compression machinery.
+    pub kind: XattrKind,
+}
+
 // ── Unified File Stat ───────────────────────────────────────────────────
 
 /// Unified file metadata from either HFS+ or APFS
@@ -498,6 +530,9 @@ pub struct FsFileStat {
     pub data_fork_extents: Option<u32>,
     /// Resource fork size (HFS+ only, when > 0)
     pub resource_fork_size: Option<u64>,
+    /// decmpfs compression type, when the file is transparently compressed.
+    /// `size` above is then the decompressed size.
+    pub compression_type: Option<u32>,
 }
 
 impl From<&hfsplus::FileStat> for FsFileStat {
@@ -519,6 +554,7 @@ impl From<&hfsplus::FileStat> for FsFileStat {
             } else {
                 None
             },
+            compression_type: s.compression.map(|c| c.compression_type),
         }
     }
 }
@@ -538,6 +574,7 @@ impl From<&apfs::FileStat> for FsFileStat {
             nlink: Some(s.nlink),
             data_fork_extents: None,
             resource_fork_size: None,
+            compression_type: s.compression.map(|c| c.compression_type),
         }
     }
 }
@@ -589,6 +626,43 @@ impl FilesystemHandle {
             FilesystemHandle::Hfs(h) => Ok(FsFileStat::from(&h.stat(path)?)),
             FilesystemHandle::Apfs(h) => Ok(FsFileStat::from(&h.stat(path)?)),
         }
+    }
+
+    /// Read one extended attribute, or `None` when there is no attribute of
+    /// that name.
+    pub fn get_xattr(&mut self, path: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        match self {
+            FilesystemHandle::Hfs(h) => h.get_xattr(path, name),
+            FilesystemHandle::Apfs(h) => h.get_xattr(path, name),
+        }
+    }
+
+    /// List a file's extended attributes, classified.
+    ///
+    /// Nothing is filtered out. [`XattrKind::Compression`] marks the
+    /// attributes macOS hides from userspace: `read_file` has already
+    /// resolved them, and writing one onto an extracted file makes that file
+    /// unreadable on macOS.
+    pub fn list_xattrs(&mut self, path: &str) -> Result<Vec<FsXattr>> {
+        let entries = match self {
+            FilesystemHandle::Hfs(h) => h
+                .list_xattrs(path)?
+                .into_iter()
+                .map(|a| FsXattr {
+                    name: a.name,
+                    kind: a.kind,
+                })
+                .collect(),
+            FilesystemHandle::Apfs(h) => h
+                .list_xattrs(path)?
+                .into_iter()
+                .map(|a| FsXattr {
+                    name: a.name,
+                    kind: a.kind,
+                })
+                .collect(),
+        };
+        Ok(entries)
     }
 
     /// Get unified volume information

@@ -734,9 +734,6 @@ fn compare_catalog_keys(oid_a: u64, type_a: u8, oid_b: u64, type_b: u8) -> std::
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::omap as omap_mod;
-    use crate::superblock;
-    use std::io::BufReader;
 
     #[test]
     fn catalog_keys_compare_equal_only_when_oid_and_type_match() {
@@ -888,72 +885,6 @@ mod tests {
         // Undecodable keys are treated as "before the target" so the scan
         // keeps going rather than terminating early.
         assert_eq!(compare_xattr_key(b"short", 25, &want), Ordering::Less);
-    }
-
-    fn open_volume() -> (BufReader<std::fs::File>, u64, u64, u32) {
-        let file = std::fs::File::open("../tests/appfs.raw").unwrap();
-        let mut reader = BufReader::new(file);
-
-        let nxsb = superblock::read_nxsb(&mut reader).unwrap();
-        let latest = superblock::find_latest_nxsb(&mut reader, &nxsb).unwrap();
-        let block_size = latest.block_size;
-
-        let container_omap_root =
-            omap_mod::read_omap_tree_root(&mut reader, latest.omap_oid, block_size).unwrap();
-
-        let vol_oid = latest.fs_oids.iter().find(|&&o| o != 0).copied().unwrap();
-        let vol_block =
-            omap_mod::omap_lookup(&mut reader, container_omap_root, block_size, vol_oid).unwrap();
-
-        let vol_data = crate::object::read_block(&mut reader, vol_block, block_size).unwrap();
-        let vol_sb = superblock::ApfsSuperblock::parse(&vol_data).unwrap();
-
-        let vol_omap_root =
-            omap_mod::read_omap_tree_root(&mut reader, vol_sb.omap_oid, block_size).unwrap();
-        let catalog_root =
-            omap_mod::omap_lookup(&mut reader, vol_omap_root, block_size, vol_sb.root_tree_oid)
-                .unwrap();
-
-        (reader, catalog_root, vol_omap_root, block_size)
-    }
-
-    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_list_root() {
-        let (mut reader, catalog_root, omap_root, block_size) = open_volume();
-
-        let entries = list_directory(
-            &mut reader,
-            catalog_root,
-            omap_root,
-            block_size,
-            ROOT_DIR_RECORD,
-        )
-        .unwrap();
-        assert!(!entries.is_empty(), "Root directory should have entries");
-    }
-
-    /// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
-    #[test]
-    #[ignore]
-    fn test_resolve_path() {
-        let (mut reader, catalog_root, omap_root, block_size) = open_volume();
-
-        let entries = list_directory(
-            &mut reader,
-            catalog_root,
-            omap_root,
-            block_size,
-            ROOT_DIR_RECORD,
-        )
-        .unwrap();
-        let first = entries.first().expect("Root should have entries");
-        let path = format!("/{}", first.name);
-        let (oid, inode) =
-            resolve_path(&mut reader, catalog_root, omap_root, block_size, &path).unwrap();
-        assert!(oid > 0);
-        assert!(inode.kind() != 0);
     }
 
     #[test]

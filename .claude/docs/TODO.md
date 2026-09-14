@@ -181,7 +181,68 @@ One bad entry destroys the whole result.
   Add the pin to `main` or merge `dev`.
 - Decide `#[non_exhaustive]` for data enums. Blocks Tier 2. `apfs` has an
   external dependent (`startup-disk`) that would break on a new variant.
+- `hfsplus::testutil` writes a single-leaf Attributes B-tree, so nothing
+  exercises index-node descent through it. Cheaper to extend the builder than
+  to obtain a real volume: `hfsp.raw` has no attributes file at all.
 - `apfs` has no `docs/FORMATS.md`, unlike the other format crates.
+
+## Capability gaps
+
+Formats and questions the pipeline cannot currently reach. None of these is a
+defect — nothing here returns wrong data — so they sit behind everything above.
+Worth stating the cost of taking them early: each new parser enlarges the
+surface the anomaly channel has to cover, so one landed before the channel is
+one more to retrofit. `cmpfs` already added a
+`PROVISIONAL(anomaly-channel)` marker and a fifth call site to item 9.
+
+**A. No BOM parser.** Every `.pkg` carries a `Bom`; `xara` extracts it as
+opaque bytes and nothing reads it. Two consequences. Listing a payload's
+contents currently goes through `PbzxArchive::list`, which materialises the
+whole decompressed cpio stream because cpio has no index — a 5 GB payload
+costs 5 GB of decompression to answer what is in it, where the BOM answers the
+same question from a few hundred KB of random-access B-tree. And the BOM
+carries a CRC32 per file, which the `newc` format Apple ships structurally
+cannot, so per-file integrity is unavailable from the payload alone.
+Separately, `/var/db/receipts/*.bom` on an extracted system volume records
+what an installer actually wrote, and is unreachable today. The format is
+small and well understood, and `hfsplus/src/attributes.rs` is a recent worked
+example of the same shape. The name `bom` is taken on crates.io.
+
+**B. Apple Archive (AA1, `.aar`) is not read at all.** It is the format that
+follows pbzx, and the pipeline dead-ends on it: `pbzx/src/format.rs` knows
+only the `pbzx` magic and `dpp` has no fallback detection, so an archive in
+the newer format is reported as malformed rather than unsupported. It appears
+in cryptexes, Command Line Tools distribution and modern installer assets.
+Undocumented — it would be reverse-engineered from `libNeoAppleArchive` — and
+the largest item on this list by some margin.
+
+**C. LZBITMAP has no pure-Rust decoder.** `cmpfs` returns `Unsupported` for
+decmpfs types 13 and 14 for this reason. crates.io has FFI bindings to Apple's
+own framework, which are macOS-only, and two placeholder name reservations;
+there is nothing to depend on. The codec is shared between decmpfs and Apple
+Archive, so one decoder closes `cmpfs`'s remaining gap and removes the hardest
+part of B.
+
+**Whether C is a gap or a defect is unmeasured.** If `ditto --hfsCompression`
+on a current macOS emits types 13 or 14 for ordinary files, then shipped code
+fails on ordinary input and this belongs in Tier 1 instead. Running
+`cmpfs/tools/mint-fixtures.py` answers it; nothing else can.
+
+**D. No signature verification for XAR or pkg.** The TOC is CMS-signed and
+`xara` parses the TOC but not its `<signature>` / `<x-signature>` elements, so
+the toolchain cannot answer whether a package was signed or by whom. It should
+be an off-by-default feature on `xara`, not a separate crate: verification
+needs the raw compressed TOC bytes, the header's checksum offsets and the
+signature's heap position, all currently private. Splitting it would mean
+widening `xara`'s public API to byte granularity purely to feed a sibling, and
+pinning the internal layout in semver. Note the overlap with the `xara` items
+below, and that `toc.rs` has recent changes.
+
+**E. `list_directory` reports the data-fork size, so a decmpfs-compressed file
+lists as 0 bytes** while `stat` on the same path reports its real size. Both
+are honest about what they read and they disagree, which is confusing rather
+than wrong. Resolving it costs an attribute lookup per entry, which is why
+`stat` is documented as authoritative instead.
 
 ## Open in xara
 

@@ -225,8 +225,9 @@ part of B.
 
 **Whether C is a gap or a defect is unmeasured.** If `ditto --hfsCompression`
 on a current macOS emits types 13 or 14 for ordinary files, then shipped code
-fails on ordinary input and this belongs in Tier 1 instead. Running
-`cmpfs/tools/mint-fixtures.py` answers it; nothing else can.
+fails on ordinary input and this belongs in Tier 1 instead. Compressing a file on a
+current Mac and reading back its `com.apple.decmpfs` attribute answers it;
+nothing else can.
 
 **D. No signature verification for XAR or pkg.** The TOC is CMS-signed and
 `xara` parses the TOC but not its `<signature>` / `<x-signature>` elements, so

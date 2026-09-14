@@ -22,5 +22,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   user one. `com.apple.ResourceFork` is only machinery on a compressed file —
   on an uncompressed one it is user data, which is why a name alone cannot
   decide
-- `tools/mint-fixtures.py` generates fixtures from a real macOS filesystem, and
-  ignored tests in `tests/real_fixtures.rs` decode them
+- Ignored tests in `tests/real_fixtures.rs` decode fixtures captured from a
+  real macOS filesystem; that file documents the layout they expect

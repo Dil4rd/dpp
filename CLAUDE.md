@@ -80,8 +80,8 @@ If a change touches a format parser, also run the fixture tests. They are `#[ign
 cargo test -p apfs -- --ignored     # likewise hfsplus, udif, dpp, cmpfs
 ```
 
-`cmpfs`'s fixtures are generated rather than collected — see
-`cmpfs/tools/mint-fixtures.py`, which must run on a Mac.
+`cmpfs`'s fixtures are generated rather than collected, on a Mac; the layout
+is documented in `cmpfs/tests/real_fixtures.rs`.
 
 `dpp-python` is excluded from checks 3 and 4 because they run without Python headers. It is **not** excluded from clippy — do not add `--exclude dpp-python` to check 2. Its exhaustive `ApfsError` match is what catches a new error variant that has no Python mapping.
 

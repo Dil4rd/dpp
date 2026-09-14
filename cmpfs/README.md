@@ -97,18 +97,17 @@ A payload that does not produce exactly the size its header declares is an
 error, not a short buffer.
 
 To check the decoder against bytes Apple actually wrote rather than bytes
-reconstructed from a reference, mint fixtures on a Mac and run the ignored
-tests:
+reconstructed from a reference, generate fixtures on a Mac — the layout is
+documented in `tests/real_fixtures.rs` — and run the ignored tests:
 
 ```bash
-python3 cmpfs/tools/mint-fixtures.py tests/decmpfs   # on macOS
-cargo test -p cmpfs -- --ignored                     # anywhere
+cargo test -p cmpfs -- --ignored
 ```
 
-The script needs `getxattr` with `XATTR_SHOWCOMPRESSION`, because the kernel
-hides both `com.apple.decmpfs` and a compressed file's resource fork from
-ordinary reads — `xattr -l` on a compressed file prints nothing. See the script
-header for the deciding lines in xnu.
+Capturing those bytes needs `getxattr` with `XATTR_SHOWCOMPRESSION`, because
+the kernel hides both `com.apple.decmpfs` and a compressed file's resource fork
+from ordinary reads — `xattr -l` on a compressed file prints nothing. See
+[`docs/FORMATS.md`](docs/FORMATS.md) for the deciding lines in xnu.
 
 ## License
 

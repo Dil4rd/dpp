@@ -1,8 +1,8 @@
 //! Decode payloads that macOS itself wrote.
 //!
-//! Requires `../tests/decmpfs`, produced by `cmpfs/tools/mint-fixtures.py` on
-//! a Mac. Ignored like the other fixture tests, so neither `cargo test` nor CI
-//! runs it:
+//! Requires `../tests/decmpfs`, generated on a Mac: see the layout below.
+//! Ignored like the other fixture tests, so neither `cargo test` nor CI runs
+//! it:
 //!
 //! ```text
 //! cargo test -p cmpfs -- --ignored
@@ -12,6 +12,23 @@
 //! rather than bytes reconstructed from a reference implementation. Types 8, 10
 //! and 12 rest on a single reader that marks two of them assumptions, so they
 //! are the reason this exists.
+//!
+//! # Fixture layout
+//!
+//! Per case, taken from a file macOS has compressed — `ditto --hfsCompression`
+//! produces one:
+//!
+//! - `<name>.decmpfs` — the `com.apple.decmpfs` attribute, verbatim
+//! - `<name>.rsrc` — the resource fork, verbatim, for the types that use one
+//! - `<name>.expected` — the original uncompressed bytes
+//!
+//! plus `manifest.tsv`, whose rows are `name`, compression type, declared
+//! size, actual size, attribute length, resource-fork length, sha256 and a
+//! description. Lines beginning `#` are comments.
+//!
+//! Capturing the first two needs `getxattr` with `XATTR_SHOWCOMPRESSION`
+//! (`bsd/sys/xattr.h`): the kernel hides both on a compressed file, so
+//! `xattr(1)` reports neither. See `docs/FORMATS.md`.
 
 use std::path::{Path, PathBuf};
 
@@ -31,7 +48,7 @@ fn manifest() -> Vec<Fixture> {
     let path = PathBuf::from(DIR).join("manifest.tsv");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
         panic!(
-            "{}: {e}\nrun cmpfs/tools/mint-fixtures.py on a Mac",
+            "{}: {e}\ngenerate the fixtures on a Mac; see this file's header",
             path.display()
         )
     });

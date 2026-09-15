@@ -31,6 +31,12 @@ lost extent records, so it is a short count rather than fabricated zeros.
 
 The `read_file` half of item 7 in hfsplus 0.3.0; see that entry for the rest.
 
+Item 5 in apfs 0.4.0-dev: the six unverified `read_block` sites in `btree`,
+`omap` and `lib` go through `read_object`, so every metadata block is
+Fletcher-64 verified and a corrupt one fails with `InvalidChecksum` instead
+of being parsed. Synthetic corrupt-node tests cover the b-tree paths; all
+fixture tests still pass, as the pre-switch measurement predicted.
+
 ## Next: the anomaly channel
 
 Design options, prior art and a staged proposal are in
@@ -61,26 +67,6 @@ degrade-and-report, not a new abort:
 - erroring on over-long decodes (`udif`)
 
 ## Tier 1 remainder: defects returning wrong data
-
-**5. apfs reads are unverified** `[verified]` — high. **Measured; safe to
-proceed.** A tracing run over `appfs.raw` (`ApfsVolume::open` + `walk()`,
-302 entries) touched 61 distinct blocks through those six sites; all 61 pass
-`fletcher::verify_object`, so `fletcher.rs` is correct as written and the
-switch would not reject this healthy image. The only failures anywhere were
-4 all-zero blocks (197367-197370), unwritten slots in the checkpoint
-descriptor ring — their stored checksum is 0 and the Fletcher-64 of an
-all-zero buffer is `0xFFFF_FFFF_FFFF_FFFF`. Those are read by
-`find_latest_nxsb` (`superblock.rs:291`), which already calls
-`verify_object` and uses the failure to *identify* unused slots; it is not
-one of the six sites and is unaffected.
-
-`read_object` (`apfs/src/object.rs:73`) checks Fletcher-64 and is **never
-called**. Every b-tree, omap and volume read uses the non-verifying
-`read_block`: `btree.rs:375,486,514,581`, `omap.rs:20`, `lib.rs:109`.
-Superblock and checkpoint reads *are* verified (`superblock.rs:298,344,356`),
-so it is not total. Measure `appfs.raw` for Fletcher failures before switching
-— the same block-audit approach used for the DMGs — since this could reject
-real images.
 
 **7. hfsplus `read_fork_data` reports a short read as success** `[verified]`
 — med, and waiting on the anomaly channel by design.

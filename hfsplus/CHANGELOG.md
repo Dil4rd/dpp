@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking behaviour:** `stat` derives its kind from the file mode, so a
+  symlink is `EntryKind::Symlink` in `stat` as it always was in
+  `list_directory`, instead of `File` in one and `Symlink` in the other
+- **Breaking behaviour:** `list_directory` and `walk` report the decmpfs
+  uncompressed size for a compressed file, matching `stat`; the raw data
+  fork of such a file is empty, so listings previously said 0 where `stat`
+  said the real length
 - **Breaking:** `btree::search_btree` takes a fallible comparator
   (`Fn(&[u8]) -> Result<Ordering>`). A B-tree key that cannot be decoded now
   fails the operation with the parse error instead of ordering `Less`, which

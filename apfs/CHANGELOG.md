@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking behaviour:** `list_directory` and `walk` report the size `stat`
+  reports: the decmpfs uncompressed size for a compressed file and the
+  target length for a symlink, where the inode itself records 0. A listing
+  and a `stat` of the same path no longer disagree
 - **Breaking behaviour:** a catalog or object-map key that cannot be decoded
   fails the lookup or scan with `CorruptedData` instead of ordering `Less`,
   which silently steered the search past the damage and reported records

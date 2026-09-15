@@ -155,3 +155,28 @@ fn test_read_btree_header_from_real_volume() {
     assert!(catalog_header.root_node > 0);
     assert!(catalog_header.leaf_records > 0);
 }
+
+/// Requires ../tests/hfsp.raw fixture. Run with `cargo test -- --ignored`.
+///
+/// `list_directory`, `walk` and `stat` must tell one story: sizes match and
+/// a symlink is a symlink in both, not a symlink in the listing and a
+/// regular file in `stat`.
+#[test]
+#[ignore]
+fn test_walk_entries_agree_with_stat() {
+    let file = std::fs::File::open("../tests/hfsp.raw").unwrap();
+    let mut vol = HfsVolume::open(std::io::BufReader::new(file)).unwrap();
+
+    let entries = vol.walk().unwrap();
+    let mut symlinks = 0usize;
+    for entry in &entries {
+        let stat = vol.stat(&entry.path).unwrap();
+        assert_eq!(entry.entry.size, stat.size, "size of {}", entry.path);
+        assert_eq!(entry.entry.kind, stat.kind, "kind of {}", entry.path);
+        if entry.entry.kind == EntryKind::Symlink {
+            symlinks += 1;
+        }
+    }
+    // The stat-kind fix is only exercised if the fixture has symlinks.
+    assert!(symlinks > 0, "fixture should contain symlinks");
+}

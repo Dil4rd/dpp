@@ -372,7 +372,7 @@ pub fn btree_lookup<R: Read + Seek, F>(
 where
     F: Fn(&[u8]) -> std::cmp::Ordering,
 {
-    let block_data = object::read_block(reader, root_block, block_size)?;
+    let (_, block_data) = object::read_object(reader, root_block, block_size)?;
     let node = BTreeNode::parse(&block_data)?;
 
     // Get fixed sizes from BTreeInfo if available (root node)
@@ -483,7 +483,7 @@ where
         let child_block =
             resolve_child_oid(reader, child_oid, params.block_size, params.omap_root)?;
 
-        let child_data = object::read_block(reader, child_block, params.block_size)?;
+        let (_, child_data) = object::read_object(reader, child_block, params.block_size)?;
         let child_node = BTreeNode::parse(&child_data)?;
 
         btree_lookup_node(reader, &child_node, params, compare_fn)
@@ -511,7 +511,7 @@ pub fn btree_scan<R: Read + Seek, F>(
 where
     F: Fn(&[u8]) -> std::cmp::Ordering,
 {
-    let block_data = object::read_block(reader, root_block, block_size)?;
+    let (_, block_data) = object::read_object(reader, root_block, block_size)?;
     let node = BTreeNode::parse(&block_data)?;
 
     let (fks, fvs) = if let Some(ref info) = node.info {
@@ -578,7 +578,7 @@ where
             let child_oid = node.child_oid(i)?;
             let child_block =
                 resolve_child_oid(reader, child_oid, params.block_size, params.omap_root)?;
-            let child_data = object::read_block(reader, child_block, params.block_size)?;
+            let (_, child_data) = object::read_object(reader, child_block, params.block_size)?;
             let child_node = BTreeNode::parse(&child_data)?;
 
             if !btree_scan_node(reader, &child_node, params, compare_fn, results)? {
@@ -588,3 +588,6 @@ where
         Ok(true)
     }
 }
+
+#[cfg(test)]
+mod tests;

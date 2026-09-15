@@ -149,7 +149,7 @@ impl<R: Read + Seek> ApfsVolume<R> {
         let vol_block = omap::omap_lookup(&mut reader, container_omap_root, block_size, vol_oid)?;
 
         // Step 6: Parse volume superblock
-        let vol_data = object::read_block(&mut reader, vol_block, block_size)?;
+        let (_, vol_data) = object::read_object(&mut reader, vol_block, block_size)?;
         let vol_sb = superblock::ApfsSuperblock::parse(&vol_data)?;
 
         // Step 7: Read volume OMAP

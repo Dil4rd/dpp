@@ -17,7 +17,7 @@ pub fn read_omap_tree_root<R: Read + Seek>(
     omap_block: u64,
     block_size: u32,
 ) -> Result<u64> {
-    let block_data = object::read_block(reader, omap_block, block_size)?;
+    let (_, block_data) = object::read_object(reader, omap_block, block_size)?;
 
     // omap_phys_t layout after obj_phys_t (32 bytes):
     //   om_flags: u32 (4)

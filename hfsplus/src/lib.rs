@@ -153,12 +153,28 @@ impl<R: Read + Seek> HfsVolume<R> {
     /// List entries in a directory by path
     pub fn list_directory(&mut self, path: &str) -> Result<Vec<DirEntry>> {
         let cnid = self.resolve_path_to_cnid(path)?;
-        catalog::list_directory(
+        let mut entries = catalog::list_directory(
             &mut self.reader,
             &self.header,
             &self.catalog_btree_header,
             cnid,
-        )
+        )?;
+        self.resolve_entry_sizes(&mut entries)?;
+        Ok(entries)
+    }
+
+    /// Make listed sizes agree with `stat`: a compressed file's data fork is
+    /// empty, so its listed size is the decmpfs header's uncompressed size,
+    /// exactly as `stat` reports it.
+    fn resolve_entry_sizes(&mut self, entries: &mut [DirEntry]) -> Result<()> {
+        for entry in entries.iter_mut() {
+            if entry.kind == EntryKind::File
+                && let Some(header) = self.compression(entry.cnid)?
+            {
+                entry.size = header.uncompressed_size;
+            }
+        }
+        Ok(())
     }
 
     /// The Attributes B-tree header, or `None` on a volume with no attributes
@@ -380,7 +396,13 @@ impl<R: Read + Seek> HfsVolume<R> {
                 let compression = self.compression(f.file_id)?;
                 Ok(FileStat {
                     cnid: f.file_id,
-                    kind: EntryKind::File,
+                    // Same mode test as list_directory: a symlink is a file
+                    // record whose mode says S_IFLNK.
+                    kind: if f.permissions.file_mode & 0o170000 == 0o120000 {
+                        EntryKind::Symlink
+                    } else {
+                        EntryKind::File
+                    },
                     size: compression.map_or(f.data_fork.logical_size, |h| h.uncompressed_size),
                     create_date: f.create_date,
                     modify_date: f.content_mod_date,
@@ -475,12 +497,13 @@ impl<R: Read + Seek> HfsVolume<R> {
         parent_path: &str,
         entries: &mut Vec<WalkEntry>,
     ) -> Result<()> {
-        let dir_entries = catalog::list_directory(
+        let mut dir_entries = catalog::list_directory(
             &mut self.reader,
             &self.header,
             &self.catalog_btree_header,
             parent_cnid,
         )?;
+        self.resolve_entry_sizes(&mut dir_entries)?;
 
         for entry in dir_entries {
             let full_path = if parent_path.is_empty() {

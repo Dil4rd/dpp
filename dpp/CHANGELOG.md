@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking:** `FsFileStat` gains `compression_type`. Transparently
   compressed files now read as their contents rather than as nothing, and
   report their decompressed size
+- **Breaking behaviour:** `FsDirEntry` and `FsWalkEntry` agree with
+  `FsFileStat` for the same path: listed sizes are decmpfs-resolved (both
+  filesystems) and symlink-target lengths (APFS), and an HFS+ symlink is a
+  symlink in both the listing and `stat`
 
 ## [0.5.0] - 2026-09-07
 

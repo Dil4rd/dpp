@@ -267,27 +267,29 @@ fn parse_catalog_record(data: &[u8]) -> Result<CatalogRecord> {
 
 /// Compare a catalog key in a B-tree record against a target (parent_id, name).
 /// For HFSX: binary name comparison. For HFS+: case-insensitive.
+///
+/// An undecodable key fails the whole operation. Any ordering guessed for it
+/// would steer the descent past the damage and report a record that exists as
+/// absent. PROVISIONAL(anomaly-channel): fail now, degrade to a reported miss
+/// once there is somewhere to report to.
 fn make_catalog_comparator(
     target_parent_id: u32,
     target_name: &[u16],
     is_hfsx: bool,
-) -> impl Fn(&[u8]) -> std::cmp::Ordering + '_ {
+) -> impl Fn(&[u8]) -> Result<std::cmp::Ordering> + '_ {
     move |record_data: &[u8]| {
-        let (key, _) = match parse_catalog_key(record_data) {
-            Ok(k) => k,
-            Err(_) => return std::cmp::Ordering::Less,
-        };
+        let (key, _) = parse_catalog_key(record_data)?;
 
         match key.parent_id.cmp(&target_parent_id) {
             std::cmp::Ordering::Equal => {}
-            ord => return ord,
+            ord => return Ok(ord),
         }
 
-        if is_hfsx {
+        Ok(if is_hfsx {
             unicode::compare_binary(&key.node_name, target_name)
         } else {
             unicode::compare_case_insensitive(&key.node_name, target_name)
-        }
+        })
     }
 }
 
@@ -427,7 +429,7 @@ fn find_leaf_for_parent<R: Read + Seek>(
     reader: &mut R,
     btree_header: &BTreeHeaderRecord,
     _parent_cnid: u32,
-    comparator: &dyn Fn(&[u8]) -> std::cmp::Ordering,
+    comparator: &dyn Fn(&[u8]) -> Result<std::cmp::Ordering>,
 ) -> Result<u32> {
     if btree_header.root_node == 0 {
         return Ok(0);
@@ -448,7 +450,7 @@ fn find_leaf_for_parent<R: Read + Seek>(
 
                 for i in 0..node.descriptor.num_records as usize {
                     let record_data = node.record_data(i)?;
-                    match comparator(record_data) {
+                    match comparator(record_data)? {
                         std::cmp::Ordering::Less | std::cmp::Ordering::Equal => {
                             child_node = btree::extract_index_child_pub(record_data)?;
                             found = true;
@@ -562,4 +564,16 @@ fn lookup_root_folder<R: Read + Seek>(
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    #[test]
+    fn undecodable_key_is_an_error_not_a_miss() {
+        // Too short to hold a catalog key. Ordering it (the old behaviour was
+        // `Less`) would steer the descent past the damage and report a record
+        // that exists as absent.
+        let name = unicode::string_to_utf16("file");
+        let comparator = make_catalog_comparator(2, &name, false);
+        assert!(comparator(&[0u8; 3]).is_err());
+    }
+}

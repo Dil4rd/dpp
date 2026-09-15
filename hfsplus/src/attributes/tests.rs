@@ -91,7 +91,7 @@ fn orders_by_file_then_name_then_start_block() {
     use std::cmp::Ordering;
     let name = unicode::string_to_utf16("bbb");
 
-    let cmp = |record: &[u8]| compare_key(record, 42, &name, 0);
+    let cmp = |record: &[u8]| compare_key(record, 42, &name, 0).expect("decodable key");
     assert_eq!(cmp(&key(41, "bbb", 0)), Ordering::Less);
     assert_eq!(cmp(&key(43, "bbb", 0)), Ordering::Greater);
     assert_eq!(cmp(&key(42, "aaa", 0)), Ordering::Less);
@@ -101,6 +101,15 @@ fn orders_by_file_then_name_then_start_block() {
     assert_eq!(cmp(&key(42, "bbbb", 0)), Ordering::Greater);
     assert_eq!(cmp(&key(42, "bbb", 0)), Ordering::Equal);
     assert_eq!(cmp(&key(42, "bbb", 8)), Ordering::Greater);
+}
+
+#[test]
+fn undecodable_key_is_an_error_not_a_miss() {
+    // Too short to hold an attribute key. Ordering it (the old behaviour was
+    // `Less`) would steer the descent past the damage and report an attribute
+    // that exists as absent.
+    let name = unicode::string_to_utf16("bbb");
+    assert!(compare_key(&[0u8; 3], 42, &name, 0).is_err());
 }
 
 #[test]

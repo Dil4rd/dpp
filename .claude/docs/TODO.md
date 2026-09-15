@@ -37,6 +37,16 @@ Fletcher-64 verified and a corrupt one fails with `InvalidChecksum` instead
 of being parsed. Synthetic corrupt-node tests cover the b-tree paths; all
 fixture tests still pass, as the pre-switch measurement predicted.
 
+Item 9 in apfs and hfsplus 0.4.0-dev: comparators are fallible
+(`Fn(&[u8]) -> Result<Ordering>`, a breaking change to the public
+`hfsplus::btree::search_btree`), and all five sites fail on an undecodable
+key instead of ordering `Less` past the damage. Each site carries
+`PROVISIONAL(anomaly-channel)`: the target state is a reported miss with the
+affected key range, not an abort. No fixture can trigger the old false
+negative — a corrupt key cannot exist in a healthy image — so unit tests on
+the comparators are the only coverage, and fixture tests pin the healthy
+path.
+
 ## Next: the anomaly channel
 
 Design options, prior art and a staged proposal are in
@@ -100,14 +110,6 @@ Correction to the earlier audit note: this is a loud error, not a silent short
 read. `open_file` is affected; `read_file` is not, because `read_fork_data`
 (`extents.rs:165`) does consult the overflow tree. Fixing it means threading
 the extents B-tree into the constructor — closer to feature work than a fix.
-
-**9. Comparators return `Less` on undecodable keys** `[verified]` — high.
-`apfs/src/catalog.rs:510`, `apfs/src/omap.rs:60`, `hfsplus/src/catalog.rs:278`,
-`hfsplus/src/extents.rs:240`, and now `hfsplus/src/attributes.rs` — the
-attribute comparator follows the same convention deliberately, so fixing this
-means fixing all five together. A malformed key steers the descent past itself,
-producing a false negative: a file that exists reports as not found. Touches
-the comparator contract, so agree the approach first.
 
 ## Tier 2: silent data modification
 

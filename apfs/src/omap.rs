@@ -55,16 +55,23 @@ pub fn omap_lookup<R: Read + Seek>(
     // Strategy: use btree_scan to find all entries for this OID, then pick the
     // one with the highest xid. This is simpler than trying to do a range query.
 
-    let compare_fn = |key: &[u8]| -> std::cmp::Ordering {
+    // A short key fails the lookup rather than ordering `Less`, which would
+    // steer the descent past the damage and report a mapping that exists as
+    // absent. PROVISIONAL(anomaly-channel): fail now, degrade to a reported
+    // miss once there is somewhere to report to.
+    let compare_fn = |key: &[u8]| -> Result<std::cmp::Ordering> {
         if key.len() < 16 {
-            return std::cmp::Ordering::Less;
+            return Err(ApfsError::CorruptedData(format!(
+                "omap key too short: {} bytes",
+                key.len()
+            )));
         }
         let key_oid = u64::from_le_bytes([
             key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
         ]);
         // Compare only by OID. For equal OIDs, we consider the key "equal" to let
         // btree_lookup find the first match, then we'll use scan for the latest xid.
-        key_oid.cmp(&target_oid)
+        Ok(key_oid.cmp(&target_oid))
     };
 
     // First try a direct lookup — this finds the first entry with matching OID

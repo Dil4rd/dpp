@@ -253,6 +253,11 @@ pub fn compute_fork_offset(fork: &ForkData, block_size: u32, offset_in_fork: u64
 /// - Less means the record key is less than the search key
 /// - Greater means the record key is greater than the search key
 /// - Equal means exact match
+///
+/// A comparator that cannot decode a key must return `Err` rather than an
+/// ordering. Any ordering it guessed would steer the descent or end the leaf
+/// scan on a damaged key, reporting a record that exists as absent — a false
+/// negative indistinguishable from a genuine miss.
 pub fn search_btree<R, F>(
     reader: &mut R,
     btree_header: &BTreeHeaderRecord,
@@ -260,7 +265,7 @@ pub fn search_btree<R, F>(
 ) -> Result<Option<(BTreeNode, usize)>>
 where
     R: Read + Seek,
-    F: Fn(&[u8]) -> std::cmp::Ordering,
+    F: Fn(&[u8]) -> Result<std::cmp::Ordering>,
 {
     if btree_header.root_node == 0 {
         return Ok(None);
@@ -276,7 +281,7 @@ where
                 // Search through leaf records for an exact match
                 for i in 0..node.descriptor.num_records as usize {
                     let record_data = node.record_data(i)?;
-                    match compare_key(record_data) {
+                    match compare_key(record_data)? {
                         std::cmp::Ordering::Equal => return Ok(Some((node, i))),
                         std::cmp::Ordering::Greater => return Ok(None),
                         std::cmp::Ordering::Less => continue,
@@ -292,7 +297,7 @@ where
 
                 for i in 0..node.descriptor.num_records as usize {
                     let record_data = node.record_data(i)?;
-                    match compare_key(record_data) {
+                    match compare_key(record_data)? {
                         std::cmp::Ordering::Less | std::cmp::Ordering::Equal => {
                             // Extract child node pointer from the end of the record
                             child_node = extract_index_child(record_data)?;

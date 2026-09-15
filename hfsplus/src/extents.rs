@@ -237,9 +237,16 @@ fn lookup_overflow_extents<R: Read + Seek>(
     fork_type: u8,
     start_block: u32,
 ) -> Result<Vec<ExtentDescriptor>> {
-    let comparator = move |record_data: &[u8]| -> std::cmp::Ordering {
+    // An undecodable key fails the lookup rather than ordering `Less`, which
+    // would steer the descent past the damage and report extents that exist
+    // as absent. PROVISIONAL(anomaly-channel): fail now, degrade to a
+    // reported miss once there is somewhere to report to.
+    let comparator = move |record_data: &[u8]| -> Result<std::cmp::Ordering> {
         if record_data.len() < 12 {
-            return std::cmp::Ordering::Less;
+            return Err(HfsPlusError::InvalidBTree(format!(
+                "extent key too short: {} bytes",
+                record_data.len()
+            )));
         }
         // Extent key: key_length(2) + fork_type(1) + pad(1) + file_id(4) + start_block(4)
         let _key_length = u16::from_be_bytes([record_data[0], record_data[1]]);
@@ -259,13 +266,13 @@ fn lookup_overflow_extents<R: Read + Seek>(
 
         match rec_file_id.cmp(&file_id) {
             std::cmp::Ordering::Equal => {}
-            ord => return ord,
+            ord => return Ok(ord),
         }
         match rec_fork_type.cmp(&fork_type) {
             std::cmp::Ordering::Equal => {}
-            ord => return ord,
+            ord => return Ok(ord),
         }
-        rec_start_block.cmp(&start_block)
+        Ok(rec_start_block.cmp(&start_block))
     };
 
     match btree::search_btree(reader, extents_btree, &comparator)? {

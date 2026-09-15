@@ -34,15 +34,21 @@ The `read_file` half of item 7 in hfsplus 0.3.0; see that entry for the rest.
 ## Next: the anomaly channel
 
 Design options, prior art and a staged proposal are in
-[Anomaly Channel](ANOMALY-CHANNEL.md) — proposed, awaiting review.
+[Anomaly Channel](ANOMALY-CHANNEL.md) — proposed, awaiting review. Agreed
+scope: a slim channel (uncapped counts plus capped, region-carrying detail)
+on the handle, strict by default; every whole-object operation reports
+uncovered subranges of its own scope. Coverage maps and the unaccounted-space
+check are deferred to a later `validate` iteration; `dpp-tool` is the first
+consumer.
 
 **This is the critical path, ahead of the remaining Tier 1 items.** Nearly
 everything below is "containable, needs reporting", and tightening those first
 just adds more `PROVISIONAL(anomaly-channel)` markers to unwind later.
 
-Model it on `pbzx`'s `ExtractStats`, but carry the affected **byte range**, not
-a counter. "bytes 4096-4608 of partition 0 were not recovered" is
-investigable; "1 block skipped" is not.
+Model it on `pbzx`'s `ExtractStats`, but carry the affected **region** in the
+format's own address space — byte range, key range, or TOC subtree — not a
+counter. "bytes 4096-4608 of partition 0 were not recovered" is investigable;
+"1 block skipped" is not.
 
 `rg 'PROVISIONAL\(anomaly-channel\)'` lists the sites to revisit once it
 exists. `rg 'DELIBERATE\(fatal\)'` lists the one that must **not** be relaxed

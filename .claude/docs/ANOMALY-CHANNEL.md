@@ -2,7 +2,8 @@
 
 > **Status: proposed, not adopted.** Design options for the reporting channel
 > required by [Forensic Direction](FORENSIC-DIRECTION.md), which is itself still
-> proposed. Nothing here is a rule.
+> proposed. Nothing here is a rule. The agreed scope is in
+> [Recommendation](#recommendation).
 
 ## The problem
 
@@ -75,17 +76,37 @@ not enumerated*. The number of lost records is unknown; the affected extent is
 not. A failure is a single located event whether the node was a leaf or an
 interior branch.
 
-### Three tiers
+### Coverage is reconciliation against a scope
+
+A "not attempted" region is only meaningful relative to what was asked for.
+Splitting by scope removes the need for an always-on coverage map:
+
+- **A gap inside a requested scope.** `read_file` requests `[0, logical_size)`;
+  `walk` requests a whole catalog. A subrange of that scope covered by no
+  extent or subtree is detectable at operation end — or up front for
+  absolutely addressed formats: `ApfsForkReader` holds its whole extent map at
+  construction — and is reported as an ordinary region-carrying anomaly.
+  **Invariant: every whole-object operation reports uncovered subranges of its
+  own scope as anomalies.** Needs no map, only end-of-scope reconciliation;
+  without it, `read_file` returns zero-padded buffers again.
+- **Space no object accounts for.** Volume-level and cross-object, so no
+  single operation's scope can find it. Needs the format's own accounting
+  (APFS spaceman, HFS+ allocation file) — structures the readers do not
+  parse — and is only meaningful under an explicit full-scan contract, like
+  `fsck`. **Deferred** (see [Recommendation](#recommendation)): no
+  `PROVISIONAL(anomaly-channel)` site and no audit finding needs it.
+
+### Tiers
 
 | Tier | Content | Cap policy |
 |---|---|---|
-| Coverage | which regions of the address space are accounted for | never capped |
 | Counts | per-kind totals | never capped |
-| Detail | message and context per instance | capped: first N located examples |
+| Detail | message, region and context per instance | capped: first N located examples |
 
-Counts stay uncapped alongside coverage because first-N locations alone cannot
-distinguish 20 lost entries from 20,000, and that difference decides whether a
-result is usable.
+Counts stay uncapped because first-N locations alone cannot distinguish 20
+lost entries from 20,000, and that difference decides whether a result is
+usable. A full coverage map exists only as the artifact of an explicit
+validate operation, not as a byproduct of reads.
 
 ## Prior art
 
@@ -136,6 +157,22 @@ Degradation must be data, not logging.
 *Evidence quality: issue tracker and wiki, not libfsapfs source. A read of the
 library's posture, not a line-level claim.*
 
+### The Sleuth Kit — FILLER runs
+
+`TSK_FS_ATTR_RUN_FLAG_FILLER` marks a synthesized placeholder in a file's run
+list, "a filler for a run that has not been seen yet in the processing (or has
+been lost)", distinct from `TSK_FS_ATTR_RUN_FLAG_SPARSE` for genuine holes.
+
+**Applicable:** per-file region provenance for lost extents shipping in a
+mature forensic tool — and it separates *absent by design* from *absent
+because lost* exactly as the scope reconciliation above does.
+
+**Not applicable:** the error channel is a single-slot per-thread errno with
+no accumulation, and `tsk_verbose` is unstructured stderr.
+
+*Evidence quality: TSK API documentation and `fs_attr.c`, not exercised
+against a corrupt image.*
+
 ### GNU ddrescue — the mapfile
 
 Each record is two integers and a status character: start position, size, and
@@ -155,7 +192,22 @@ three distinguishable states. A `Vec<Anomaly>` cannot represent the second: a
 problem list enumerates what went wrong but cannot answer which parts of the
 artifact are real. The status characters also encode how hard the tool tried,
 and the mapfile is a persistable, resumable artifact rather than an in-memory
-report.
+report. The mapfile belongs to the copy-everything command, not to `read()`:
+coverage as an explicit operation.
+
+### DFXML — an interchange format for coverage
+
+PhotoRec's `report.xml` is DFXML: one `fileobject` per recovered file with
+`byte_run` elements carrying `img_offset`, `len` and a `fill` attribute for
+synthesized content. NIST maintains a converter that renders ddrescue
+mapfiles as the `byte_runs` of a DFXML `diskimageobject` — the coverage-map
+usage in practice.
+
+**Applicable:** a machine-readable region format the DFIR ecosystem already
+consumes; a candidate output for `dpp-tool validate`.
+
+**Not applicable:** no typed per-region reasons or confidence, and its
+`error` element is free text.
 
 ### Prisma `Diagnostics` — accumulate, then decide
 
@@ -172,11 +224,16 @@ code path.
 
 ### No existing crate to depend on
 
-Nothing models region provenance over a recovered artifact. The Rust
-diagnostics crates (`miette`, rust-analyzer's and Prisma's internal types)
-target compilers and source spans. The crates.io hits for "anomaly" are
-unrelated — statistical anomaly detection, and an archived error-context
-library. This would be written here.
+Nothing in the Rust ecosystem models region provenance over a recovered
+artifact. Every binary-parsing crate checked (binrw, gimli, object, zip,
+Kaitai-generated) is error-or-value; `chumsky` is the one multi-diagnostic
+partial-result library, and it targets text ASTs. The Rust diagnostics crates
+(`miette`, rust-analyzer's and Prisma's internal types) target compilers and
+source spans. The crates.io hits for "anomaly" are unrelated — statistical
+anomaly detection, and an archived error-context library. TSK's FILLER runs
+and DFXML (above) are the closest prior art anywhere, but they are C flags
+behind FFI and an XML interchange format — evidence for the model, not a
+dependency. This would be written here.
 
 ## Options
 
@@ -246,7 +303,10 @@ Three conditions:
 
 ## Reporting overhead
 
-A shattered multi-gigabyte image could produce millions of records.
+A shattered multi-gigabyte image could produce millions of records. With
+coverage now the artifact of an explicit validate run rather than a byproduct
+of reads, most of this section applies to that run; the slim channel needs
+only region coalescing and the detail cap.
 
 **Coalesce.** Cost scales with the number of status *transitions*, not with
 damaged size — one contiguous bad region is one record whatever its length.
@@ -265,7 +325,7 @@ inline, then the overflow B-tree.
 **A bitmap floor bounds the worst case.** One bit per block is 32 MB for a 1 TB
 image at 4 KiB blocks, regardless of fragmentation.
 
-**Cap detail, not coverage or counts.** Per the three tiers above. Precedent for
+**Cap detail, not counts.** Per the tiers above. Precedent for
 capping: clang stops at `-ferror-limit=20` with "too many errors emitted,
 stopping now"; the kernel has `WARN_ONCE` and printk ratelimiting; syslog
 collapses to "last message repeated N times".
@@ -283,20 +343,33 @@ is a coverage summary, not a ten-million-entry list.
 
 ## Recommendation
 
-1. **Per-crate `Anomaly` type and accumulator on the handle (B).** No signature
-   changes, lands outside any breaking release, converts every
-   `PROVISIONAL(anomaly-channel)` site from silently dropped to recorded.
-2. **Policy layer (C and D).** `to_result()`-style conversion, strict by
-   default, plus the abort fraction. Still no signature changes.
+Slim channel now; coverage as an explicit operation later.
+
+1. **B and C together, one step: per-crate `Anomaly` type, accumulator on the
+   handle, strict by default.** The parser always records; a
+   `to_result()`-style conversion at the operation boundary maps anomalies at
+   or above the fatal threshold to `Err` unless the caller opts into relaxed
+   mode. B alone is the ignorable form; with strict as the default a caller
+   cannot obtain a degraded result without opting in — near-A enforcement
+   with no signature changes and no breaking release, and consistent with the
+   self-enforcing markers used elsewhere (`#[expect]`, `#[deprecated]`, the
+   exhaustive `ApfsError` match). Whole-object operations honour the
+   scope-reconciliation invariant from the start, and every event carries a
+   format-native region: cheap to adopt now, expensive to retrofit.
+2. **`dpp-tool validate` is the first consumer.** A subcommand that drives the
+   existing `walk`/`read_file` APIs and aggregates the reports; DFXML is a
+   candidate output. No new library primitive. The abort fraction (D) lives
+   here, where a byte-domain denominator exists.
 3. **Reporting variants with delegating wrappers (E),** under the three
    conditions above.
 4. **Type-level enforcement (A)** at data-returning entry points only, batched
    with the Tier 2 type changes into the single breaking release per crate the
    sequencing already calls for.
-5. **Shared crate last, if at all.**
-
-Decide the address-space reporting model before step 1: it is cheap to adopt
-there and expensive to retrofit later.
+5. **Deferred: a library `validate()` primitive and the unaccounted-space
+   check.** The check needs spaceman / allocation-file parsing that does not
+   exist. The slim channel's regions are the coordinates a later coverage
+   artifact is built from, so nothing above blocks it.
+6. **Shared crate last, if at all.**
 
 ## Open decisions
 
@@ -311,4 +384,14 @@ there and expensive to retrofit later.
 - **Whether a hole is an anomaly.** No. An APFS hole is genuinely zeros, not
   missing data. *Absent by design* versus *absent because we
   failed* is exactly what the coverage statuses encode; conflating them is a bug
-  in either direction.
+  in either direction. TSK draws the same line: `SPARSE` runs versus `FILLER`
+  runs.
+- **Threading.** `pbzx` and `dpp` have rayon-based `parallel` features; a
+  `&mut self` accumulator does not compose with parallel chunk decompression.
+  Per-worker accumulation merged at the join, or the caller-installed sink
+  from the overhead section.
+- **Python mapping.** Anomalies cross into `dpp-python`. Per the `ApfsError`
+  convention, the kind enum should be matched exhaustively there so a new
+  kind fails the build until it has a deliberate Python mapping. Bears on
+  where the type lives: five per-crate types → `dpp` translation → Python is
+  a triple mapping.

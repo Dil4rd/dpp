@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking behaviour:** every b-tree, object-map and volume-superblock
+  block is Fletcher-64 verified on read, failing with `InvalidChecksum`
+  instead of parsing a corrupt block as if it were intact. Container
+  superblock and checkpoint reads were already verified. Measured against
+  the fixture image before the switch: every block those paths touch
+  passes, so healthy volumes are unaffected
 - **Breaking behaviour:** `read_file` and `read_file_to` now decompress
   transparently compressed (`decmpfs`) files, which previously read as empty
 - **Breaking behaviour:** `open_file` fails on a compressed file instead of

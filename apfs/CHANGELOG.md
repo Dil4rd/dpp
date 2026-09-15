@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking behaviour:** a catalog or object-map key that cannot be decoded
+  fails the lookup or scan with `CorruptedData` instead of ordering `Less`,
+  which silently steered the search past the damage and reported records
+  that exist as absent
 - **Breaking behaviour:** every b-tree, object-map and volume-superblock
   block is Fletcher-64 verified on read, failing with `InvalidChecksum`
   instead of parsing a corrupt block as if it were intact. Container

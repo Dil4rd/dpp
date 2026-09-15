@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking:** `btree::search_btree` takes a fallible comparator
+  (`Fn(&[u8]) -> Result<Ordering>`). A B-tree key that cannot be decoded now
+  fails the operation with the parse error instead of ordering `Less`, which
+  silently steered the search past the damage and reported records that
+  exist — catalog entries, overflow extents, extended attributes — as absent
 - **Breaking behaviour:** `read_file` and `read_file_to` now decompress
   transparently compressed (`decmpfs`) files. Their data fork is empty, so
   these previously returned zero bytes for a file `stat` reported as

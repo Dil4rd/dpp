@@ -50,10 +50,10 @@ fn synthetic_root_leaf(key: u64, value: u64) -> Vec<u8> {
     block
 }
 
-fn compare_to(search: u64) -> impl Fn(&[u8]) -> std::cmp::Ordering {
+fn compare_to(search: u64) -> impl Fn(&[u8]) -> Result<std::cmp::Ordering> {
     move |key: &[u8]| {
         let k = u64::from_le_bytes(key.try_into().expect("8-byte key"));
-        k.cmp(&search)
+        Ok(k.cmp(&search))
     }
 }
 
@@ -74,6 +74,18 @@ fn lookup_rejects_a_corrupt_node() {
     let err = btree_lookup(&mut reader, 0, BLOCK_SIZE, 0, 0, &compare_to(42), None)
         .expect_err("corrupt node must not be traversed");
     assert!(matches!(err, ApfsError::InvalidChecksum), "{err:?}");
+}
+
+#[test]
+fn comparator_errors_propagate_instead_of_reading_as_a_miss() {
+    let block = synthetic_root_leaf(42, 7);
+    let mut reader = Cursor::new(block);
+    let failing = |_key: &[u8]| -> Result<std::cmp::Ordering> {
+        Err(ApfsError::CorruptedData("undecodable key".into()))
+    };
+    let err = btree_lookup(&mut reader, 0, BLOCK_SIZE, 0, 0, &failing, None)
+        .expect_err("an undecodable key must fail the lookup, not report a miss");
+    assert!(matches!(err, ApfsError::CorruptedData(_)), "{err:?}");
 }
 
 #[test]

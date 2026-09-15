@@ -94,64 +94,51 @@ fn compares_xattr_keys_by_oid_then_type_then_name() {
     let mut want = SYMLINK_XATTR_NAME.as_bytes().to_vec();
     want.push(0);
 
+    let cmp = |key: &[u8], oid: u64| compare_xattr_key(key, oid, &want).expect("decodable key");
+
     // Exact match.
     assert_eq!(
-        compare_xattr_key(&xattr_key(25, J_TYPE_XATTR, SYMLINK_XATTR_NAME), 25, &want),
+        cmp(&xattr_key(25, J_TYPE_XATTR, SYMLINK_XATTR_NAME), 25),
         Ordering::Equal
     );
 
     // OID dominates, and is compared numerically -- not as little-endian
     // bytes, which would order 0x100 before 0x02.
     assert_eq!(
-        compare_xattr_key(
-            &xattr_key(0x100, J_TYPE_XATTR, SYMLINK_XATTR_NAME),
-            0x02,
-            &want
-        ),
+        cmp(&xattr_key(0x100, J_TYPE_XATTR, SYMLINK_XATTR_NAME), 0x02),
         Ordering::Greater
     );
     assert_eq!(
-        compare_xattr_key(
-            &xattr_key(0x02, J_TYPE_XATTR, SYMLINK_XATTR_NAME),
-            0x100,
-            &want
-        ),
+        cmp(&xattr_key(0x02, J_TYPE_XATTR, SYMLINK_XATTR_NAME), 0x100),
         Ordering::Less
     );
 
     // Same OID: the record type breaks the tie, even though it is packed
     // into the high nibble of obj_id_and_type.
+    assert_eq!(cmp(&xattr_key(25, J_TYPE_INODE, ""), 25), Ordering::Less);
     assert_eq!(
-        compare_xattr_key(&xattr_key(25, J_TYPE_INODE, ""), 25, &want),
-        Ordering::Less
-    );
-    assert_eq!(
-        compare_xattr_key(&xattr_key(25, J_TYPE_DIR_REC, ""), 25, &want),
+        cmp(&xattr_key(25, J_TYPE_DIR_REC, ""), 25),
         Ordering::Greater
     );
 
     // Same OID and type: names order by bytes, ignoring the name_len field
     // that precedes them -- a longer name can still sort first.
     assert_eq!(
-        compare_xattr_key(
+        cmp(
             &xattr_key(25, J_TYPE_XATTR, "com.apple.diskimages.recentcksum"),
-            25,
-            &want
+            25
         ),
         Ordering::Less
     );
     assert_eq!(
-        compare_xattr_key(
-            &xattr_key(25, J_TYPE_XATTR, "com.apple.quarantine"),
-            25,
-            &want
-        ),
+        cmp(&xattr_key(25, J_TYPE_XATTR, "com.apple.quarantine"), 25),
         Ordering::Greater
     );
 
-    // Undecodable keys are treated as "before the target" so the scan
-    // keeps going rather than terminating early.
-    assert_eq!(compare_xattr_key(b"short", 25, &want), Ordering::Less);
+    // An undecodable key is an error, not an ordering: any guess would
+    // steer the descent past the damage and report a record that exists
+    // as absent.
+    assert!(compare_xattr_key(b"short", 25, &want).is_err());
 }
 
 #[test]

@@ -307,6 +307,42 @@ fn test_stat_reports_the_decompressed_size() {
 }
 
 #[test]
+fn test_list_directory_and_walk_agree_with_stat() {
+    // A compressed file's data fork is empty, so a listing that reports the
+    // raw fork would say 0 where stat says the decompressed size.
+    let content = b"nineteen characters";
+    let mut payload = vec![0xff];
+    payload.extend_from_slice(content);
+
+    let image = HfsPlusImageBuilder::new()
+        .add_file_with_xattrs(
+            "c.txt",
+            b"",
+            0o644,
+            &[(
+                "com.apple.decmpfs",
+                &decmpfs_attr(3, content.len() as u64, &payload),
+            )],
+            b"",
+        )
+        .add_file("plain.txt", b"plain", 0o644)
+        .build();
+
+    let mut vol = HfsVolume::open(Cursor::new(image)).unwrap();
+
+    for entry in vol.list_directory("/").unwrap() {
+        let stat = vol.stat(&format!("/{}", entry.name)).unwrap();
+        assert_eq!(entry.size, stat.size, "{}", entry.name);
+        assert_eq!(entry.kind, stat.kind, "{}", entry.name);
+    }
+    for walked in vol.walk().unwrap() {
+        let stat = vol.stat(&walked.path).unwrap();
+        assert_eq!(walked.entry.size, stat.size, "{}", walked.path);
+        assert_eq!(walked.entry.kind, stat.kind, "{}", walked.path);
+    }
+}
+
+#[test]
 fn test_compression_attributes_are_classified_apart() {
     let content = b"compressed body";
     let mut payload = vec![0xff];

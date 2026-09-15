@@ -212,13 +212,37 @@ impl<R: Read + Seek> ApfsVolume<R> {
             oid
         };
 
-        catalog::list_directory(
+        let mut entries = catalog::list_directory(
             &mut self.reader,
             self.catalog_root_block,
             self.vol_omap_root_block,
             self.block_size,
             parent,
-        )
+        )?;
+        self.resolve_entry_sizes(&mut entries)?;
+        Ok(entries)
+    }
+
+    /// Make listed sizes agree with `stat`. A compressed file's inode records
+    /// no size of its own — the real length is in the decmpfs header — and a
+    /// symlink inode reports 0 where `stat` reports the target length.
+    fn resolve_entry_sizes(&mut self, entries: &mut [DirEntry]) -> Result<()> {
+        for entry in entries.iter_mut() {
+            match entry.kind {
+                EntryKind::File => {
+                    if let Some(header) = self.compression(entry.oid)? {
+                        entry.size = header.uncompressed_size;
+                    }
+                }
+                EntryKind::Symlink => {
+                    if let Some(target) = self.symlink_target(entry.oid)? {
+                        entry.size = target.len() as u64;
+                    }
+                }
+                EntryKind::Directory => {}
+            }
+        }
+        Ok(())
     }
 
     /// Read an entire file into memory
@@ -518,13 +542,14 @@ impl<R: Read + Seek> ApfsVolume<R> {
         parent_path: &str,
         entries: &mut Vec<WalkEntry>,
     ) -> Result<()> {
-        let dir_entries = catalog::list_directory(
+        let mut dir_entries = catalog::list_directory(
             &mut self.reader,
             self.catalog_root_block,
             self.vol_omap_root_block,
             self.block_size,
             parent_oid,
         )?;
+        self.resolve_entry_sizes(&mut dir_entries)?;
 
         for entry in dir_entries {
             let full_path = if parent_path.is_empty() {

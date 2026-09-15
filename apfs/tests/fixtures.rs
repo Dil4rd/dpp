@@ -341,3 +341,28 @@ fn lists_and_reads_every_xattr_on_the_fixture() {
         "expected hundreds of attributes, found {listed}"
     );
 }
+
+/// Requires ../tests/appfs.raw fixture. Run with `cargo test -- --ignored`.
+///
+/// `list_directory`, `walk` and `stat` must tell one story: the listed size
+/// is the size `stat` reports (decmpfs-resolved for compressed files, target
+/// length for symlinks), and the kinds match.
+#[test]
+#[ignore]
+fn test_walk_entries_agree_with_stat() {
+    let file = std::fs::File::open("../tests/appfs.raw").unwrap();
+    let mut vol = ApfsVolume::open(std::io::BufReader::new(file)).unwrap();
+
+    let entries = vol.walk().unwrap();
+    let mut symlinks = 0usize;
+    for entry in &entries {
+        let stat = vol.stat(&entry.path).unwrap();
+        assert_eq!(entry.entry.size, stat.size, "size of {}", entry.path);
+        assert_eq!(entry.entry.kind, stat.kind, "kind of {}", entry.path);
+        if entry.entry.kind == EntryKind::Symlink {
+            symlinks += 1;
+        }
+    }
+    // The symlink-size path is only exercised if the fixture has symlinks.
+    assert!(symlinks > 0, "fixture should contain symlinks");
+}

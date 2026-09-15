@@ -100,17 +100,23 @@ impl AttrKey {
 
 /// Order a record against `(file_id, name, start_block)`.
 ///
-/// An undecodable key orders `Less`, matching the other comparators in this
-/// crate. PROVISIONAL(anomaly-channel): this steers the descent past the bad
-/// record, so a damaged key reports an attribute that exists as absent.
-fn compare_key(record: &[u8], file_id: u32, name: &[u16], start_block: u32) -> std::cmp::Ordering {
-    let Ok(key) = AttrKey::parse(record) else {
-        return std::cmp::Ordering::Less;
-    };
-    key.file_id
+/// An undecodable key fails the operation, matching the other comparators in
+/// this crate: any ordering guessed for it would steer the descent past the
+/// bad record and report an attribute that exists as absent.
+/// PROVISIONAL(anomaly-channel): fail now, degrade to a reported miss once
+/// there is somewhere to report to.
+fn compare_key(
+    record: &[u8],
+    file_id: u32,
+    name: &[u16],
+    start_block: u32,
+) -> Result<std::cmp::Ordering> {
+    let key = AttrKey::parse(record)?;
+    Ok(key
+        .file_id
         .cmp(&file_id)
         .then_with(|| unicode::compare_binary(&key.name, name))
-        .then_with(|| key.start_block.cmp(&start_block))
+        .then_with(|| key.start_block.cmp(&start_block)))
 }
 
 /// Look up one extended attribute, or `None` when the file has no attribute of

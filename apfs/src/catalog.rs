@@ -468,14 +468,14 @@ pub fn lookup_extents<R: Read + Seek>(
 /// by the NUL-terminated attribute name. The name is preceded in the key by a
 /// `name_len` field, so the tie-break skips it rather than comparing key bytes
 /// straight through.
-fn compare_xattr_key(key: &[u8], oid: u64, name_with_nul: &[u8]) -> std::cmp::Ordering {
-    match compare_key_to(key, oid, J_TYPE_XATTR) {
+fn compare_xattr_key(key: &[u8], oid: u64, name_with_nul: &[u8]) -> Result<std::cmp::Ordering> {
+    Ok(match compare_key_to(key, oid, J_TYPE_XATTR)? {
         std::cmp::Ordering::Equal => key
             .get(XATTR_KEY_NAME_OFFSET..)
             .unwrap_or(&[])
             .cmp(name_with_nul),
         ord => ord,
-    }
+    })
 }
 
 /// Where an extended attribute keeps its value.
@@ -617,13 +617,13 @@ fn parse_xattr_value(value: &[u8]) -> Result<XattrValue> {
 
 /// Order an on-disk catalog key against the `(oid, type)` being searched for.
 ///
-/// An undecodable key orders `Less`, so a damaged record makes the scan keep
-/// going rather than terminate early and report a miss.
-fn compare_key_to(key: &[u8], oid: u64, j_type: u8) -> std::cmp::Ordering {
-    match decode_catalog_key(key) {
-        Ok((key_oid, key_type)) => compare_catalog_keys(key_oid, key_type, oid, j_type),
-        Err(_) => std::cmp::Ordering::Less,
-    }
+/// An undecodable key fails the operation. Any ordering guessed for it would
+/// steer the descent or end a scan on the damaged key, reporting records that
+/// exist as absent. PROVISIONAL(anomaly-channel): fail now, degrade to a
+/// reported miss once there is somewhere to report to.
+fn compare_key_to(key: &[u8], oid: u64, j_type: u8) -> Result<std::cmp::Ordering> {
+    let (key_oid, key_type) = decode_catalog_key(key)?;
+    Ok(compare_catalog_keys(key_oid, key_type, oid, j_type))
 }
 
 /// Comparator selecting the record with this `(oid, type)`.
@@ -631,7 +631,7 @@ fn compare_key_to(key: &[u8], oid: u64, j_type: u8) -> std::cmp::Ordering {
 /// Used for both `btree_lookup`, which wants the single matching record, and
 /// `btree_scan`, which reads the same ordering as a range and collects the run
 /// of `Equal` keys.
-fn catalog_key(oid: u64, j_type: u8) -> impl Fn(&[u8]) -> std::cmp::Ordering {
+fn catalog_key(oid: u64, j_type: u8) -> impl Fn(&[u8]) -> Result<std::cmp::Ordering> {
     move |key| compare_key_to(key, oid, j_type)
 }
 

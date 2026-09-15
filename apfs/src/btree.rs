@@ -370,7 +370,7 @@ pub fn btree_lookup<R: Read + Seek, F>(
     omap_root: Option<u64>,
 ) -> Result<Option<Vec<u8>>>
 where
-    F: Fn(&[u8]) -> std::cmp::Ordering,
+    F: Fn(&[u8]) -> Result<std::cmp::Ordering>,
 {
     let (_, block_data) = object::read_object(reader, root_block, block_size)?;
     let node = BTreeNode::parse(&block_data)?;
@@ -417,11 +417,11 @@ fn debug_assert_comparator_matches_node_order<F>(
     compare_fn: &F,
 ) -> Result<()>
 where
-    F: Fn(&[u8]) -> std::cmp::Ordering,
+    F: Fn(&[u8]) -> Result<std::cmp::Ordering>,
 {
     let mut prev: Option<(usize, std::cmp::Ordering)> = None;
     for i in 0..node.node_header.btn_nkeys as usize {
-        let ord = compare_fn(node.key(i, params.fixed_key_size)?);
+        let ord = compare_fn(node.key(i, params.fixed_key_size)?)?;
         if let Some((prev_i, prev_ord)) = prev {
             assert!(
                 ord >= prev_ord,
@@ -441,7 +441,7 @@ fn btree_lookup_node<R: Read + Seek, F>(
     compare_fn: &F,
 ) -> Result<Option<Vec<u8>>>
 where
-    F: Fn(&[u8]) -> std::cmp::Ordering,
+    F: Fn(&[u8]) -> Result<std::cmp::Ordering>,
 {
     #[cfg(debug_assertions)]
     debug_assert_comparator_matches_node_order(node, params, compare_fn)?;
@@ -450,7 +450,7 @@ where
         // Search leaf for exact match
         for i in 0..node.node_header.btn_nkeys as usize {
             let key = node.key(i, params.fixed_key_size)?;
-            match compare_fn(key) {
+            match compare_fn(key)? {
                 std::cmp::Ordering::Equal => {
                     let val = node.value(i, params.fixed_val_size)?;
                     return Ok(Some(val.to_vec()));
@@ -466,7 +466,7 @@ where
 
         for i in 0..node.node_header.btn_nkeys as usize {
             let key = node.key(i, params.fixed_key_size)?;
-            match compare_fn(key) {
+            match compare_fn(key)? {
                 std::cmp::Ordering::Less | std::cmp::Ordering::Equal => {
                     child_idx = Some(i);
                 }
@@ -509,7 +509,7 @@ pub fn btree_scan<R: Read + Seek, F>(
     omap_root: Option<u64>,
 ) -> Result<Vec<(Vec<u8>, Vec<u8>)>>
 where
-    F: Fn(&[u8]) -> std::cmp::Ordering,
+    F: Fn(&[u8]) -> Result<std::cmp::Ordering>,
 {
     let (_, block_data) = object::read_object(reader, root_block, block_size)?;
     let node = BTreeNode::parse(&block_data)?;
@@ -551,7 +551,7 @@ fn btree_scan_node<R: Read + Seek, F>(
 ) -> Result<bool>
 // returns false if scanning should stop
 where
-    F: Fn(&[u8]) -> std::cmp::Ordering,
+    F: Fn(&[u8]) -> Result<std::cmp::Ordering>,
 {
     if node.node_header.is_leaf() {
         #[cfg(debug_assertions)]
@@ -559,7 +559,7 @@ where
 
         for i in 0..node.node_header.btn_nkeys as usize {
             let key = node.key(i, params.fixed_key_size)?;
-            match compare_fn(key) {
+            match compare_fn(key)? {
                 std::cmp::Ordering::Equal => {
                     let val = node.value(i, params.fixed_val_size)?;
                     results.push((key.to_vec(), val.to_vec()));

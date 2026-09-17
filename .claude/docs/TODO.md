@@ -223,11 +223,11 @@ there is nothing to depend on. The codec is shared between decmpfs and Apple
 Archive, so one decoder closes `cmpfs`'s remaining gap and removes the hardest
 part of B.
 
-**Whether C is a gap or a defect is unmeasured.** If `ditto --hfsCompression`
-on a current macOS emits types 13 or 14 for ordinary files, then shipped code
-fails on ordinary input and this belongs in Tier 1 instead. Compressing a file on a
-current Mac and reading back its `com.apple.decmpfs` attribute answers it;
-nothing else can.
+**C is a gap, not a defect** `[verified]`. Measured Sep 2026 on macOS 26.3
+arm64: `ditto --hfsCompression` emits type 8 and nothing else, and 13,259
+compressed files under `/usr/share` and `/usr/lib/swift` are type 8 without
+exception. Nothing on that release writes LZBITMAP, so no shipped path fails on
+ordinary input. Recorded in `cmpfs/docs/FIXTURES.md`.
 
 **D. No signature verification for XAR or pkg.** The TOC is CMS-signed and
 `xara` parses the TOC but not its `<signature>` / `<x-signature>` elements, so

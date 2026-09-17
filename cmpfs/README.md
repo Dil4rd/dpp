@@ -97,8 +97,8 @@ A payload that does not produce exactly the size its header declares is an
 error, not a short buffer.
 
 To check the decoder against bytes Apple actually wrote rather than bytes
-reconstructed from a reference, generate fixtures on a Mac — the layout is
-documented in `tests/real_fixtures.rs` — and run the ignored tests:
+reconstructed from a reference, capture fixtures on a Mac — see
+[`docs/FIXTURES.md`](docs/FIXTURES.md) — and run the ignored tests:
 
 ```bash
 cargo test -p cmpfs -- --ignored

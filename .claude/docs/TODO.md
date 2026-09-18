@@ -208,20 +208,46 @@ what an installer actually wrote, and is unreachable today. The format is
 small and well understood, and `hfsplus/src/attributes.rs` is a recent worked
 example of the same shape. The name `bom` is taken on crates.io.
 
-**B. Apple Archive (AA1, `.aar`) is not read at all.** It is the format that
-follows pbzx, and the pipeline dead-ends on it: `pbzx/src/format.rs` knows
-only the `pbzx` magic and `dpp` has no fallback detection, so an archive in
-the newer format is reported as malformed rather than unsupported. It appears
-in cryptexes, Command Line Tools distribution and modern installer assets.
-Undocumented — it would be reverse-engineered from `libNeoAppleArchive` — and
-the largest item on this list by some margin.
+Verified on macOS 26.3: the magic is `BOMStore`, and `lsbom -p MUGsc` prints
+mode, uid, gid, size and a 32-bit checksum per file. `lsbom` and `mkbom` both
+ship with macOS, so unlike decmpfs this work would have an oracle on both
+sides — generate with one, cross-check against the other.
+
+**B. Apple Archive (AA01) is not read** `[verified]`. Measured on macOS 26.3
+with `/usr/bin/aa`: an Apple Archive is an `AA01` entry stream, optionally
+wrapped in a `pbz?` compression container whose last magic byte selects the
+codec.
+
+| `aa archive -a` | magic |
+|---|---|
+| `raw` | `AA01` |
+| `lzma` | `pbzx` |
+| `lzfse` | `pbze` |
+| `lzbitmap` | `pbzb` |
+| `zlib` | `pbzz` |
+| `lz4` | `pbz4` |
+
+So `pbzx` is the lzma member of that family, and this workspace already reads
+the container. Two things are missing: `pbzx/src/format.rs` accepts only the
+`pbzx` magic, and the decompressed stream is handed to the cpio reader, which
+an `AA01` stream is not. An Apple Archive written with `-a lzma` therefore
+parses its chunk framing and then fails inside cpio, rather than being
+rejected on its magic.
+
+The `AA01` header is a field table — `41 41 30 31 47 00 54 59 50 31 44 50 41
+54 50 00` is `AA01`, then key `TYP` type `1`, key `PAT` type `P`.
+
+Smaller than previously recorded here: the container is written, the codecs
+are present except LZBITMAP, and what remains is magic dispatch plus an entry
+parser.
 
 **C. LZBITMAP has no pure-Rust decoder.** `cmpfs` returns `Unsupported` for
 decmpfs types 13 and 14 for this reason. crates.io has FFI bindings to Apple's
 own framework, which are macOS-only, and two placeholder name reservations;
 there is nothing to depend on. The codec is shared between decmpfs and Apple
-Archive, so one decoder closes `cmpfs`'s remaining gap and removes the hardest
-part of B.
+Archive — `aa archive -a lzbitmap` is accepted and produces `pbzb` — so one
+decoder closes `cmpfs`'s remaining gap and removes the only missing codec in
+B.
 
 **C is a gap, not a defect** `[verified]`. Measured Sep 2026 on macOS 26.3
 arm64: `ditto --hfsCompression` emits type 8 and nothing else, and 13,259
@@ -229,7 +255,10 @@ compressed files under `/usr/share` and `/usr/lib/swift` are type 8 without
 exception. Nothing on that release writes LZBITMAP, so no shipped path fails on
 ordinary input. Recorded in `cmpfs/docs/FIXTURES.md`.
 
-**D. No signature verification for XAR or pkg.** The TOC is CMS-signed and
+**D. No signature verification for XAR or pkg** `[unverified]` — this one rests
+on reading `xar`'s source, not on measurement: macOS 26.3 carries no `.pkg`
+anywhere on disk, so there was nothing to check `pkgutil --check-signature`
+against. The TOC is CMS-signed and
 `xara` parses the TOC but not its `<signature>` / `<x-signature>` elements, so
 the toolchain cannot answer whether a package was signed or by whom. It should
 be an off-by-default feature on `xara`, not a separate crate: verification

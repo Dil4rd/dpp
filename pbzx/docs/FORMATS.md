@@ -17,7 +17,7 @@ PBZX is Apple's streaming compression format used in macOS software updates and 
 
 ```
 +------------------+
-| Header (12 bytes)|  Magic "pbzx" + flags (u64 BE)
+| Header (12 bytes)|  Magic "pbzx" + chunk size (u64 BE)
 +------------------+
 | Chunk 1          |  uncompressed_size (u64 BE) + compressed_size (u64 BE) + XZ data
 +------------------+

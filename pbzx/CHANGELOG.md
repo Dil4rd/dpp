@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The writer put a constant, `0x0100000000000000`, in the header field that
+  holds the chunk size, so it disagreed with the chunking it actually used and
+  with every archive Apple writes. It now states the size in use
+
+### Changed
+
+- **Breaking:** `PbzxHeader::flags` is `PbzxHeader::chunk_size`, and
+  `PbzxReader::flags` is `PbzxReader::chunk_size`. The field is the
+  uncompressed chunk size, big-endian, not a flags word: on macOS 26.3
+  `aa archive -a lzma -b` writes its argument there and nothing else — `1m`
+  gives `0x100000`, `8m` `0x800000`, `512k` `0x80000` — and Apple's installer
+  payloads carry `0x1000000`, the 16 MiB pbzx has always used
+- **Breaking:** `PbzxWriter::flags` is removed. Setting it independently of
+  `chunk_size` is what allowed the two to disagree
+
 ## [0.4.1] - 2026-09-10
 
 ### Changed

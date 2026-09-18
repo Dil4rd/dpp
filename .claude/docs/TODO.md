@@ -174,8 +174,10 @@ One bad entry destroys the whole result.
   either volume. So decompression itself is proved only by `cmpfs`'s unit tests
   and the synthetic `hfsplus` ones. A fixture containing a macOS system volume
   would close both gaps at once; nothing in `tests/` can.
-- No real-image XAR coverage. The only XAR fixture has no symlinks and no
-  `<ea>` blocks, so fixture tests are structurally blind to that bug class.
+- Thin real-image XAR coverage. The only XAR fixture, `KernelDebugKit.pkg` in
+  `tests/kdk.dmg`, has no symlinks and no `<ea>` blocks, so fixture tests are
+  structurally blind to that bug class. It does carry a real RSA signature and
+  a three-certificate chain, so it covers capability gap D.
 - `rust-toolchain.toml` exists only on `dev`. Every PR targeting `main` hits
   phantom lints — this already cost an external contributor a wasted round.
   Add the pin to `main` or merge `dev`.
@@ -255,18 +257,33 @@ compressed files under `/usr/share` and `/usr/lib/swift` are type 8 without
 exception. Nothing on that release writes LZBITMAP, so no shipped path fails on
 ordinary input. Recorded in `cmpfs/docs/FIXTURES.md`.
 
-**D. No signature verification for XAR or pkg** `[unverified]` — this one rests
-on reading `xar`'s source, not on measurement: macOS 26.3 carries no `.pkg`
-anywhere on disk, so there was nothing to check `pkgutil --check-signature`
-against. The TOC is CMS-signed and
-`xara` parses the TOC but not its `<signature>` / `<x-signature>` elements, so
-the toolchain cannot answer whether a package was signed or by whom. It should
-be an off-by-default feature on `xara`, not a separate crate: verification
-needs the raw compressed TOC bytes, the header's checksum offsets and the
-signature's heap position, all currently private. Splitting it would mean
-widening `xara`'s public API to byte granularity purely to feed a sibling, and
-pinning the internal layout in semver. Note the overlap with the `xara` items
-below, and that `toc.rs` has recent changes.
+**D. No signature verification for XAR or pkg** `[verified]`. `xara/src/toc.rs`
+does not look at `<signature>` at all, so the toolchain cannot say whether a
+package was signed or by whom.
+
+Measured against `KernelDebugKit.pkg` inside `tests/kdk.dmg`, which is signed:
+
+```xml
+<checksum style="sha1"><offset>0</offset><size>20</size></checksum>
+<signature style="RSA"><offset>20</offset><size>256</size>
+  <KeyInfo><X509Data><X509Certificate>...   (3 certificates)
+```
+
+Correction to what was recorded here before: this is **not** CMS. The style is
+`RSA` — a 2048-bit signature over the TOC checksum — and the certificate chain
+is inline in the TOC as base64 DER, leaf then Apple Software Update
+Certification Authority then Apple Root CA. CMS appears as `<x-signature>`,
+which this package does not carry. Any implementation has to handle both, and
+only the second needs a CMS parser.
+
+The heap therefore opens with the checksum at 0 and the signature at 20, both
+relative to `heap_offset`, which is `pub(crate)` in `xara/src/lib.rs`. That is
+the argument for an off-by-default feature on `xara` rather than a separate
+crate: a sibling would need `heap_offset` and the raw compressed TOC bytes
+made public purely to reach them, pinning the internal layout in semver.
+
+Note the fixture already exists, so this is testable without acquiring
+anything: `tests/kdk.dmg` holds a real Apple-signed package.
 
 **E. `list_directory` reports the data-fork size, so a decmpfs-compressed file
 lists as 0 bytes** while `stat` on the same path reports its real size. Both

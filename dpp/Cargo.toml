@@ -10,7 +10,7 @@ categories = ["compression", "encoding", "parsing"]
 
 [dependencies]
 udif = { version = "0.4.0", path = "../udif" }
-pbzx = { version = "0.4.0", path = "../pbzx" }
+pbzx = { version = "0.5.0-dev", path = "../pbzx" }
 hfsplus = { version = "0.4.0-dev", path = "../hfsplus" }
 apfs = { version = "0.4.0-dev", path = "../apfs" }
 xara = { version = "0.4.0", path = "../xara" }

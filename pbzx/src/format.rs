@@ -38,7 +38,7 @@ pub const PBZX_MAGIC: [u8; 4] = [0x70, 0x62, 0x7a, 0x78];
 /// XZ magic bytes for validation
 pub const XZ_MAGIC: [u8; 6] = [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00];
 
-/// Size of the PBZX header (magic + flags)
+/// Size of the PBZX header (magic + chunk size)
 pub const HEADER_SIZE: usize = 12;
 
 /// Size of a chunk header (uncompressed_size + compressed_size)
@@ -72,8 +72,18 @@ pub enum CpioFormat {
 pub struct PbzxHeader {
     /// Magic bytes (should be "pbzx")
     pub magic: [u8; 4],
-    /// Flags field (purpose varies by version)
-    pub flags: u64,
+    /// Uncompressed size of each chunk, big-endian.
+    ///
+    /// Measured against Apple's own writer on macOS 26.3: `aa archive -a lzma`
+    /// puts its `-b` argument here, and only that — `1m` gives `0x100000`,
+    /// `8m` gives `0x800000`, `512k` gives `0x80000`. The payload in
+    /// `tests/payload.bin`, written by Apple's installer tooling, carries
+    /// `0x1000000`, the 16 MiB pbzx has always used.
+    ///
+    /// The final chunk is short, so this is a declared maximum rather than a
+    /// count; each chunk still carries its own [`ChunkHeader`], which is what
+    /// the reader actually uses.
+    pub chunk_size: u64,
 }
 
 impl PbzxHeader {

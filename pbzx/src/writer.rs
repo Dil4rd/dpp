@@ -40,7 +40,6 @@ pub struct PbzxWriter<W> {
     writer: W,
     chunk_size: usize,
     compression_level: u32,
-    flags: u64,
     header_written: bool,
     total_written: u64,
 }
@@ -52,7 +51,6 @@ impl<W: Write> PbzxWriter<W> {
             writer,
             chunk_size: DEFAULT_CHUNK_SIZE,
             compression_level: DEFAULT_COMPRESSION_LEVEL,
-            flags: 0x0100000000000000, // Default flags (version 1)
             header_written: false,
             total_written: 0,
         }
@@ -74,12 +72,6 @@ impl<W: Write> PbzxWriter<W> {
         self
     }
 
-    /// Set the flags field in the header.
-    pub fn flags(mut self, flags: u64) -> Self {
-        self.flags = flags;
-        self
-    }
-
     /// Write the PBZX header.
     fn write_header(&mut self) -> Result<()> {
         if self.header_written {
@@ -87,7 +79,10 @@ impl<W: Write> PbzxWriter<W> {
         }
 
         self.writer.write_all(&PBZX_MAGIC)?;
-        self.writer.write_u64::<BigEndian>(self.flags)?;
+        // The header states the chunk size in use. It was previously a
+        // constant unrelated to the chunking, which no reader here consulted
+        // but which disagreed with every archive Apple writes.
+        self.writer.write_u64::<BigEndian>(self.chunk_size as u64)?;
         self.header_written = true;
         self.total_written += 12;
 
@@ -412,6 +407,25 @@ fn add_directory_to_cpio(builder: &mut CpioBuilder, base: &Path, prefix: &str) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The header must state the chunk size actually used. It previously
+    /// carried a constant unrelated to the chunking, which disagreed with
+    /// every archive Apple writes.
+    #[test]
+    fn header_states_the_chunk_size_in_use() {
+        use crate::PbzxReader;
+        use std::io::Cursor;
+
+        for size in [512 * 1024usize, 4 * 1024 * 1024, DEFAULT_CHUNK_SIZE] {
+            let mut out = Vec::new();
+            let mut w = PbzxWriter::new(&mut out).chunk_size(size);
+            w.write_cpio(b"payload").unwrap();
+            w.finish().unwrap();
+
+            let reader = PbzxReader::new(Cursor::new(out)).unwrap();
+            assert_eq!(reader.chunk_size(), size as u64, "chunk size {size}");
+        }
+    }
 
     #[test]
     fn test_cpio_builder() {

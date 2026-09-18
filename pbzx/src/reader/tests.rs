@@ -7,8 +7,8 @@ fn create_minimal_pbzx() -> Vec<u8> {
     let mut data = Vec::new();
     // Magic
     data.extend_from_slice(&PBZX_MAGIC);
-    // Flags (8 bytes, big-endian)
-    data.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 1]);
+    // Chunk size (8 bytes, big-endian): 16 MiB, as Apple's tooling writes.
+    data.extend_from_slice(&0x0100_0000u64.to_be_bytes());
     data
 }
 
@@ -52,7 +52,7 @@ fn test_header_parsing() {
     let reader = PbzxReader::new(cursor).unwrap();
 
     assert!(reader.header().is_valid());
-    assert_eq!(reader.flags(), 1);
+    assert_eq!(reader.chunk_size(), 0x0100_0000);
 }
 
 #[test]

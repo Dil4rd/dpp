@@ -64,9 +64,9 @@ impl<R: Read> PbzxReader<R> {
         &self.header
     }
 
-    /// Get the flags value from the header.
-    pub fn flags(&self) -> u64 {
-        self.header.flags
+    /// Uncompressed chunk size declared by the header.
+    pub fn chunk_size(&self) -> u64 {
+        self.header.chunk_size
     }
 
     /// Get the total bytes decompressed so far.
@@ -78,9 +78,9 @@ impl<R: Read> PbzxReader<R> {
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic)?;
 
-        let flags = reader.read_u64::<BigEndian>()?;
+        let chunk_size = reader.read_u64::<BigEndian>()?;
 
-        Ok(PbzxHeader { magic, flags })
+        Ok(PbzxHeader { magic, chunk_size })
     }
 
     /// Read the next chunk header, if any.

@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "apfs"
-version = "0.4.0-dev"
+version = "0.4.0"
 dependencies = [
  "byteorder",
  "cmpfs",
@@ -253,7 +253,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "cmpfs"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "flate2",
  "lzfse_rust",
@@ -404,7 +404,7 @@ dependencies = [
 
 [[package]]
 name = "dpp"
-version = "0.6.0-dev"
+version = "0.6.0"
 dependencies = [
  "apfs",
  "flate2",
@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "dpp-python"
-version = "0.4.0-dev"
+version = "0.4.0"
 dependencies = [
  "dpp",
  "pyo3",
@@ -426,7 +426,7 @@ dependencies = [
 
 [[package]]
 name = "dpp-tool"
-version = "0.6.0-dev"
+version = "0.6.0"
 dependencies = [
  "apfs",
  "clap",
@@ -549,7 +549,7 @@ checksum = "e17592d60ebacc7d5e169f4663c5f84f9161cc90328abcfe8456f41e4dfcb284"
 
 [[package]]
 name = "hfsplus"
-version = "0.4.0-dev"
+version = "0.4.0"
 dependencies = [
  "byteorder",
  "cmpfs",
@@ -747,7 +747,7 @@ checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
 name = "pbzx"
-version = "0.5.0-dev"
+version = "0.5.0"
 dependencies = [
  "byteorder",
  "cpio-archive",

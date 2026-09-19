@@ -47,9 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   decompressed size for a compressed file
 - **Breaking:** `list_xattrs` returns `Vec<XattrEntry>` rather than
   `Vec<String>`
-- `list_directory` still reports the data fork size, so a compressed file
-  lists as 0 bytes. `stat` is authoritative; resolving it during a listing
-  would cost an attribute lookup per entry
 
 ## [0.3.0] - 2026-09-07
 

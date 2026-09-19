@@ -164,6 +164,55 @@ One bad entry destroys the whole result.
 - `pbzx/src/cpio.rs` `peek_format` guards — a garbage archive lists as empty
   rather than erroring
 
+## Performance
+
+`[verified]` by reading the code; not measured against a large volume — the
+only fixtures are a few hundred entries, too small to show the effect.
+
+**`btree_scan`'s internal-node branch does not prune by separator key**
+(`apfs/src/btree.rs:572-589`). For each internal node it recurses into every
+child unconditionally, relying only on a leaf yielding `Greater` to unwind
+the whole recursion. `btree_lookup_node` does this correctly — it picks the
+one child whose separator key brackets the search key — but `btree_scan`
+does not, so a scan effectively performs a full in-order walk from the start
+of the tree up to the end of the matching range, rather than descending
+directly to it. Cost is closer to O(rank of first match + matches) than
+O(log n + matches).
+
+This is not new: `catalog::list_directory` already calls `btree_scan` for a
+directory's own children, so `walk()` already pays this on every real
+volume, independent of anything in the decmpfs/xattr work above. A
+late-created directory (large `parent_oid`, sorting near the end of the
+catalog tree) would be the worst case. Invisible on the current fixtures —
+small enough that "scan the prefix" and "scan the whole tree" cost about the
+same — so this needs a synthetic large tree to demonstrate, not a fixture
+measurement.
+
+Fixing it means giving `btree_scan_node`'s internal-node branch the same
+child-selection logic `btree_lookup_node` uses, then continuing to scan
+across the following children once inside the matching range instead of
+visiting every child from index 0. Do this before relying on `btree_scan` (or
+building a combined-lookup on top of it, see below) for anything performance
+sensitive on real-sized volumes.
+
+**Combining `lookup_inode` and the decmpfs/symlink xattr lookup into one
+descent is possible but not implemented.** Both already use the efficient
+`btree_lookup` (not the scan above), and their keys —
+`(oid, J_TYPE_INODE=3)` and `(oid, J_TYPE_XATTR=4)` — sort adjacently for the
+same oid, so one descent to `(oid, J_TYPE_INODE)` followed by a bounded
+forward read within the same leaf could return both instead of doing two
+independent root-to-leaf descents from `list_directory`/`resolve_entry_sizes`.
+
+Not done because APFS b-tree leaves carry no forward/sibling pointer, so if
+an oid's xattr record falls just past a leaf boundary, "read a bit further
+in this leaf" silently misses it — exactly the silent-loss shape this
+codebase exists to avoid. Doing this correctly needs real cursor logic
+(unwind to the parent and descend into the next child when a leaf runs out),
+which nothing here has today, plus a synthetic test that deliberately
+straddles a leaf boundary. The two-lookup cost paid today is two efficient
+`O(log n)` descents, not a regression class with the scan issue above — worth
+fixing, not worth rushing.
+
 ## Tests and infrastructure
 
 - **No real-image decmpfs coverage, and none possible from `tests/`.** Measured
@@ -284,12 +333,6 @@ made public purely to reach them, pinning the internal layout in semver.
 
 Note the fixture already exists, so this is testable without acquiring
 anything: `tests/kdk.dmg` holds a real Apple-signed package.
-
-**E. `list_directory` reports the data-fork size, so a decmpfs-compressed file
-lists as 0 bytes** while `stat` on the same path reports its real size. Both
-are honest about what they read and they disagree, which is confusing rather
-than wrong. Resolving it costs an attribute lookup per entry, which is why
-`stat` is documented as authoritative instead.
 
 ## Open in xara
 

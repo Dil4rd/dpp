@@ -3,3 +3,4 @@ tests/
 !*/tests/
 demo/*.cast
 __pycache__/
+.env

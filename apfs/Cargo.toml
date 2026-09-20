@@ -16,7 +16,7 @@ thiserror = "2"
 [dev-dependencies]
 # Also a normal dependency, but `tests/` links only dev-dependencies.
 byteorder = "1.5"
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 
 [[bench]]
 name = "parse_benchmark"

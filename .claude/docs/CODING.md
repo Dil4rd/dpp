@@ -4,7 +4,7 @@ Standards and conventions for all code in the dpp workspace.
 
 ## Tests required
 
-Every code change must include or update relevant tests. Run all four pre-commit checks (see [CLAUDE.md](../../CLAUDE.md)) before considering work complete. If test fixtures are missing, verify the code compiles and any new unit tests pass.
+Every code change must include or update relevant tests. Run the pre-commit checks listed in [CLAUDE.md](../../CLAUDE.md) before considering work complete. If test fixtures are missing, verify the code compiles and any new unit tests pass.
 
 ## Docs required
 
@@ -52,7 +52,7 @@ No `unsafe` code in the `hfsplus` and `apfs` crates. Avoid `unsafe` elsewhere un
 
 ## Public API surface
 
-These crates are published, so `pub` is a semver commitment. New items default to `pub(crate)` unless something outside the crate actually calls them — check before widening, and check before narrowing too: `apfs` has a third-party dependent (`startup-disk`) that drives `catalog`, `omap`, `object`, `superblock` and `extents` directly rather than through `ApfsVolume`.
+These crates are published, so `pub` is a semver commitment. New items default to `pub(crate)` unless something outside the crate actually calls them — check before widening, and check before narrowing too: `apfs` has third-party dependents (`startup-disk`, `exav-unpack`) and `startup-disk` drives `catalog`, `omap`, `object`, `superblock` and `extents` directly rather than through `ApfsVolume`. Check the current list with crates.io's reverse-dependencies API before assuming a private-looking item is unused.
 
 Keep an API private when using it correctly requires knowledge the caller has no way to check. `apfs::btree` is the worked example: its comparator must reproduce the tree's on-disk key ordering, and breaking that returns `Ok(None)` for records that exist rather than an error. Higher-level readers own their comparators so callers never face that contract.
 

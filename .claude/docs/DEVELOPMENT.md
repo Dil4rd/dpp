@@ -10,7 +10,7 @@ cargo test -p dpp                  # Run one crate's tests
 cargo test <test_name>             # Run a single test by name
 cargo test -- --nocapture          # Show eprintln diagnostic output
 cargo test -p apfs -- --ignored    # Run the fixture tests (needs tests/, see below)
-cargo run -p dpp-tool -- <cmd>     # Run CLI tool (dmg, fs, hfs, apfs, pkg, payload, info, bench)
+cargo run -p dpp-tool -- <cmd>     # Run CLI tool (dmg, fs, hfs, apfs, pkg, payload, info, bench, completions)
 cargo run -p dpp-tool -- --in-memory fs info <dmg>  # In-memory extraction mode
 cargo run -p pbzx --example pbzx-tool --release -- <file>   # Run pbzx example
 cargo run -p udif --example udif-tool --release -- <cmd>    # Run udif example
@@ -48,8 +48,14 @@ This gap is why a comparator bug that broke 13 of 15 symlinks in `tests/appfs.ra
 
 ## Feature Flags
 
-- **pbzx:** `extract`, `list`, `pack` — all enabled by default.
-- **udif:** `extract`, `list`, `create` — all enabled by default.
+- **pbzx:** `extract`, `list`, `pack` by default, plus `parallel`.
+- **udif:** `extract`, `list`, `create` by default, plus `parallel`.
+- **dpp:** `extract` by default, plus `parallel`.
+- **dpp-tool:** `parallel` by default.
+
+`parallel` is off by default in the libraries and on in `dpp-tool`, so a
+library change can pass locally and fail for the binary. `pbzx` and `dpp` have
+extra test commands for it in [CLAUDE.md](../../CLAUDE.md).
 
 ## CI/CD
 

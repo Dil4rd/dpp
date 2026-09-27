@@ -9,7 +9,7 @@ cargo build --release              # Build all crates
 cargo test                         # Run all tests (skips if fixtures missing)
 cargo test -p <crate>              # Test single crate
 cargo test -- --nocapture          # Show diagnostic output
-cargo run -p dpp-tool -- <cmd>     # CLI tool (dmg, fs, hfs, apfs, pkg, payload, info, bench)
+cargo run -p dpp-tool -- <cmd>     # CLI tool (dmg, fs, hfs, apfs, pkg, payload, info, bench, completions)
 ```
 
 ## Pre-Commit Verification

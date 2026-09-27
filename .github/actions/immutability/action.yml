@@ -1,0 +1,33 @@
+name: Immutability
+description: Fail if a published version's archive no longer matches this tree.
+
+# Expects `cargo package` to have run already, so a caller that packages for its
+# own reasons does not pay for it twice.
+#
+# Fetching and unpacking happen here rather than in xtask so the check needs no
+# HTTP or archive crates. Any dependency xtask added would also be scanned by
+# cargo audit, for code that is never published.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        cargo metadata --no-deps --format-version 1 --locked > target/metadata.json
+
+        mkdir -p target/compare/ours target/compare/theirs
+        while read -r name version; do
+          archive="$name-$version"
+          mkdir -p "target/compare/ours/$archive"
+          tar xzf "target/package/$archive.crate" -C "target/compare/ours/$archive"
+
+          # A -dev version is never published, and a new version has no
+          # published counterpart, so a 404 is a pass.
+          if curl -sfL -o /tmp/published.crate \
+               "https://static.crates.io/crates/$name/$archive.crate"; then
+            mkdir -p "target/compare/theirs/$archive"
+            tar xzf /tmp/published.crate -C "target/compare/theirs/$archive"
+          fi
+        done < <(cargo xtask publishable)
+
+        cargo xtask immutability

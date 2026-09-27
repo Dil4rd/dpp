@@ -1,0 +1,46 @@
+name: Immutability
+
+# Fails when a crate whose version is already published no longer packages to
+# what crates.io holds.
+#
+# This covers a gap in publish.yml. `cargo publish` refuses a version that
+# already exists, and publish.yml treats that refusal as success so a re-run
+# cannot half-release the workspace. The side effect: editing a crate without
+# bumping its version publishes nothing and still reports success, so CI is
+# green and no consumer receives the change.
+#
+# The bundled Cargo.lock counts only for crates that ship a binary, where
+# `cargo install --locked` reads it. Library dependents resolve from
+# requirements and never read it.
+#
+# Runs on pull requests, where adding a -dev suffix is a one-line fix.
+# publish.yml runs the same check before uploading, covering pushes that never
+# went through a pull request.
+on:
+  pull_request:
+    branches: [main, dev]
+
+# Reads the checked-out tree and fetches public archives. Nothing else.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  immutable:
+    name: Published versions unchanged
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+
+      # --no-verify: this compares archive contents and never needs the crates
+      # to build. publish.yml does the verifying build.
+      # --exclude dpp-python: it ships to PyPI, so it has no published .crate.
+      - run: cargo package --workspace --locked --no-verify --exclude dpp-python
+      - uses: ./.github/actions/immutability

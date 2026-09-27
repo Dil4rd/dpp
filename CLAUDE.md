@@ -9,7 +9,7 @@ cargo build --release              # Build all crates
 cargo test                         # Run all tests (skips if fixtures missing)
 cargo test -p <crate>              # Test single crate
 cargo test -- --nocapture          # Show diagnostic output
-cargo run -p dpp-tool -- <cmd>     # CLI tool (dmg, hfs, pkg, payload, info, bench)
+cargo run -p dpp-tool -- <cmd>     # CLI tool (dmg, fs, hfs, apfs, pkg, payload, info, bench)
 ```
 
 ## Pre-Commit Verification
@@ -32,15 +32,19 @@ cargo audit                          # 5. known advisories against Cargo.lock
 
 `Cargo.lock` is committed, so this audits what is actually built. CI enforces
 it in the `audit` job and, separately, audits a freshly resolved dependency set
-in `audit-fresh` — five of the eight crates are libraries whose consumers never
-see our lockfile, so both questions matter. Both run on a daily schedule as
+in `audit-fresh` — every crate but `dpp-tool` is a library, and a library's
+consumers never see our lockfile, so both questions matter. Both run on a daily schedule as
 well as on pull requests, because advisories are published against
 dependencies nobody touched: both `quick-xml` advisories affecting this
 workspace landed with no change on our side.
 
 Note that `cargo audit` reads the RustSec database directly. Dependabot only
 sees the GitHub Advisory Database, which had no `quick-xml` entries at all, so
-it is not a substitute.
+it is not a substitute. That gap is part of why `dependabot.yml` was removed:
+`release-readiness.yml` reports stale dependencies weekly and on every release
+pull request, and `cargo audit` is the authority on advisories. Dependabot
+*security* updates stay enabled in repository settings, because writing the fix
+promptly is the one thing it does that CI does not.
 
 Any change that adds, removes or upgrades a dependency also needs checks 6 and
 7:
@@ -58,7 +62,7 @@ Both are enforced by `dependencies.yml` on pull requests. `cargo about` needs
 builds as a library and installs no subcommand.
 
 Check 7 fails in two ways, and they mean different things. A licence not in
-`about.toml`'s `accepted` list stops generation: decide whether to accept it,
+`dpp-python/about.toml`'s `accepted` list stops generation: decide whether to accept it,
 because that list is what keeps an unreviewed licence out of the wheels.
 A changed file means the committed notices no longer match what the wheels
 link, and the regenerated file should be committed. Upgrading `bzip2` to 0.6
@@ -66,6 +70,24 @@ tripped the first: its pure-Rust backend arrives under `bzip2-1.0.6`.
 
 The notice file only covers the wheels. The crates.io packages ship source, so
 their consumers resolve these dependencies themselves.
+
+Any change to a crate that is already published must move that crate's version
+to a `-dev` suffix in the same batch. crates.io refuses to republish a version
+and `publish.yml` treats that refusal as success, so an unbumped edit publishes
+nothing while CI stays green. The unit compared is the packaged archive; the
+bundled `Cargo.lock` counts only for a crate that ships a binary, since only
+then can a consumer read it. `immutability.yml` enforces this on every pull
+request, and `publish.yml` again before upload.
+See [Development](.claude/docs/DEVELOPMENT.md) for the release flow.
+
+Repository automation lives in the `xtask` crate, so `cargo fmt`, `clippy` and
+`cargo doc` cover it like any other member. It is `publish = false` and nothing
+depends on it, so it appears in no published manifest and no bundled lockfile.
+
+```bash
+cargo xtask immutability       # published archives must match this tree
+cargo xtask actions-current    # pinned actions must be at their newest release
+```
 
 If a change touches `pbzx` or `dpp` with the `parallel` feature, also run:
 

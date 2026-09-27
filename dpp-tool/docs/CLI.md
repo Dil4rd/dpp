@@ -26,6 +26,7 @@ Commands are organized by pipeline layer with consistent verbs across layers:
 ```bash
 dpp-tool info <dmg>              # Full pipeline overview (DMG + HFS+/APFS + PKGs)
 dpp-tool bench <dmg>             # Benchmark each pipeline stage
+dpp-tool completions <shell>     # Write a completion script to stdout
 ```
 
 ### dmg — DMG/UDIF Container

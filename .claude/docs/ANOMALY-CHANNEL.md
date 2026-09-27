@@ -241,7 +241,7 @@ dependency. This would be written here.
 
 | Pros | Cons |
 |---|---|
-| A caller cannot obtain degraded bytes without the record of what is degraded | Largest change; breaking across five crates |
+| A caller cannot obtain degraded bytes without the record of what is degraded | Largest change; breaking across every format crate |
 | Enforcement is structural, not conventional | Fixes the anomaly type's shape before real images show which anomalies occur |
 
 ### B. Accumulator on the handle
@@ -373,11 +373,16 @@ Slim channel now; coverage as an explicit operation later.
 
 ## Open decisions
 
-- **Where the type lives.** The five format crates are siblings with no shared
-  dependency; only `dpp` depends on them. A shared vocabulary means either a
-  sixth published crate entering five crates' public semver, or per-crate types
-  with translation in `dpp` — which duplicates the type five times and puts the
+- **Where the type lives.** The format crates are siblings, and only `dpp`
+  depends on all of them. A shared vocabulary means either a new published
+  crate entering each of their public semver, or per-crate types with
+  translation in `dpp` — which duplicates the type per crate and puts the
   mapping in the one place that cannot see the original context.
+
+  Note the precedent: `cmpfs` is already a published crate shared by `apfs` and
+  `hfsplus`, and both re-export its types. The shared-crate option is therefore
+  a pattern this workspace already carries rather than a new one, which weakens
+  the objection to it.
 - **Streaming APIs.** `ApfsForkReader` implements `Read`; `read()` returns
   `io::Result<usize>` with no slot for a report. A design that only works for
   whole-operation calls leaves the largest data paths uncovered. Favours B.

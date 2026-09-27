@@ -1,0 +1,11 @@
+[package]
+name = "xtask"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Deliberately only what the workspace already resolves, so this adds no
+# package to Cargo.lock and nothing to the surface `cargo audit` scans. CI
+# fetches and unpacks; this crate reads files and decides.
+[dependencies]
+serde_json = "1"

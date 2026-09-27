@@ -1,0 +1,5 @@
+# `cargo xtask <cmd>` runs the repository's own automation. The checks live in
+# a workspace member rather than a script so that `cargo fmt`, `cargo clippy`
+# and `cargo doc` cover the code guarding the publish path.
+[alias]
+xtask = "run --package xtask --"

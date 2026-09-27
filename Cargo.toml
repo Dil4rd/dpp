@@ -10,4 +10,5 @@ members = [
     "apfs",
     "dpp-tool",
     "dpp-python",
+    "xtask",
 ]

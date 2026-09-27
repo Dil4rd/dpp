@@ -89,14 +89,19 @@ jobs:
       - run: cargo install cargo-audit --locked
       - run: cargo audit --deny yanked
 
-  # The committed Cargo.lock says what we build; this says what a fresh
-  # consumer of the published crates would resolve. Five of the eight crates
-  # are libraries, whose users never see our lockfile, so both matter.
+  # The committed Cargo.lock says what we build; this says what a fresh consumer
+  # of the published crates would resolve. Every crate but dpp-tool is a
+  # library, and a library's users never see our lockfile, so both questions
+  # matter. Only dpp-tool ships a binary, and only its bundled lock is
+  # reachable, via `cargo install --locked`.
+  #
+  # It gates like any other job. With no bot opening pull requests for stale
+  # dependencies, `cargo audit` is the whole advisory pipeline, and half a
+  # pipeline that can only ever report is not one.
   audit-fresh:
     name: Security advisories (latest deps)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0

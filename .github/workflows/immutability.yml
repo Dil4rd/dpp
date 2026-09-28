@@ -3,11 +3,10 @@ name: Immutability
 # Fails when a crate whose version is already published no longer packages to
 # what crates.io holds.
 #
-# This covers a gap in publish.yml. `cargo publish` refuses a version that
-# already exists, and publish.yml treats that refusal as success so a re-run
-# cannot half-release the workspace. The side effect: editing a crate without
-# bumping its version publishes nothing and still reports success, so CI is
-# green and no consumer receives the change.
+# This covers a gap in publish.yml. A version crates.io already holds is
+# excluded from the publish, so a re-run cannot half-release the workspace. The
+# side effect: editing a crate without bumping its version publishes nothing and
+# still reports success, so CI is green and no consumer receives the change.
 #
 # The bundled Cargo.lock counts only for crates that ship a binary, where
 # `cargo install --locked` reads it. Library dependents resolve from

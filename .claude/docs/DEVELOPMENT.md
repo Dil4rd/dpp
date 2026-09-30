@@ -62,7 +62,7 @@ extra test commands for it in [CLAUDE.md](../../CLAUDE.md).
 | Workflow | What | When |
 | --- | --- | --- |
 | `ci.yml` | fmt, clippy, tests on three OSes, `parallel` feature, docs, `cargo audit` | push + PR on `main`/`dev`, daily |
-| `publish.yml` | packages, then publishes to crates.io | PR into `main` (package only), push to `main` |
+| `publish.yml` | packages, checks immutability, shellchecks `ci/publish.sh`, then publishes | PR into `main` (no publish), push to `main` |
 | `publish-pypi.yml` | maturin wheels → PyPI | push to `main`, only if the version differs from PyPI |
 | `dependencies.yml` | `cargo machete`, wheel licence notices | PR on `main`/`dev` |
 | `immutability.yml` | refuses a change to an already-published version | PR on `main`/`dev` |
@@ -114,11 +114,13 @@ index records a sha256, and cargo verifies it on download. Trusted Publishing
 additionally records the commit behind each version (`apfs 0.4.0` → `4d533fc`),
 and git commits are immutable, so that record stays accurate.
 
-What crates.io cannot enforce is the repository's side. `cargo publish` refuses
-a version that already exists, and `publish.yml` treats that refusal as success
-so a re-run cannot half-release the workspace. The consequence: editing a crate
-without bumping its version publishes nothing and still reports success. CI is
-green and no consumer receives the change, including for a security fix.
+What crates.io cannot enforce is the repository's side. A release usually
+changes only some crates, so `ci/publish.sh` asks the registry which versions
+exist and excludes those from `cargo publish --workspace`. It cannot tell a
+crate correctly skipped from one whose version was never bumped. The
+consequence: editing a crate without bumping its version publishes nothing and
+still reports success. CI is green and no consumer receives the change,
+including for a security fix.
 
 The unit compared is the packaged archive, not just the source, with one
 exception. Cargo bundles a copy of `Cargo.lock` into every `.crate`, pruned to
@@ -154,9 +156,9 @@ through a composite action. That job holds no permissions; the `package` job
 needs `id-token` and `attestations` write for the attestation step, and this
 check needs neither. `publish` depends on both.
 
-It gates the publish job rather than running inside it because publishing is
-sequential with sleeps for index propagation: failing partway would leave
-earlier crates uploaded and their version numbers permanently taken.
+It gates the publish job rather than running inside it because
+`cargo publish --workspace` is not atomic: failing partway would leave earlier
+crates uploaded and their version numbers permanently taken.
 
 Pull requests are where this should be caught, since adding `-dev` is a one-line
 fix there. Both copies pass trivially on a release pull request, because

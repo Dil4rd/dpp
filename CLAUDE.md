@@ -72,9 +72,9 @@ The notice file only covers the wheels. The crates.io packages ship source, so
 their consumers resolve these dependencies themselves.
 
 Any change to a crate that is already published must move that crate's version
-to a `-dev` suffix in the same batch. crates.io refuses to republish a version
-and `publish.yml` treats that refusal as success, so an unbumped edit publishes
-nothing while CI stays green. The unit compared is the packaged archive; the
+to a `-dev` suffix in the same batch. crates.io refuses to republish a version,
+and `ci/publish.sh` excludes every version the registry already holds, so an
+unbumped edit publishes nothing while CI stays green. The unit compared is the packaged archive; the
 bundled `Cargo.lock` counts only for a crate that ships a binary, since only
 then can a consumer read it. `immutability.yml` enforces this on every pull
 request, and `publish.yml` again before upload.

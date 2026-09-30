@@ -9,8 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- `criterion` dev-dependency moved to 0.8. Benchmarks only; no change to the
-  library.
+- `criterion` dev-dependency moved to 0.7. Benchmarks only; no change to the
+  library. Not 0.8: it depends unconditionally on `alloca`, whose build script
+  compiles C, which would put a C toolchain on the path of anyone building the
+  benchmarks.
 
 ## [0.4.0] - 2026-09-19
 

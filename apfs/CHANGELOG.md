@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- `criterion` dev-dependency moved to 0.8. Benchmarks only; no change to the
+  library.
+
 ## [0.4.0] - 2026-09-19
 
 ### Added

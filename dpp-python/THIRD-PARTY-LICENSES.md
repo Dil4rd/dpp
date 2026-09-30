@@ -222,7 +222,7 @@ Used by:
 ## Apache License 2.0
 
 Used by:
-- [lzma-rust2 0.20.1](https://github.com/hasenbanck/lzma-rust2/)
+- [lzma-rust2 0.21.0](https://github.com/hasenbanck/lzma-rust2/)
 
 ```
                                  Apache License
@@ -466,7 +466,7 @@ DEALINGS IN THE SOFTWARE.
 ## MIT License
 
 Used by:
-- [cfg-if 1.0.4](https://github.com/rust-lang/cfg-if)
+- [cfg-if 1.0.5](https://github.com/rust-lang/cfg-if)
 
 ```
 Copyright (c) 2014 Alex Crichton
@@ -534,7 +534,7 @@ DEALINGS IN THE SOFTWARE.
 ## MIT License
 
 Used by:
-- [bitflags 2.13.1](https://github.com/bitflags/bitflags)
+- [bitflags 2.13.2](https://github.com/bitflags/bitflags)
 
 ```
 Copyright (c) 2014 The Rust Project Developers
@@ -1296,7 +1296,7 @@ DEALINGS IN THE SOFTWARE.
 ## MIT License
 
 Used by:
-- [crc32fast 1.5.1](https://github.com/srijs/rust-crc32fast)
+- [crc32fast 1.5.2](https://github.com/srijs/rust-crc32fast)
 
 ```
 MIT License
@@ -1356,13 +1356,13 @@ SOFTWARE.
 ## MIT License
 
 Used by:
-- [apfs 0.4.0](https://github.com/Dil4rd/dpp)
+- [apfs 0.4.1-dev](https://github.com/Dil4rd/dpp)
 - [cmpfs 0.1.0](https://github.com/Dil4rd/dpp)
-- [dpp 0.6.0](https://github.com/Dil4rd/dpp)
-- [dpp-python 0.4.0](https://crates.io/crates/dpp-python)
+- [dpp 0.6.1-dev](https://github.com/Dil4rd/dpp)
+- [dpp-python 0.4.1-dev](https://crates.io/crates/dpp-python)
 - [hfsplus 0.4.0](https://github.com/Dil4rd/dpp)
-- [pbzx 0.5.0](https://github.com/Dil4rd/dpp)
-- [udif 0.4.1](https://github.com/Dil4rd/dpp)
+- [pbzx 0.5.1-dev](https://github.com/Dil4rd/dpp)
+- [udif 0.4.2-dev](https://github.com/Dil4rd/dpp)
 - [xara 0.4.2](https://github.com/Dil4rd/dpp)
 
 ```
@@ -1524,14 +1524,14 @@ Used by:
 - [once_cell 1.21.4](https://github.com/matklad/once_cell)
 - [proc-macro2 1.0.107](https://github.com/dtolnay/proc-macro2)
 - [quote 1.0.47](https://github.com/dtolnay/quote)
-- [rustix 1.1.4](https://github.com/bytecodealliance/rustix)
+- [rustix 1.1.5](https://github.com/bytecodealliance/rustix)
 - [serde 1.0.229](https://github.com/serde-rs/serde)
 - [serde_core 1.0.229](https://github.com/serde-rs/serde)
 - [syn 2.0.119](https://github.com/dtolnay/syn)
-- [syn 3.0.5](https://github.com/dtolnay/syn)
-- [thiserror-impl 2.0.20](https://github.com/dtolnay/thiserror)
-- [thiserror 2.0.20](https://github.com/dtolnay/thiserror)
-- [unicode-ident 1.0.24](https://github.com/dtolnay/unicode-ident)
+- [syn 3.0.6](https://github.com/dtolnay/syn)
+- [thiserror-impl 2.0.21](https://github.com/dtolnay/thiserror)
+- [thiserror 2.0.21](https://github.com/dtolnay/thiserror)
+- [unicode-ident 1.0.26](https://github.com/dtolnay/unicode-ident)
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -1724,7 +1724,7 @@ THE SOFTWARE.
 ## Unicode License v3
 
 Used by:
-- [unicode-ident 1.0.24](https://github.com/dtolnay/unicode-ident)
+- [unicode-ident 1.0.26](https://github.com/dtolnay/unicode-ident)
 
 ```
 UNICODE LICENSE V3

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- `cpio-archive` dev-dependency moved to 0.10 and `lzma-rust2` to 0.21. The
+  latter matches `udif`, so the workspace builds one XZ implementation rather
+  than two.
+
 ## [0.5.0] - 2026-09-19
 
 ### Fixed

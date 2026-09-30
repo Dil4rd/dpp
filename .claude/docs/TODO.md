@@ -31,19 +31,19 @@ lost extent records, so it is a short count rather than fabricated zeros.
 
 The `read_file` half of item 7 in hfsplus 0.3.0; see that entry for the rest.
 
-Item 5 in apfs 0.4.0-dev: the six unverified `read_block` sites in `btree`,
+Item 5 in apfs 0.4.0: the six unverified `read_block` sites in `btree`,
 `omap` and `lib` go through `read_object`, so every metadata block is
 Fletcher-64 verified and a corrupt one fails with `InvalidChecksum` instead
 of being parsed. Synthetic corrupt-node tests cover the b-tree paths; all
 fixture tests still pass, as the pre-switch measurement predicted.
 
-Listing/stat agreement in apfs and hfsplus 0.4.0-dev (not a numbered audit
+Listing/stat agreement in apfs and hfsplus 0.4.0 (not a numbered audit
 item): `list_directory` and `walk` resolve the sizes `stat` resolves
 (decmpfs, and symlink targets on APFS), and hfsplus `stat` derives its kind
 from the file mode instead of reporting every file record as `File`. Fixture
 tests pin walk-vs-stat agreement on both real images.
 
-Item 9 in apfs and hfsplus 0.4.0-dev: comparators are fallible
+Item 9 in apfs and hfsplus 0.4.0: comparators are fallible
 (`Fn(&[u8]) -> Result<Ordering>`, a breaking change to the public
 `hfsplus::btree::search_btree`), and all five sites fail on an undecodable
 key instead of ordering `Less` past the damage. Each site carries

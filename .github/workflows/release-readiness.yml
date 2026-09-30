@@ -1,0 +1,113 @@
+name: Release readiness
+
+# Reports dependencies and pinned actions that are behind their latest release.
+#
+# A merge to main publishes, and a published version cannot be amended, so
+# releasing with updates outstanding requires a second release to carry them.
+# This reports before the merge, and weekly so drift surfaces between releases
+# rather than at release time.
+#
+# Nothing opens a pull request to announce a new version, so a failing run is
+# the only notification.
+#
+# cargo audit covers advisories and ignores the cooldown below: an advisory is
+# acted on immediately.
+on:
+  pull_request:
+    branches: [main]
+  # Monday, so a finding has the week to be dealt with.
+  schedule:
+    - cron: "23 7 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  cargo-current:
+    name: Cargo dependencies current
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Reports only; see the step below.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+
+      # Cargo reports two kinds of staleness:
+      #
+      #   Updating x -> y              inside the declared requirement; a
+      #                                Cargo.lock change only.
+      #   Unchanged x (available: y)   outside it; requires editing a
+      #                                Cargo.toml, which changes a published
+      #                                crate and so requires a version bump.
+      #
+      # Reports without blocking, because the cooldown cannot be applied on the
+      # pinned toolchain. `registry.global-min-publish-age` filters candidates
+      # by publication age and falls back to the newest version past the
+      # window, but it became stable only in cargo 1.100. Without it a week-old
+      # update cannot be told from an hour-old one, and blocking on both would
+      # require adopting versions on their release day.
+      #
+      # TO ENABLE BLOCKING, once cargo 1.100 is stable:
+      #   - point this job's toolchain at `stable`
+      #   - add `--config 'registry.global-min-publish-age="7 days"'`
+      #   - drop `continue-on-error` above
+      - name: Report available updates
+        run: |
+          set -uo pipefail
+          cargo update --dry-run --verbose > update.txt 2>&1
+          cat update.txt
+
+          # ' -> ' is required: the progress line "Updating crates.io index"
+          # also begins with Updating and is not a finding.
+          lockfile=$(grep -E '^\s+Updating .* -> ' update.txt || true)
+          manifest=$(grep -E '^\s+Unchanged .*\(available: ' update.txt || true)
+
+          if [ -z "$lockfile" ] && [ -z "$manifest" ]; then
+            echo "Cargo dependencies are current."
+            exit 0
+          fi
+          if [ -n "$lockfile" ]; then
+            echo "::notice::lockfile updates are available; run 'cargo update'"
+          fi
+          if [ -n "$manifest" ]; then
+            echo "::notice::updates outside the declared requirements are available; editing a Cargo.toml also needs a -dev bump on that crate"
+          fi
+
+  actions-current:
+    name: Pinned actions current
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@62ae3a85dbdd2bedbb5819da8ce45635129289a1 # 1.98.0
+
+      # No equivalent of `cargo update` exists for pinned shas, so a stale pin
+      # is invisible until someone reads the workflow files.
+      #
+      # The cooldown applies here because the cutoff is a date rather than a
+      # toolchain feature. Releases younger than the cutoff are ignored: a
+      # compromised release is usually yanked or reported within days.
+      #
+      # The token raises the API rate limit. This reads public release metadata
+      # and writes nothing.
+      - name: Check pinned action versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p target/releases
+          while read -r repo; do
+            slug=${repo//\//__}
+            gh api "/repos/$repo/releases?per_page=30" > "target/releases/$slug.releases.json"
+            gh api "/repos/$repo/tags?per_page=100" > "target/releases/$slug.tags.json"
+          done < <(cargo xtask pinned-actions)
+
+          cargo xtask actions-current "$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)"

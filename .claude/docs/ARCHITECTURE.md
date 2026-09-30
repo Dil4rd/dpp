@@ -1,6 +1,6 @@
 # Architecture
 
-Rust workspace with 8 crates forming a layered pipeline for cross-platform Apple file format extraction (no macOS required).
+Rust workspace forming a layered pipeline for cross-platform Apple file format extraction (no macOS required).
 
 ## Crate Diagram
 
@@ -23,7 +23,7 @@ DMG → decompress partition → mount HFS+ or APFS filesystem → find .pkg →
 - **Generic I/O:** All filesystem/archive types are generic over `R: Read + Seek` (works with files, memory cursors, network streams). No trait objects — fully monomorphized.
 - **Type erasure via macro:** `dpp/src/pipeline.rs` uses a `dispatch!` macro on `HfsHandle` to avoid `dyn` while supporting both `TempFile` and `InMemory` extraction modes.
 - **Extraction modes:** `ExtractMode::TempFile` (default, low memory ~4KB) vs `ExtractMode::InMemory` (fast, loads full partition into `Vec<u8>`). All `open_*()` methods have `_with_mode()` variants. CLI exposes this via `--temp-file` / `--in-memory` global flags.
-- **Error aggregation:** `dpp::DppError` uses `#[from]` to unify errors from all four sub-crates plus `io::Error`.
+- **Error aggregation:** `dpp::DppError` uses `#[from]` to unify the error type of every sub-crate it chains, plus `io::Error`.
 - **Zero unsafe code** in hfsplus and apfs crates.
 
 ## Crate Responsibilities
@@ -43,4 +43,5 @@ DMG → decompress partition → mount HFS+ or APFS filesystem → find .pkg →
 
 - **dpp** — Pipeline library. Chains udif→hfsplus/apfs→xara→pbzx. Provides `DmgPipeline` (with `open_filesystem()` / `open_filesystem_with_mode()`), `FilesystemHandle` (unified HFS+/APFS access), unified types (`FsType`, `FsFileStat`, `FsVolumeInfo`, `FsDirEntry`, `FsWalkEntry`, `FsEntryKind`), `find_packages()`, `extract_pkg_payload()`.
 - **dpp-tool** — CLI tool with subcommands for interactive exploration of each pipeline stage. The `fs` command auto-detects HFS+ or APFS; `hfs` and `apfs` commands target specific filesystems. Global `--in-memory` / `--temp-file` flags control extraction mode.
+- **xtask** — repository automation, not part of the pipeline. `publish = false`, and nothing depends on it. See [Development](DEVELOPMENT.md).
 - **dpp-python** — Python bindings via PyO3 + maturin. Wraps the `dpp` crate API as a native Python extension module (`cdylib`). Provides `dpp.open()`, `DmgPipeline`, `FilesystemHandle`, `DmgArchive`, `DmgBuilder`, `PkgReader`, `XarArchive`, `Archive`, `CpioBuilder`, `PbzxWriter`, `HfsVolume`, `ApfsVolume`, and frozen data types. Exception hierarchy maps Rust errors to Python exceptions.

@@ -88,14 +88,14 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-dpp = "0.4"
+dpp = "0.6"
 ```
 
 For faster PBZX payload extraction with multi-threaded decompression:
 
 ```toml
 [dependencies]
-dpp = { version = "0.4", features = ["parallel"] }
+dpp = { version = "0.6", features = ["parallel"] }
 ```
 
 Open a DMG and list the root directory (auto-detects HFS+ or APFS):
@@ -148,6 +148,7 @@ Global options: `--temp-file` (default, low memory), `--in-memory` (faster for s
 |---------|-------------|
 | `dpp-tool info <dmg>` | Full pipeline overview |
 | `dpp-tool bench <dmg>` | Benchmark each pipeline stage |
+| `dpp-tool completions <shell>` | Generate a shell completion script |
 | **dmg** | |
 | `dpp-tool dmg info <dmg>` | DMG format and compression stats |
 | `dpp-tool dmg ls <dmg>` | List partitions |

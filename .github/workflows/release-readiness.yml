@@ -68,7 +68,20 @@ jobs:
           # ' -> ' is required: the progress line "Updating crates.io index"
           # also begins with Updating and is not a finding.
           lockfile=$(grep -E '^\s+Updating .* -> ' update.txt || true)
-          manifest=$(grep -E '^\s+Unchanged .*\(available: ' update.txt || true)
+
+          # Requirement bumps we have decided against. Without this the check
+          # reports them forever, because declining one looks identical to
+          # overlooking it.
+          #
+          #   criterion  0.8 depends unconditionally on alloca, whose build
+          #              script compiles C. Held at 0.7, the newest release
+          #              without it.
+          declined='criterion'
+          # Ending at the version is what distinguishes an actionable bump from
+          # one cargo withheld: a withheld version carries ", published N ago".
+          manifest=$(grep -E '^\s+Unchanged .*\(available: v[^,)]*\)\s*$' update.txt \
+                     | grep -vE "^\s+Unchanged ($declined) " || true)
+          cooling=$(grep -E '^\s+Unchanged .*, published .* ago\)\s*$' update.txt || true)
 
           if [ -z "$lockfile" ] && [ -z "$manifest" ]; then
             echo "Cargo dependencies are current."
@@ -79,6 +92,11 @@ jobs:
           fi
           if [ -n "$manifest" ]; then
             echo "::notice::updates outside the declared requirements are available; editing a Cargo.toml also needs a -dev bump on that crate"
+            echo "$manifest"
+          fi
+          if [ -n "$cooling" ]; then
+            echo "Inside the cooldown window, not actionable:"
+            echo "$cooling"
           fi
 
   actions-current:

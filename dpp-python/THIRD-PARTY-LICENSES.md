@@ -1356,13 +1356,13 @@ SOFTWARE.
 ## MIT License
 
 Used by:
-- [apfs 0.4.1-dev](https://github.com/Dil4rd/dpp)
+- [apfs 0.4.1](https://github.com/Dil4rd/dpp)
 - [cmpfs 0.1.0](https://github.com/Dil4rd/dpp)
-- [dpp 0.6.1-dev](https://github.com/Dil4rd/dpp)
-- [dpp-python 0.4.1-dev](https://crates.io/crates/dpp-python)
+- [dpp 0.6.1](https://github.com/Dil4rd/dpp)
+- [dpp-python 0.4.1](https://crates.io/crates/dpp-python)
 - [hfsplus 0.4.0](https://github.com/Dil4rd/dpp)
-- [pbzx 0.5.1-dev](https://github.com/Dil4rd/dpp)
-- [udif 0.4.2-dev](https://github.com/Dil4rd/dpp)
+- [pbzx 0.5.1](https://github.com/Dil4rd/dpp)
+- [udif 0.4.2](https://github.com/Dil4rd/dpp)
 - [xara 0.4.2](https://github.com/Dil4rd/dpp)
 
 ```

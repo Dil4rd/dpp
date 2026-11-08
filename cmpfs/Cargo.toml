@@ -1,6 +1,6 @@
 [package]
 name = "cmpfs"
-version = "0.1.0"
+version = "0.1.1-dev"
 edition = "2024"
 description = "Read-only decoder for Apple decmpfs transparent filesystem compression"
 license = "MIT"

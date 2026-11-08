@@ -28,6 +28,12 @@ pyo3::create_exception!(
     DppError,
     "Unsupported feature or format."
 );
+pyo3::create_exception!(
+    _dpp,
+    LimitExceededError,
+    DppError,
+    "A size limit refused the read. Raise the limit or use a streaming read."
+);
 
 /// Register exception types on the module.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -43,6 +49,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.py().get_type::<DecompressionError>(),
     )?;
     m.add("UnsupportedError", m.py().get_type::<UnsupportedError>())?;
+    m.add(
+        "LimitExceededError",
+        m.py().get_type::<LimitExceededError>(),
+    )?;
     Ok(())
 }
 

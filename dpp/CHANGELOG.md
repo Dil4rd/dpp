@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Internal pins follow the `apfs`, `hfsplus`, `udif` and `xara` 0.5 bumps, and
+  the `pbzx` and `cmpfs` patch bumps. `dpp` re-exports these crates, so their
+  breaking changes are breaking here too.
+
 ## [0.6.1] - 2026-10-06
 
 ### Changed

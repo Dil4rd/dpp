@@ -60,6 +60,7 @@ from dpp._dpp import (
     FileNotFoundError,
     DecompressionError,
     UnsupportedError,
+    LimitExceededError,
 )
 
 __all__ = [
@@ -104,4 +105,5 @@ __all__ = [
     "FileNotFoundError",
     "DecompressionError",
     "UnsupportedError",
+    "LimitExceededError",
 ]

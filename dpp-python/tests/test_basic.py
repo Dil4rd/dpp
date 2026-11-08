@@ -55,6 +55,7 @@ def test_exceptions_importable():
     assert issubclass(dpp.FileNotFoundError, dpp.DppError)
     assert issubclass(dpp.DecompressionError, dpp.DppError)
     assert issubclass(dpp.UnsupportedError, dpp.DppError)
+    assert issubclass(dpp.LimitExceededError, dpp.DppError)
     assert issubclass(dpp.DppError, Exception)
 
 

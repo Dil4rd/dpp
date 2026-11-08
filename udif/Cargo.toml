@@ -1,6 +1,6 @@
 [package]
 name = "udif"
-version = "0.4.2"
+version = "0.5.0-dev"
 edition = "2024"
 description = "cross-platform Apple disk image (aka DMG, UDIF) library"
 license = "MIT"

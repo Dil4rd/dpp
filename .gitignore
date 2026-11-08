@@ -4,3 +4,4 @@ tests/
 demo/*.cast
 __pycache__/
 .env
+.claude/scheduled_tasks.lock

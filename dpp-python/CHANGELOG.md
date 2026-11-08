@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `LimitExceededError`, a `DppError` subclass for a read refused by a size
+  limit rather than by a malformed image.
+
+### Changed
+
+- Internal `dpp` pin follows its 0.7 bump.
+
 ## [0.4.1] - 2026-10-06
 
 ### Changed

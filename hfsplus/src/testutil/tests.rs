@@ -44,6 +44,34 @@ fn test_synthetic_list_root() {
 }
 
 #[test]
+fn test_list_directory_records_match_list_directory() {
+    let image = make_test_image();
+    let cursor = Cursor::new(image);
+    let mut vol = HfsVolume::open(cursor).unwrap();
+
+    let records = crate::catalog::list_directory_records(
+        &mut vol.reader,
+        &vol.header,
+        &vol.catalog_btree_header,
+        crate::catalog::CNID_ROOT_FOLDER,
+    )
+    .unwrap();
+    let entries = vol.list_directory("/").unwrap();
+
+    assert_eq!(records.len(), entries.len());
+    for (r, entry) in records.iter().zip(&entries) {
+        assert_eq!(r.name, entry.name);
+        let crate::catalog::CatalogRecord::File(f) = &r.record else {
+            panic!("{} is not a file record", r.name);
+        };
+        assert_eq!(f.file_id, entry.cnid);
+        assert_eq!(f.data_fork.logical_size, entry.size);
+        // What a DirEntry does not carry.
+        assert_eq!(f.permissions.file_mode, 0o100644);
+    }
+}
+
+#[test]
 fn test_synthetic_read_file() {
     let image = make_test_image();
     let cursor = Cursor::new(image);

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `catalog::list_directory_records` lists a directory's file and folder
+  records (`catalog::DirRecord`: name and record), from the same leaf scan as
+  `list_directory`. A caller that needs forks, permissions or all dates gets
+  them without one catalog lookup per entry
+
 ## [0.4.0] - 2026-09-19
 
 ### Added

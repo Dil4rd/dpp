@@ -86,6 +86,13 @@ pub struct CatalogKey {
     pub node_name: Vec<u16>, // UTF-16 code points
 }
 
+/// A file or folder record of a directory, with its name.
+#[derive(Debug, Clone)]
+pub struct DirRecord {
+    pub name: String,
+    pub record: CatalogRecord,
+}
+
 /// Parse a catalog key from raw record data.
 /// Returns (key, remaining_data_offset) where remaining_data_offset points to the record data after the key.
 fn parse_catalog_key(data: &[u8]) -> Result<(CatalogKey, usize)> {
@@ -327,6 +334,51 @@ pub fn list_directory<R: Read + Seek>(
     btree_header: &BTreeHeaderRecord,
     parent_cnid: u32,
 ) -> Result<Vec<DirEntry>> {
+    let records = list_directory_records(reader, vol, btree_header, parent_cnid)?;
+    Ok(records
+        .into_iter()
+        .filter_map(|DirRecord { name, record }| match record {
+            CatalogRecord::Folder(f) => Some(DirEntry {
+                name,
+                cnid: f.folder_id,
+                kind: EntryKind::Directory,
+                size: 0,
+                create_date: f.create_date,
+                modify_date: f.content_mod_date,
+            }),
+            CatalogRecord::File(f) => {
+                let kind = if f.permissions.file_mode & 0o170000 == 0o120000 {
+                    EntryKind::Symlink
+                } else {
+                    EntryKind::File
+                };
+                Some(DirEntry {
+                    name,
+                    cnid: f.file_id,
+                    kind,
+                    size: f.data_fork.logical_size,
+                    create_date: f.create_date,
+                    modify_date: f.content_mod_date,
+                })
+            }
+            CatalogRecord::FolderThread(_) | CatalogRecord::FileThread(_) => None,
+        })
+        .collect())
+}
+
+/// List the file and folder records of a directory (by parent CNID), each
+/// with its name.
+///
+/// The records come from the same leaf scan as [`list_directory`], so a
+/// caller that needs more than a [`DirEntry`] holds (forks, permissions,
+/// all dates) gets it without one catalog lookup per entry. Sizes are the
+/// raw fork sizes: a decmpfs-compressed file's data fork is empty.
+pub fn list_directory_records<R: Read + Seek>(
+    reader: &mut R,
+    vol: &VolumeHeader,
+    btree_header: &BTreeHeaderRecord,
+    parent_cnid: u32,
+) -> Result<Vec<DirRecord>> {
     // We need to find the first leaf node that could contain records for parent_cnid.
     // Strategy: search for (parent_cnid, "") which will land at the first record
     // for this parent, then scan forward collecting all records with this parent.
@@ -357,7 +409,7 @@ pub fn list_directory<R: Read + Seek>(
         }
     };
 
-    let parse_fn = |record_data: &[u8]| -> Result<Option<DirEntry>> {
+    let parse_fn = |record_data: &[u8]| -> Result<Option<DirRecord>> {
         let (key, record_offset) = parse_catalog_key(record_data)?;
         if record_offset >= record_data.len() {
             return Ok(None);
@@ -366,28 +418,8 @@ pub fn list_directory<R: Read + Seek>(
         let name = unicode::utf16_to_string(&key.node_name);
 
         match record {
-            CatalogRecord::Folder(f) => Ok(Some(DirEntry {
-                name,
-                cnid: f.folder_id,
-                kind: EntryKind::Directory,
-                size: 0,
-                create_date: f.create_date,
-                modify_date: f.content_mod_date,
-            })),
-            CatalogRecord::File(f) => {
-                let kind = if f.permissions.file_mode & 0o170000 == 0o120000 {
-                    EntryKind::Symlink
-                } else {
-                    EntryKind::File
-                };
-                Ok(Some(DirEntry {
-                    name,
-                    cnid: f.file_id,
-                    kind,
-                    size: f.data_fork.logical_size,
-                    create_date: f.create_date,
-                    modify_date: f.content_mod_date,
-                }))
+            CatalogRecord::Folder(_) | CatalogRecord::File(_) => {
+                Ok(Some(DirRecord { name, record }))
             }
             // Skip thread records
             CatalogRecord::FolderThread(_) | CatalogRecord::FileThread(_) => Ok(None),

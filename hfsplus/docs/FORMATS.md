@@ -194,3 +194,5 @@ The attribute layout and the compression types are documented in
 HFS+ file names use a decomposed Unicode variant (similar to NFD but with Apple-specific rules). The catalog B-tree key contains the name length (u16) followed by UTF-16BE characters.
 
 HFSX volumes use binary comparison; HFS+ volumes use case-insensitive comparison with Unicode folding tables.
+
+The case-insensitive order is `FastUnicodeCompare` (`core/UnicodeWrappers.c` in apple-oss-distributions/hfs). Each UTF-16 unit is folded through `gLatinCaseFold` below U+0100 and `gLowerCaseTable` above (`core/UCStringCompareData.h`). Units that fold to 0 are ignorable and skipped. The folded names then compare unit by unit, and a name that ends first sorts first. U+0000 folds to 0xFFFF, so a name with NUL sorts after the others. Letters with a canonical decomposition are not folded: names are stored decomposed. Linux's `hfsplus_case_fold_table` folds every unit the same way.

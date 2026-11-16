@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Names on case-insensitive (HFS+) volumes compare as macOS compares them
+  (FastUnicodeCompare): Apple's full case-folding table, U+0000 sorting
+  last, and ignorable characters skipped. Lookups missed names that the
+  old order placed elsewhere in the catalog, such as non-Latin names or
+  the hard link folder `\0\0\0\0HFS+ Private Data`. Letters with a
+  canonical decomposition are no longer folded, as on macOS
+
 ## [0.4.0] - 2026-09-19
 
 ### Added

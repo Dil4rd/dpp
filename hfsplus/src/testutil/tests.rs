@@ -125,6 +125,18 @@ fn test_synthetic_stat() {
 }
 
 #[test]
+fn test_ignorable_only_name_is_not_found() {
+    let mut image = make_test_image();
+    // Case-insensitive HFS+: signature "H+", version 4. The names are lower
+    // case, so the builder's catalog order holds.
+    image[1024..1028].copy_from_slice(&[b'H', b'+', 0, 4]);
+    let mut vol = HfsVolume::open(Cursor::new(image)).unwrap();
+
+    assert!(vol.exists("/hello.txt").unwrap());
+    assert!(!vol.exists("/\u{FEFF}").unwrap());
+}
+
+#[test]
 fn test_synthetic_exists() {
     let image = make_test_image();
     let cursor = Cursor::new(image);

@@ -32,7 +32,7 @@ Files with more than 8 extents store additional extent records in the extents ov
 
 ## Unicode key comparison
 
-HFSX uses binary comparison (straightforward), but HFS+ uses case-insensitive comparison with Apple's custom Unicode folding. Our implementation handles HFSX correctly. HFS+ case-insensitive matching uses the standard Unicode case folding tables.
+HFSX uses binary comparison (straightforward), but HFS+ uses case-insensitive comparison with Apple's custom Unicode folding. Our implementation handles HFSX correctly. HFS+ case-insensitive matching follows Apple's FastUnicodeCompare and its folding table (see FORMATS.md).
 
 ## Catalog thread records
 

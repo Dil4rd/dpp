@@ -314,6 +314,16 @@ pub fn lookup_catalog<R: Read + Seek>(
                 ));
             }
             let record = parse_catalog_record(&record_data[record_offset..])?;
+            // On HFS+ a name of only ignorable characters compares equal to
+            // the empty name of the parent's thread record.
+            if !name_u16.is_empty()
+                && matches!(
+                    record,
+                    CatalogRecord::FileThread(_) | CatalogRecord::FolderThread(_)
+                )
+            {
+                return Ok(None);
+            }
             Ok(Some(record))
         }
         None => Ok(None),

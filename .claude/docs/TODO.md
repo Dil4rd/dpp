@@ -134,9 +134,8 @@ Needs the type changes from step 2 of the sequencing, and the
 - `apfs/src/superblock.rs:89` — `max_file_systems` clamp silently hides
   volumes past 100; `:230-233` lossy volume name
 - `apfs/src/lib.rs:203` — symlink target strips *all* trailing zeros
-- `hfsplus/src/unicode.rs:179` — `from_utf16_lossy` on every filename the crate
-  emits; `:168` odd-length name loses its trailing byte; `:145` incomplete
-  case-fold table mis-orders non-Latin names
+- `hfsplus/src/unicode.rs:400` — `from_utf16_lossy` on every filename the crate
+  emits; `:389` odd-length name loses its trailing byte
 - `udif/src/reader.rs:854-870` — partition `ID`/`Name`/`Attributes` default to
   `0`/`""`, and `0` collides with a real partition 0
 - `pbzx/src/cpio.rs:263` — `check: 0` for odc conflates "format has no
